@@ -3,7 +3,8 @@ USE portfolio_manager;
 
 CREATE TABLE Users (
     userId INTEGER AUTO_INCREMENT PRIMARY KEY,
-    walletBalance FLOAT NOT NULL DEFAULT 0
+    firstName VARCHAR(32) NOT NULL,
+    lastName VARCHAR(32) NOT NULL
 );
 
 CREATE TABLE CashTransactions (
