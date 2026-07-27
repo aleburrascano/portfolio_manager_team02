@@ -9,7 +9,7 @@ CREATE TABLE Users (
 
 CREATE TABLE CashTransactions (
     cashTransactionId INTEGER AUTO_INCREMENT PRIMARY KEY,
-    transactionType ENUM('deposit', 'withdraw') NOT NULL,
+    cashTransactionType ENUM('deposit', 'withdraw') NOT NULL,
     amount FLOAT NOT NULL,
     cashTransactionDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     userId INTEGER NOT NULL,
@@ -19,8 +19,9 @@ CREATE TABLE CashTransactions (
 CREATE TABLE StockTransactions (
     stockTransactionId INTEGER AUTO_INCREMENT PRIMARY KEY,
     ticker VARCHAR(5) NOT NULL,
-    amount FLOAT NOT NULL,
+    qty FLOAT NOT NULL,
     price FLOAT NOT NULL,
+    val FLOAT NOT NULL,
     stockTransactionType ENUM('buy', 'sell') NOT NULL,
     stockTransactionDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     userId INTEGER NOT NULL,
