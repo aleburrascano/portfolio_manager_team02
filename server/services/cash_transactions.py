@@ -1,10 +1,13 @@
 """
 Handle cash transactions in the database.
 """
+import user_transactions as ut
+import db.connection as db_conn
 
-def depositCash(user_id: int, amount: float, cursor, db) -> bool:
+def depositCash(user_id: int, amount: float) -> bool:
     """
-    Deposits cash into the user's account.
+    Deposits cash into the user's account. Ensure that the amount is 
+    positive before proceeding with the deposit.
 
     Args:
         user_id (int): The ID of the user.
@@ -16,6 +19,11 @@ def depositCash(user_id: int, amount: float, cursor, db) -> bool:
         bool: True if the deposit was successful, False otherwise.
     """
     try:
+        db = db_conn.get_db()
+        if db is None: return False
+        cursor = db.cursor()
+        
+        # Validate that the amount is positive and insert into the database
         sql = "INSERT INTO cashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
         val = (abs(amount), "deposit", user_id)
         cursor.execute(sql, val)
@@ -26,9 +34,11 @@ def depositCash(user_id: int, amount: float, cursor, db) -> bool:
         return False
 
 
-def withdrawCash(user_id: int, amount: float, cursor, db) -> bool:
+def withdrawCash(user_id: int, amount: float) -> bool:
     """
-    Withdraws cash from the user's account.
+    Withdraws cash from the user's account. Ensure that the provided amount 
+    is positive before proceeding with the withdrawal, and that the user has 
+    sufficient funds.
 
     Args:
         user_id (int): The ID of the user.
@@ -40,6 +50,17 @@ def withdrawCash(user_id: int, amount: float, cursor, db) -> bool:
         bool: True if the withdrawal was successful, False otherwise.
     """
     try:
+        db = db_conn.get_db()
+        if db is None: return False
+        cursor = db.cursor()
+        
+        # Validate that the user has sufficient funds to make the withdrawal
+        wallet = ut.get_user_balance(user_id)
+        if wallet is None or wallet < abs(amount):
+            print("Insufficient funds for withdrawal.")
+            return False
+
+        # Insert the withdrawal into the database
         sql = "INSERT INTO cashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
         val = (-abs(amount), "withdraw", user_id)
         cursor.execute(sql, val)

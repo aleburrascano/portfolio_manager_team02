@@ -1,6 +1,7 @@
 from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
+import services.stock_transactions as st
 
 stocks_bp = Blueprint('stocks', __name__)
 
@@ -60,3 +61,29 @@ def get_popular_stocks() -> Tuple[dict, int]:
         return {'results': stocks}, 200
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
+
+@stocks_bp.route('/stocks/buy', methods=['POST'])
+def buy_stock(user_id: int, ticker: str, quantity: int) -> Tuple[dict, int]:
+    """
+    Buy stock for the user.
+    """
+    try:
+        if st.purchaseStock(user_id, ticker, quantity):
+            return {'message': 'Stock purchase successful!'}, 200
+        else:
+            return {'error': 'Stock purchase failed. Check your balance.'}, 400
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+@stocks_bp.route('/stocks/sell', methods=['POST'])
+def sell_stock(user_id: int, ticker: str, quantity: int) -> Tuple[dict, int]:
+    """
+    Sell stock for the user.
+    """
+    try:
+        if st.sellStock(user_id, ticker, quantity):
+            return {'message': 'Stock sale successful!'}, 200
+        else:
+            return {'error': 'Stock sale failed. Check your holdings.'}, 400
+    except Exception as e:
+        return {'error': str(e)}, 500
