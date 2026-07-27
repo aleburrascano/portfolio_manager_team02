@@ -1,0 +1,90 @@
+.stock-list h2 {
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin: 0 0 12px 4px;
+}
+
+.stock-list-status {
+  margin: 0;
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.stock-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stock-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.stock-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.stock-name {
+  color: var(--text-h);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stock-symbol {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.stock-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.stock-price {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.stock-change {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.stock-change.positive {
+  color: var(--positive);
+}
+
+.stock-change.negative {
+  color: var(--negative);
+}
+
+.stock-range {
+  font-size: 12px;
+  color: var(--text-muted);
+}
