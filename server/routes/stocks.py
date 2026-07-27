@@ -1,10 +1,20 @@
+from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
 
 stocks_bp = Blueprint('stocks', __name__)
 
 @stocks_bp.route('/stocks/search', methods=['GET'])
-def search_stocks():
+def search_stocks() -> Tuple[dict, int]:
+    """
+    Search for stocks by ticker or company name.
+
+    Query params:
+        q (str): The search query.
+
+    Returns:
+        dict: {'results': list[dict]}, each with 'symbol' and 'name'.
+    """
     query = request.args.get('q', '').strip()
     if not query:
         return {'error': 'Search query required'}, 400
@@ -27,7 +37,14 @@ def search_stocks():
         return {'error': str(e), 'results': []}, 200
 
 @stocks_bp.route('/stocks/popular', methods=['GET'])
-def get_popular_stocks():
+def get_popular_stocks() -> Tuple[dict, int]:
+    """
+    Get the top 10 most actively traded stocks.
+
+    Returns:
+        dict: {'results': list[dict]}, each with 'symbol', 'name',
+        'currentPrice', and 'volume'.
+    """
     try:
         results = yf.screen("most_actives")
         stocks = []
