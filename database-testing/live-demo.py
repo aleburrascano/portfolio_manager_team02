@@ -4,7 +4,7 @@ import yfinance as yf
 mydb = mysql.connector.connect(
     host="localhost",
     user="root",
-    password="n3u3da!",
+    password="<PASSWORD>",
     database="portfolio_manager"
 )
 mycursor = mydb.cursor()
