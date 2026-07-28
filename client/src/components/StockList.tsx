@@ -6,9 +6,10 @@ type StockListProps = {
   title: string
   stocks: Stock[]
   loading?: boolean
+  onSelect?: (symbol: string) => void
 }
 
-function StockList({ title, stocks, loading }: StockListProps) {
+function StockList({ title, stocks, loading, onSelect }: StockListProps) {
   return (
     <div className="stock-list">
       <h2>{title}</h2>
@@ -21,7 +22,13 @@ function StockList({ title, stocks, loading }: StockListProps) {
           {stocks.map((stock) => {
             const isPositive = (stock.change ?? 0) >= 0
             return (
-              <li key={stock.symbol} className="stock-row">
+              <li
+                key={stock.symbol}
+                className="stock-row"
+                onClick={() => onSelect?.(stock.symbol)}
+                role={onSelect ? 'button' : undefined}
+                tabIndex={onSelect ? 0 : undefined}
+              >
                 <StockLogo symbol={stock.symbol} />
                 <div className="stock-info">
                   <span className="stock-name">{stock.name}</span>
