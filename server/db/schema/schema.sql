@@ -19,7 +19,7 @@ CREATE TABLE CashTransactions (
 CREATE TABLE AssetTransactions (
     assetTransactionId INTEGER AUTO_INCREMENT PRIMARY KEY,
     assetType ENUM('stock', 'crypto') NOT NULL,
-    ticker VARCHAR(7) NOT NULL,
+    ticker VARCHAR(12) NOT NULL,
     qty FLOAT NOT NULL,
     price FLOAT NOT NULL,
     val FLOAT NOT NULL,
