@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import StockList from './components/StockList'
+import StockDetail from './components/StockDetail'
 import { fetchPopularStocks, searchStocks, type Stock, type User } from './api'
 
 function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
@@ -9,6 +10,8 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [popularStocks, setPopularStocks] = useState<Stock[]>([])
   const [searchResults, setSearchResults] = useState<Stock[]>([])
   const [searching, setSearching] = useState(false)
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const [balanceRefreshKey, setBalanceRefreshKey] = useState(0)
 
   useEffect(() => {
     async function loadPopularStocks() {
@@ -47,14 +50,26 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
 
   return (
     <>
-      <Header user={user} onLogout={onLogout} />
+      <Header user={user} onLogout={onLogout} refreshKey={balanceRefreshKey} />
       <section id="home-content">
-        <SearchBar value={query} onChange={setQuery} />
-        <StockList
-          title={isSearching ? 'Search Results' : 'Most Active Stocks'}
-          stocks={isSearching ? searchResults : popularStocks}
-          loading={isSearching && searching}
-        />
+        {selectedSymbol ? (
+          <StockDetail
+            symbol={selectedSymbol}
+            user={user}
+            onBack={() => setSelectedSymbol(null)}
+            onTraded={() => setBalanceRefreshKey((key) => key + 1)}
+          />
+        ) : (
+          <>
+            <SearchBar value={query} onChange={setQuery} />
+            <StockList
+              title={isSearching ? 'Search Results' : 'Most Active Stocks'}
+              stocks={isSearching ? searchResults : popularStocks}
+              loading={isSearching && searching}
+              onSelect={setSelectedSymbol}
+            />
+          </>
+        )}
       </section>
     </>
   )
