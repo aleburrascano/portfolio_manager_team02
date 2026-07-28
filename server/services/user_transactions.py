@@ -10,10 +10,10 @@ CASH_TRANSACTIONS_QUERY = (
     "FROM CashTransactions WHERE userId = %s"
 )
 
-STOCK_TRANSACTIONS_QUERY = (
-    "SELECT stockTransactionId as transactionId, stockTransactionType as transactionType, "
-    "qty, price, val, stockTransactionDate as transactionDate "
-    "FROM StockTransactions WHERE userId = %s"
+ASSET_TRANSACTIONS_QUERY = (
+    "SELECT assetTransactionId as transactionId, assetTransactionType as transactionType, "
+    "qty, price, val, assetTransactionDate as transactionDate "
+    "FROM AssetTransactions WHERE userId = %s"
 )
 
 
@@ -41,15 +41,15 @@ def get_user_transactions(user_id: int) -> Optional[List[Dict[str, Any]]]:
         row['type'] = 'cash'
         row['signedAmount'] = row['amount']
 
-    cursor.execute(STOCK_TRANSACTIONS_QUERY, (user_id,))
-    stock_rows = cursor.fetchall()
-    for row in stock_rows:
-        row['type'] = 'stock'
+    cursor.execute(ASSET_TRANSACTIONS_QUERY, (user_id,))
+    asset_rows = cursor.fetchall()
+    for row in asset_rows:
+        row['type'] = row['assetType']
         row['signedAmount'] = row['val']
 
     cursor.close()
 
-    transactions = cash_rows + stock_rows
+    transactions = cash_rows + asset_rows
     transactions.sort(key=lambda row: row['transactionDate'], reverse=True)
     return transactions
 
