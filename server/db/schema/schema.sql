@@ -16,14 +16,15 @@ CREATE TABLE CashTransactions (
     FOREIGN KEY (userId) REFERENCES Users(userId) ON DELETE CASCADE
 );
 
-CREATE TABLE StockTransactions (
-    stockTransactionId INTEGER AUTO_INCREMENT PRIMARY KEY,
-    ticker VARCHAR(5) NOT NULL,
+CREATE TABLE AssetTransactions (
+    assetTransactionId INTEGER AUTO_INCREMENT PRIMARY KEY,
+    assetType ENUM('stock', 'crypto') NOT NULL,
+    ticker VARCHAR(7) NOT NULL,
     qty FLOAT NOT NULL,
     price FLOAT NOT NULL,
     val FLOAT NOT NULL,
-    stockTransactionType ENUM('buy', 'sell') NOT NULL,
-    stockTransactionDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    assetTransactionType ENUM('buy', 'sell') NOT NULL,
+    assetTransactionDate DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     userId INTEGER NOT NULL,
     FOREIGN KEY (userId) REFERENCES Users(userId) ON DELETE CASCADE
 );
