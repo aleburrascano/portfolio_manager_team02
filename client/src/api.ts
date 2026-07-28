@@ -32,3 +32,24 @@ export async function searchStocks(query: string): Promise<Stock[]> {
   const data = await res.json()
   return data.results
 }
+
+export type TransactionType = 'deposit' | 'withdraw'
+export async function submitCashTransaction(
+  userId: number,
+  type: TransactionType,
+  amount: number,
+): Promise<{ message: string }> {
+  const res = await fetch(`/users/${userId}/${type}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ amount }),
+  })
+
+  const data = await res.json().catch(() => ({}))
+
+  if (!res.ok) {
+    throw new Error(data.error || `Unable to ${type} funds!`)
+  }
+
+  return data
+}
