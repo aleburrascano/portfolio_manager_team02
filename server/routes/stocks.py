@@ -93,6 +93,67 @@ def get_popular_stocks() -> Tuple[dict, int]:
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
 
+@stocks_bp.route('/stocks/<ticker>', methods=['GET'])
+def get_stock_detail(ticker: str) -> Tuple[dict, int]:
+    """
+    Get quote details for a single stock.
+
+    Returns:
+        dict: {'symbol', 'name', 'currentPrice', 'change', 'changePercent',
+        'dayLow', 'dayHigh', 'open', 'yearLow', 'yearHigh', 'volume'}, or a
+        404 if the ticker isn't found.
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        fast_info = stock.fast_info
+        last_price = fast_info.get('lastPrice')
+        if last_price is None:
+            return {'error': 'Stock not found'}, 404
+
+        previous_close = fast_info.get('previousClose')
+        change = last_price - previous_close if previous_close else None
+
+        return {
+            'symbol': ticker.upper(),
+            'name': stock.info.get('longName', stock.info.get('shortName', ticker.upper())),
+            **_quote_fields(fast_info),
+            'open': fast_info.get('open'),
+            'yearLow': fast_info.get('yearLow'),
+            'yearHigh': fast_info.get('yearHigh'),
+            'volume': fast_info.get('lastVolume'),
+        }, 200
+    except Exception:
+        return {'error': 'Stock not found'}, 404
+
+@stocks_bp.route('/stocks/<ticker>/history', methods=['GET'])
+def get_stock_history(ticker: str) -> Tuple[dict, int]:
+    """
+    Get a year of daily closing prices for a stock, for charting.
+
+    Returns:
+        dict: {'history': list[{'date': str, 'close': float}]}
+    """
+    try:
+        stock = yf.Ticker(ticker)
+        prices = stock.history(period='1y')
+        history = [
+            {'date': index.strftime('%Y-%m-%d'), 'close': float(row['Close'])}
+            for index, row in prices.iterrows()
+        ]
+        return {'history': history}, 200
+    except Exception as e:
+        return {'error': str(e), 'history': []}, 200
+
+@stocks_bp.route('/users/<int:user_id>/stocks/<ticker>/holdings', methods=['GET'])
+def get_stock_holdings(user_id: int, ticker: str) -> Tuple[dict, int]:
+    """
+    Get how many shares of a stock the user currently owns.
+
+    Returns:
+        dict: {'shares': float}
+    """
+    return {'shares': st.get_holding_qty(user_id, ticker)}, 200
+
 @stocks_bp.route('/users/<int:user_id>/stocks/buy', methods=['POST'])
 def buy_stock(user_id: int) -> Tuple[dict, int]:
     """
