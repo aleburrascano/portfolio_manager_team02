@@ -1,3 +1,6 @@
+"""
+Routes for searching stocks and buying/selling stock for a user.
+"""
 from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
@@ -90,26 +93,50 @@ def get_popular_stocks() -> Tuple[dict, int]:
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
 
-@stocks_bp.route('/stocks/buy', methods=['POST'])
-def buy_stock(user_id: int, ticker: str, quantity: int) -> Tuple[dict, int]:
+@stocks_bp.route('/users/<int:user_id>/stocks/buy', methods=['POST'])
+def buy_stock(user_id: int) -> Tuple[dict, int]:
     """
     Buy stock for the user.
+
+    Body:
+        dict: {'ticker': str, 'quantity': int}
+
+    Returns:
+        dict: A success message, or a 400/500 error.
     """
+    body = request.get_json(silent=True) or {}
+    ticker = body.get('ticker')
+    quantity = body.get('quantity')
+    if not ticker or not quantity:
+        return {'error': 'ticker and quantity are required'}, 400
+
     try:
-        if st.purchaseStock(user_id, ticker, quantity):
+        if st.purchase_stock(user_id, ticker, quantity):
             return {'message': 'Stock purchase successful!'}, 200
         else:
             return {'error': 'Stock purchase failed. Check your balance.'}, 400
     except Exception as e:
         return {'error': str(e)}, 500
 
-@stocks_bp.route('/stocks/sell', methods=['POST'])
-def sell_stock(user_id: int, ticker: str, quantity: int) -> Tuple[dict, int]:
+@stocks_bp.route('/users/<int:user_id>/stocks/sell', methods=['POST'])
+def sell_stock(user_id: int) -> Tuple[dict, int]:
     """
     Sell stock for the user.
+
+    Body:
+        dict: {'ticker': str, 'quantity': int}
+
+    Returns:
+        dict: A success message, or a 400/500 error.
     """
+    body = request.get_json(silent=True) or {}
+    ticker = body.get('ticker')
+    quantity = body.get('quantity')
+    if not ticker or not quantity:
+        return {'error': 'ticker and quantity are required'}, 400
+
     try:
-        if st.sellStock(user_id, ticker, quantity):
+        if st.sell_stock(user_id, ticker, quantity):
             return {'message': 'Stock sale successful!'}, 200
         else:
             return {'error': 'Stock sale failed. Check your holdings.'}, 400

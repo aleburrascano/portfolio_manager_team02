@@ -1,10 +1,10 @@
 """
-Handle cash transactions in the database.
+Deposit and withdraw cash for a user's wallet balance.
 """
-import user_transactions as ut
+import services.user_transactions as ut
 import db.connection as db_conn
 
-def depositCash(user_id: int, amount: float) -> bool:
+def deposit_cash(user_id: int, amount: float) -> bool:
     """
     Deposits cash into the user's account. Ensure that the amount is 
     positive before proceeding with the deposit.
@@ -24,7 +24,7 @@ def depositCash(user_id: int, amount: float) -> bool:
         cursor = db.cursor()
         
         # Validate that the amount is positive and insert into the database
-        sql = "INSERT INTO cashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
+        sql = "INSERT INTO CashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
         val = (abs(amount), "deposit", user_id)
         cursor.execute(sql, val)
         db.commit()
@@ -34,7 +34,7 @@ def depositCash(user_id: int, amount: float) -> bool:
         return False
 
 
-def withdrawCash(user_id: int, amount: float) -> bool:
+def withdraw_cash(user_id: int, amount: float) -> bool:
     """
     Withdraws cash from the user's account. Ensure that the provided amount 
     is positive before proceeding with the withdrawal, and that the user has 
@@ -61,7 +61,7 @@ def withdrawCash(user_id: int, amount: float) -> bool:
             return False
 
         # Insert the withdrawal into the database
-        sql = "INSERT INTO cashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
+        sql = "INSERT INTO CashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
         val = (-abs(amount), "withdraw", user_id)
         cursor.execute(sql, val)
         db.commit()
