@@ -62,6 +62,22 @@
   cursor: pointer;
 }
 
+.logout-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--border);
+  color: var(--text-h);
+  transition: opacity 0.15s;
+}
+
+.logout-btn:hover {
+  opacity: 0.75;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;

@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import StockList from './components/StockList'
-import { fetchPopularStocks, searchStocks, type Stock } from './api'
+import { fetchPopularStocks, searchStocks, type Stock, type User } from './api'
 
-function Home() {
+function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [query, setQuery] = useState('')
   const [popularStocks, setPopularStocks] = useState<Stock[]>([])
   const [searchResults, setSearchResults] = useState<Stock[]>([])
@@ -47,7 +47,7 @@ function Home() {
 
   return (
     <>
-      <Header />
+      <Header user={user} onLogout={onLogout} />
       <section id="home-content">
         <SearchBar value={query} onChange={setQuery} />
         <StockList

@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
-import { DEMO_USER_ID, fetchBalance, submitCashTransaction, 
-         type TransactionType } from '../api'
+import { fetchBalance, submitCashTransaction, type TransactionType, type User } from '../api'
 import './Header.css'
 
 function formatCurrency(value: number) {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function Header() {
+function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [balance, setBalance] = useState<number | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
@@ -17,7 +16,7 @@ function Header() {
 
   async function loadBalance() {
       try {
-        setBalance(await fetchBalance(DEMO_USER_ID))
+        setBalance(await fetchBalance(user.userId))
       } catch {
         setBalance(null)
       }
@@ -25,7 +24,7 @@ function Header() {
   
   useEffect(() => {
     loadBalance()
-  }, [])
+  }, [user.userId])
 
   function openPopup(type: TransactionType) {
     setTransactionType(type)
@@ -51,7 +50,7 @@ function Header() {
     setStatusMessage('')
 
     try {
-      await submitCashTransaction(DEMO_USER_ID, transactionType, parsedAmount)
+      await submitCashTransaction(user.userId, transactionType, parsedAmount)
       await loadBalance()
       setStatusMessage(`${transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'} submitted successfully.`)
       setAmount('')
@@ -66,7 +65,7 @@ function Header() {
   return (
     <>
     <header className="app-header">
-      <h1>Hello, User Name</h1>
+      <h1>Hello, {user.firstName}</h1>
       <div className="app-header-actions">
         <button type="button" className="deposit-btn" onClick={() => openPopup('deposit')}>
           Deposit
@@ -77,6 +76,9 @@ function Header() {
         <span className="balance">
           {balance !== null ? formatCurrency(balance) : '...'}
         </span>
+        <button type="button" className="logout-btn" onClick={onLogout}>
+          Log out
+        </button>
       </div>
     </header>
 
