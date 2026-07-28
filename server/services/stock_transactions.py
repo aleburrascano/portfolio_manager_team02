@@ -7,11 +7,11 @@ import db.connection as db_conn
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
     """
-    Get how many shares of a stock the user currently owns.
+    Get how many shares of an asset (stock or crypto) the user currently owns.
 
     Args:
         user_id (int): The ID of the user.
-        ticker (str): The stock ticker symbol.
+        ticker (str): The asset ticker symbol.
 
     Returns:
         float: The number of shares owned (0 if none or on connection failure).
@@ -22,7 +22,7 @@ def get_holding_qty(user_id: int, ticker: str) -> float:
 
     cursor = db.cursor()
     cursor.execute(
-        "SELECT SUM(qty) FROM StockTransactions WHERE userId = %s AND ticker = %s",
+        "SELECT SUM(qty) FROM AssetTransactions WHERE userId = %s AND ticker = %s",
         (user_id, ticker)
     )
     total_shares = cursor.fetchone()[0]
@@ -61,8 +61,8 @@ def purchase_stock(user_id: int, ticker: str, quantity: int) -> bool:
             return False
 
         # Insert the purchase into the database
-        sql = "INSERT INTO StockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
-        val = (ticker, abs(quantity), current_price, -cost, "buy", user_id)
+        sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        val = ("stock", ticker, abs(quantity), current_price, -cost, "buy", user_id)
         cursor.execute(sql, val)
         db.commit()
         return True
@@ -102,8 +102,8 @@ def sell_stock(user_id: int, ticker: str, quantity: int) -> bool:
             return False
 
         # Insert the sale into the database
-        sql = "INSERT INTO StockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
-        val = (ticker, -abs(quantity), current_price, cost, "sell", user_id)
+        sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
+        val = ("stock", ticker, -abs(quantity), current_price, cost, "sell", user_id)
         cursor.execute(sql, val)
         db.commit()
         return True
