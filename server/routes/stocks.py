@@ -5,6 +5,22 @@ import services.stock_transactions as st
 
 stocks_bp = Blueprint('stocks', __name__)
 
+# Yahoo Finance exchange codes for Nasdaq, NYSE, and NYSE American/Arca.
+US_EXCHANGES = {'NMS', 'NGM', 'NCM', 'NYQ', 'ASE', 'PCX', 'BATS'}
+
+def _quote_fields(fast_info) -> dict:
+    """Extract price/change/day-range fields from a fast_info object."""
+    last_price = fast_info.get('lastPrice')
+    previous_close = fast_info.get('previousClose')
+    change = last_price - previous_close if last_price is not None and previous_close else None
+    return {
+        'currentPrice': last_price,
+        'change': change,
+        'changePercent': change / previous_close * 100 if change is not None and previous_close else None,
+        'dayLow': fast_info.get('dayLow'),
+        'dayHigh': fast_info.get('dayHigh'),
+    }
+
 @stocks_bp.route('/stocks/search', methods=['GET'])
 def search_stocks() -> Tuple[dict, int]:
     """
@@ -14,7 +30,8 @@ def search_stocks() -> Tuple[dict, int]:
         q (str): The search query.
 
     Returns:
-        dict: {'results': list[dict]}, each with 'symbol' and 'name'.
+        dict: {'results': list[dict]}, each with 'symbol', 'name',
+        'currentPrice', 'change', 'changePercent', 'dayLow', and 'dayHigh'.
     """
     query = request.args.get('q', '').strip()
     if not query:
@@ -22,16 +39,22 @@ def search_stocks() -> Tuple[dict, int]:
 
     try:
         search = yf.Search(query, max_results=10)
-        results = []
-
+        names = {}
         for quote in search.quotes:
             symbol = quote.get('symbol')
-            if not symbol:
-                continue
-            results.append({
-                'symbol': symbol,
-                'name': quote.get('longname', quote.get('shortname', 'N/A')),
-            })
+            if symbol and quote.get('exchange') in US_EXCHANGES:
+                names[symbol] = quote.get('longname', quote.get('shortname', 'N/A'))
+
+        results = []
+        if names:
+            tickers = yf.Tickers(' '.join(names.keys()))
+            for symbol, name in names.items():
+                stock = {'symbol': symbol, 'name': name}
+                try:
+                    stock.update(_quote_fields(tickers.tickers[symbol].fast_info))
+                except Exception:
+                    pass
+                results.append(stock)
 
         return {'results': results}, 200
     except Exception as e:
@@ -44,7 +67,8 @@ def get_popular_stocks() -> Tuple[dict, int]:
 
     Returns:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
-        'currentPrice', and 'volume'.
+        'currentPrice', 'volume', 'change', 'changePercent', 'dayLow',
+        and 'dayHigh'.
     """
     try:
         results = yf.screen("most_actives")
@@ -55,7 +79,11 @@ def get_popular_stocks() -> Tuple[dict, int]:
                 'symbol': quote['symbol'],
                 'name': quote.get('shortName', 'N/A'),
                 'currentPrice': quote.get('regularMarketPrice'),
-                'volume': quote.get('regularMarketVolume')
+                'volume': quote.get('regularMarketVolume'),
+                'change': quote.get('regularMarketChange'),
+                'changePercent': quote.get('regularMarketChangePercent'),
+                'dayLow': quote.get('regularMarketDayLow'),
+                'dayHigh': quote.get('regularMarketDayHigh'),
             })
 
         return {'results': stocks}, 200

@@ -1,0 +1,51 @@
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 {
+  font-size: 20px;
+  margin: 0;
+}
+
+.app-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.balance {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-h);
+}
+
+.deposit-btn,
+.withdraw-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.deposit-btn {
+  background: var(--positive-bg);
+  color: var(--positive);
+}
+
+.withdraw-btn {
+  background: var(--negative-bg);
+  color: var(--negative);
+}
+
+.deposit-btn:hover,
+.withdraw-btn:hover {
+  opacity: 0.75;
+}
