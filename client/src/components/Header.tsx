@@ -6,7 +6,15 @@ function formatCurrency(value: number) {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Header({
+  user,
+  onLogout,
+  refreshKey,
+}: {
+  user: User
+  onLogout: () => void
+  refreshKey?: number
+}) {
   const [balance, setBalance] = useState<number | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
@@ -24,7 +32,7 @@ function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
   
   useEffect(() => {
     loadBalance()
-  }, [user.userId])
+  }, [user.userId, refreshKey])
 
   function openPopup(type: TransactionType) {
     setTransactionType(type)
@@ -33,7 +41,8 @@ function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
     setIsPopupOpen(true)
   }
 
-  async function handleSubmit() {
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
 
     const parsedAmount = Number(amount)
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
