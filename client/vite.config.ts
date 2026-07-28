@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       '/users': 'http://localhost:5000',
       '/stocks': 'http://localhost:5000',
+      '/auth': 'http://localhost:5000',
     },
   },
 })
