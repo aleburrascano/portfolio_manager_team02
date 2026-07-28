@@ -3,6 +3,10 @@ import { DEMO_USER_ID, fetchBalance, submitCashTransaction,
          type TransactionType } from '../api'
 import './Header.css'
 
+function formatCurrency(value: number) {
+  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
 function Header() {
   const [balance, setBalance] = useState<number | null>(null)
   const [isPopupOpen, setIsPopupOpen] = useState(false)
@@ -38,6 +42,11 @@ function Header() {
       return
     }
 
+    if (transactionType === 'withdraw' && balance !== null && parsedAmount > balance) {
+      setStatusMessage(`Withdrawal amount exceeds current balance of ${formatCurrency(balance)}.`)
+      return
+    }
+
     setIsSubmitting(true)
     setStatusMessage('')
 
@@ -66,7 +75,7 @@ function Header() {
           Withdraw
         </button>
         <span className="balance">
-          {balance !== null ? `$${balance.toFixed(2)}` : '...'}
+          {balance !== null ? formatCurrency(balance) : '...'}
         </span>
       </div>
     </header>
@@ -76,7 +85,7 @@ function Header() {
           <div className="modal-card">
             <h2>{transactionType === 'deposit' ? 'Deposit Funds' : 'Withdraw Funds'}</h2>
             <p className="modal-balance">
-              Current Balance: {balance !== null ? `$${balance.toFixed(2)}` : '...'}
+              Current Balance: {balance !== null ? formatCurrency(balance) : '...'}
             </p>
 
             <form onSubmit={handleSubmit}>
@@ -87,6 +96,7 @@ function Header() {
                 id="transaction-amount"
                 type="number"
                 min="0.01"
+                max={transactionType === 'withdraw' && balance !== null ? balance : undefined}
                 step="0.01"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
