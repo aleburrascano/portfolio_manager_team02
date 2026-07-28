@@ -4,7 +4,7 @@ Routes for searching stocks and buying/selling stock for a user.
 from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
-import services.stock_transactions as st
+import server.services.asset_transactions as st
 
 stocks_bp = Blueprint('stocks', __name__)
 

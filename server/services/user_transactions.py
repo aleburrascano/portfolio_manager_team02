@@ -12,7 +12,7 @@ CASH_TRANSACTIONS_QUERY = (
 
 ASSET_TRANSACTIONS_QUERY = (
     "SELECT assetTransactionId as transactionId, assetTransactionType as transactionType, "
-    "qty, price, val, assetTransactionDate as transactionDate "
+    "assetType, qty, price, val, assetTransactionDate as transactionDate "
     "FROM AssetTransactions WHERE userId = %s"
 )
 
