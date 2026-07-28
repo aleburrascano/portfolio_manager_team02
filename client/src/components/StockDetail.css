@@ -1,0 +1,156 @@
+.stock-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.back-btn {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.back-btn:hover {
+  color: var(--text-h);
+}
+
+.stock-detail-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.stock-detail-title h1 {
+  font-size: 22px;
+  margin: 0;
+}
+
+.chart-card,
+.trade-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.trade-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.trade-tabs button {
+  flex: 1;
+  border: none;
+  background: var(--surface);
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.trade-tabs button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.trade-price {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-h);
+  margin-bottom: 16px;
+}
+
+.trade-price span {
+  font-size: 14px;
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.trade-price .positive {
+  color: var(--positive);
+}
+
+.trade-price .negative {
+  color: var(--negative);
+}
+
+.trade-card form label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.trade-max {
+  float: right;
+}
+
+.trade-card form input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.trade-total {
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 0 0 16px;
+}
+
+.trade-card .submit-btn {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--text-h);
+  color: var(--surface);
+}
+
+.trade-status {
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.trade-status.success {
+  color: var(--positive);
+}
+
+.trade-status.error {
+  color: var(--negative);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.stats-grid > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.stats-label {
+  color: var(--text-muted);
+}

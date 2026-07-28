@@ -5,6 +5,30 @@ import yfinance as yf
 import services.user_transactions as ut
 import db.connection as db_conn
 
+def get_holding_qty(user_id: int, ticker: str) -> float:
+    """
+    Get how many shares of a stock the user currently owns.
+
+    Args:
+        user_id (int): The ID of the user.
+        ticker (str): The stock ticker symbol.
+
+    Returns:
+        float: The number of shares owned (0 if none or on connection failure).
+    """
+    db = db_conn.get_db()
+    if db is None:
+        return 0
+
+    cursor = db.cursor()
+    cursor.execute(
+        "SELECT SUM(qty) FROM StockTransactions WHERE userId = %s AND ticker = %s",
+        (user_id, ticker)
+    )
+    total_shares = cursor.fetchone()[0]
+    cursor.close()
+    return float(total_shares) if total_shares is not None else 0
+
 def purchase_stock(user_id: int, ticker: str, quantity: int) -> bool:
     """
     Purchases stock for the user. Make sure that the user has sufficient 
@@ -73,10 +97,7 @@ def sell_stock(user_id: int, ticker: str, quantity: int) -> bool:
         cost = abs(float(quantity) * current_price)
 
         # Validate that the user owns enough shares to sell
-        sql = "SELECT SUM(qty) FROM StockTransactions WHERE userId = %s AND ticker = %s"
-        cursor.execute(sql, (user_id, ticker))
-        total_shares = cursor.fetchone()[0]
-        if total_shares is None or total_shares < quantity:
+        if get_holding_qty(user_id, ticker) < quantity:
             print("Insufficient shares for sale.")
             return False
 
