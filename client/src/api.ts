@@ -46,6 +46,56 @@ export async function searchStocks(query: string): Promise<Stock[]> {
   return data.results
 }
 
+export type StockDetail = Stock & {
+  open?: number
+  yearLow?: number
+  yearHigh?: number
+  volume?: number
+}
+
+export async function fetchStockDetail(symbol: string): Promise<StockDetail> {
+  const res = await fetch(`/stocks/${encodeURIComponent(symbol)}`)
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch stock')
+  return data
+}
+
+export type PricePoint = { date: string; close: number }
+
+export async function fetchStockHistory(symbol: string): Promise<PricePoint[]> {
+  const res = await fetch(`/stocks/${encodeURIComponent(symbol)}/history`)
+  if (!res.ok) throw new Error('Failed to fetch stock history')
+  const data = await res.json()
+  return data.history
+}
+
+export async function fetchHoldings(userId: number, symbol: string): Promise<number> {
+  const res = await fetch(`/users/${userId}/stocks/${encodeURIComponent(symbol)}/holdings`)
+  if (!res.ok) throw new Error('Failed to fetch holdings')
+  const data = await res.json()
+  return data.shares
+}
+
+export async function buyStock(userId: number, symbol: string, quantity: number): Promise<void> {
+  const res = await fetch(`/users/${userId}/stocks/buy`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker: symbol, quantity }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Stock purchase failed')
+}
+
+export async function sellStock(userId: number, symbol: string, quantity: number): Promise<void> {
+  const res = await fetch(`/users/${userId}/stocks/sell`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker: symbol, quantity }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error || 'Stock sale failed')
+}
+
 export type TransactionType = 'deposit' | 'withdraw'
 export async function submitCashTransaction(
   userId: number,

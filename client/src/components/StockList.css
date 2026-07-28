@@ -35,6 +35,11 @@
   border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.stock-row:hover {
+  border-color: var(--accent);
 }
 
 .stock-info {
