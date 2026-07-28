@@ -1,5 +1,18 @@
-// No auth yet, so we hardcode the demo user id.
-export const DEMO_USER_ID = 1
+export type User = {
+  userId: number
+  firstName: string
+  lastName: string
+}
+
+export async function login(firstName: string, lastName: string): Promise<User> {
+  const res = await fetch('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ firstName, lastName }),
+  })
+  if (!res.ok) throw new Error('Login failed')
+  return res.json()
+}
 
 export type Stock = {
   symbol: string
