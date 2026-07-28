@@ -1,11 +1,11 @@
 """
-Handle stock transactions in the database.
+Buy and sell stock for a user, priced from live yfinance quotes.
 """
 import yfinance as yf
-import user_transactions as ut 
+import services.user_transactions as ut
 import db.connection as db_conn
 
-def purchaseStock(user_id: int, ticker: str, quantity: int) -> bool:
+def purchase_stock(user_id: int, ticker: str, quantity: int) -> bool:
     """
     Purchases stock for the user. Make sure that the user has sufficient 
     funds to make the purchase before proceeding.
@@ -37,7 +37,7 @@ def purchaseStock(user_id: int, ticker: str, quantity: int) -> bool:
             return False
 
         # Insert the purchase into the database
-        sql = "INSERT INTO stockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
+        sql = "INSERT INTO StockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
         val = (ticker, abs(quantity), current_price, -cost, "buy", user_id)
         cursor.execute(sql, val)
         db.commit()
@@ -47,7 +47,7 @@ def purchaseStock(user_id: int, ticker: str, quantity: int) -> bool:
         return False
 
 
-def sellStock(user_id: int, ticker: str, quantity: int) -> bool:
+def sell_stock(user_id: int, ticker: str, quantity: int) -> bool:
     """
     Sells stock for the user. Make sure that the user owns enough 
     shares of the stock to sell before proceeding.
@@ -73,7 +73,7 @@ def sellStock(user_id: int, ticker: str, quantity: int) -> bool:
         cost = abs(float(quantity) * current_price)
 
         # Validate that the user owns enough shares to sell
-        sql = "SELECT SUM(qty) FROM stockTransactions WHERE userId = %s AND ticker = %s"
+        sql = "SELECT SUM(qty) FROM StockTransactions WHERE userId = %s AND ticker = %s"
         cursor.execute(sql, (user_id, ticker))
         total_shares = cursor.fetchone()[0]
         if total_shares is None or total_shares < quantity:
@@ -81,7 +81,7 @@ def sellStock(user_id: int, ticker: str, quantity: int) -> bool:
             return False
 
         # Insert the sale into the database
-        sql = "INSERT INTO stockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
+        sql = "INSERT INTO StockTransactions (ticker, qty, price, val, stockTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s)"
         val = (ticker, -abs(quantity), current_price, cost, "sell", user_id)
         cursor.execute(sql, val)
         db.commit()

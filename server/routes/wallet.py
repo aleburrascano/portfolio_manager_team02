@@ -1,6 +1,8 @@
-from turtle import st
+"""
+Routes for reading and updating a user's cash wallet balance.
+"""
 from typing import Tuple
-from flask import Blueprint
+from flask import Blueprint, request
 from services.user_transactions import get_user_balance
 import services.cash_transactions as ct
 
@@ -22,12 +24,22 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
     return {'userId': user_id, 'balance': balance}, 200
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
-def deposit_cash(user_id: int, amount: float) -> Tuple[dict, int]:
+def deposit_cash(user_id: int) -> Tuple[dict, int]:
     """
     Deposit cash into the user's account.
+
+    Body:
+        dict: {'amount': float}
+
+    Returns:
+        dict: A success message, or a 400/500 error.
     """
+    amount = (request.get_json(silent=True) or {}).get('amount')
+    if amount is None:
+        return {'error': 'amount is required'}, 400
+
     try:
-        if ct.depositCash(user_id, amount):
+        if ct.deposit_cash(user_id, amount):
             return {'message': 'Cash deposit successful!'}, 200
         else:
             return {'error': 'Cash deposit failed.'}, 400
@@ -35,12 +47,22 @@ def deposit_cash(user_id: int, amount: float) -> Tuple[dict, int]:
         return {'error': str(e)}, 500
 
 @wallet_bp.route('/users/<int:user_id>/withdraw', methods=['POST'])
-def withdraw_cash(user_id: int, amount: float) -> Tuple[dict, int]:
+def withdraw_cash(user_id: int) -> Tuple[dict, int]:
     """
     Withdraw cash from the user's account.
+
+    Body:
+        dict: {'amount': float}
+
+    Returns:
+        dict: A success message, or a 400/500 error.
     """
+    amount = (request.get_json(silent=True) or {}).get('amount')
+    if amount is None:
+        return {'error': 'amount is required'}, 400
+
     try:
-        if ct.withdrawCash(user_id, amount):
+        if ct.withdraw_cash(user_id, amount):
             return {'message': 'Cash withdrawal successful!'}, 200
         else:
             return {'error': 'Cash withdrawal failed.'}, 400
