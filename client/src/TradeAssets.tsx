@@ -3,7 +3,7 @@ import SearchBar from './components/SearchBar'
 import AssetList from './components/AssetList'
 import AssetDetail from './components/AssetDetail'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from './api'
-import './Home.css'
+import './TradeAssets.css'
 
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
@@ -15,7 +15,7 @@ const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
   crypto: 5000,
 }
 
-function Home({ user }: { user: User }) {
+function TradeAssets({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
@@ -104,7 +104,7 @@ function Home({ user }: { user: User }) {
   const isSearching = query.trim().length > 0
 
   return (
-    <section id="home-content">
+    <section id="trade-assets-content">
       {selectedSymbol ? (
         <AssetDetail
           assetType={assetType}
@@ -145,4 +145,4 @@ function Home({ user }: { user: User }) {
   )
 }
 
-export default Home
+export default TradeAssets
