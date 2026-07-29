@@ -1,5 +1,8 @@
 import { useState } from 'react'
+import Dashboard from './Dashboard'
 import Home from './Home'
+import Header from './components/Header'
+import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
 import { BalanceProvider } from './BalanceContext'
 import type { User } from './api'
@@ -10,6 +13,7 @@ function App() {
     const stored = localStorage.getItem('user')
     return stored ? JSON.parse(stored) : null
   })
+  const [page, setPage] = useState<Page>('dashboard')
 
   function handleLogin(user: User) {
     localStorage.setItem('user', JSON.stringify(user))
@@ -27,7 +31,15 @@ function App() {
 
   return (
     <BalanceProvider userId={user.userId}>
-      <Home user={user} onLogout={handleLogout} />
+      <div className="app-shell">
+        <Header user={user} onLogout={handleLogout} />
+        <div className="app-body">
+          <Sidebar page={page} onNavigate={setPage} />
+          <main className="app-page">
+            {page === 'dashboard' ? <Dashboard /> : <Home user={user} />}
+          </main>
+        </div>
+      </div>
     </BalanceProvider>
   )
 }
