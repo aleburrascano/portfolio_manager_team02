@@ -1,0 +1,15 @@
+#dashboard-content {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 20px 40px;
+}
+
+.dashboard-placeholder {
+  margin: 0;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
