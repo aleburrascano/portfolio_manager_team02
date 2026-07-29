@@ -1,4 +1,4 @@
-.stock-detail {
+.asset-detail {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -18,13 +18,13 @@
   color: var(--text-h);
 }
 
-.stock-detail-title {
+.asset-detail-title {
   display: flex;
   align-items: center;
   gap: 14px;
 }
 
-.stock-detail-title h1 {
+.asset-detail-title h1 {
   font-size: 22px;
   margin: 0;
 }
