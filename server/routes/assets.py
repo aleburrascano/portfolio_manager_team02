@@ -1,15 +1,14 @@
 """
-Routes for searching stocks and buying/selling stock for a user.
+Routes for searching, quoting, and buying/selling assets (stocks and
+crypto), dispatched by an `asset_type` URL segment onto an AssetProvider.
 """
 from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
-import server.services.asset_transactions as st
+import services.asset_transactions as st
+from routes.asset_providers import PROVIDERS
 
-stocks_bp = Blueprint('stocks', __name__)
-
-# Yahoo Finance exchange codes for Nasdaq, NYSE, and NYSE American/Arca.
-US_EXCHANGES = {'NMS', 'NGM', 'NCM', 'NYQ', 'ASE', 'PCX', 'BATS'}
+assets_bp = Blueprint('assets', __name__)
 
 def _quote_fields(fast_info) -> dict:
     """Extract price/change/day-range fields from a fast_info object."""
@@ -24,10 +23,10 @@ def _quote_fields(fast_info) -> dict:
         'dayHigh': fast_info.get('dayHigh'),
     }
 
-@stocks_bp.route('/stocks/search', methods=['GET'])
-def search_stocks() -> Tuple[dict, int]:
+@assets_bp.route('/assets/<asset_type>/search', methods=['GET'])
+def search_assets(asset_type: str) -> Tuple[dict, int]:
     """
-    Search for stocks by ticker or company name.
+    Search for assets by ticker or name.
 
     Query params:
         q (str): The search query.
@@ -36,6 +35,10 @@ def search_stocks() -> Tuple[dict, int]:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
         'currentPrice', 'change', 'changePercent', 'dayLow', and 'dayHigh'.
     """
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
+        return {'error': 'Unknown asset type'}, 404
+
     query = request.args.get('q', '').strip()
     if not query:
         return {'error': 'Search query required'}, 400
@@ -45,40 +48,48 @@ def search_stocks() -> Tuple[dict, int]:
         names = {}
         for quote in search.quotes:
             symbol = quote.get('symbol')
-            if symbol and quote.get('exchange') in US_EXCHANGES:
+            if symbol and provider.matches_quote(quote):
                 names[symbol] = quote.get('longname', quote.get('shortname', 'N/A'))
 
         results = []
         if names:
             tickers = yf.Tickers(' '.join(names.keys()))
             for symbol, name in names.items():
-                stock = {'symbol': symbol, 'name': name}
+                asset = {'symbol': symbol, 'name': name}
                 try:
-                    stock.update(_quote_fields(tickers.tickers[symbol].fast_info))
+                    asset.update(_quote_fields(tickers.tickers[symbol].fast_info))
                 except Exception:
                     pass
-                results.append(stock)
+                results.append(asset)
 
         return {'results': results}, 200
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
 
-@stocks_bp.route('/stocks/popular', methods=['GET'])
-def get_popular_stocks() -> Tuple[dict, int]:
+@assets_bp.route('/assets/<asset_type>/popular', methods=['GET'])
+def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
     """
-    Get the top 10 most actively traded stocks.
+    Get the top 10 most actively traded assets of this type.
 
     Returns:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
         'currentPrice', 'volume', 'change', 'changePercent', 'dayLow',
         and 'dayHigh'.
     """
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
+        return {'error': 'Unknown asset type'}, 404
+
+    screener = provider.popular_screener()
+    if screener is None:
+        return {'results': []}, 200
+
     try:
-        results = yf.screen("most_actives")
-        stocks = []
+        results = yf.screen(screener)
+        assets = []
 
         for quote in results.get('quotes', [])[:10]:
-            stocks.append({
+            assets.append({
                 'symbol': quote['symbol'],
                 'name': quote.get('shortName', 'N/A'),
                 'currentPrice': quote.get('regularMarketPrice'),
@@ -89,33 +100,36 @@ def get_popular_stocks() -> Tuple[dict, int]:
                 'dayHigh': quote.get('regularMarketDayHigh'),
             })
 
-        return {'results': stocks}, 200
+        return {'results': assets}, 200
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
 
-@stocks_bp.route('/stocks/<ticker>', methods=['GET'])
-def get_stock_detail(ticker: str) -> Tuple[dict, int]:
+@assets_bp.route('/assets/<asset_type>/<ticker>', methods=['GET'])
+def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
     """
-    Get quote details for a single stock.
+    Get quote details for a single asset.
 
     Returns:
         dict: {'symbol', 'name', 'currentPrice', 'change', 'changePercent',
         'dayLow', 'dayHigh', 'open', 'yearLow', 'yearHigh', 'volume'}, or a
-        404 if the ticker isn't found.
+        404 if the asset type or ticker isn't found.
     """
+    if asset_type not in PROVIDERS:
+        return {'error': 'Unknown asset type'}, 404
+
     try:
-        stock = yf.Ticker(ticker)
-        fast_info = stock.fast_info
+        asset = yf.Ticker(ticker)
+        fast_info = asset.fast_info
         last_price = fast_info.get('lastPrice')
         if last_price is None:
-            return {'error': 'Stock not found'}, 404
+            return {'error': 'Asset not found'}, 404
 
         previous_close = fast_info.get('previousClose')
         change = last_price - previous_close if previous_close else None
 
         return {
             'symbol': ticker.upper(),
-            'name': stock.info.get('longName', stock.info.get('shortName', ticker.upper())),
+            'name': asset.info.get('longName', asset.info.get('shortName', ticker.upper())),
             **_quote_fields(fast_info),
             'open': fast_info.get('open'),
             'yearLow': fast_info.get('yearLow'),
@@ -123,19 +137,22 @@ def get_stock_detail(ticker: str) -> Tuple[dict, int]:
             'volume': fast_info.get('lastVolume'),
         }, 200
     except Exception:
-        return {'error': 'Stock not found'}, 404
+        return {'error': 'Asset not found'}, 404
 
-@stocks_bp.route('/stocks/<ticker>/history', methods=['GET'])
-def get_stock_history(ticker: str) -> Tuple[dict, int]:
+@assets_bp.route('/assets/<asset_type>/<ticker>/history', methods=['GET'])
+def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
     """
-    Get a year of daily closing prices for a stock, for charting.
+    Get a year of daily closing prices for an asset, for charting.
 
     Returns:
         dict: {'history': list[{'date': str, 'close': float}]}
     """
+    if asset_type not in PROVIDERS:
+        return {'error': 'Unknown asset type'}, 404
+
     try:
-        stock = yf.Ticker(ticker)
-        prices = stock.history(period='1y')
+        asset = yf.Ticker(ticker)
+        prices = asset.history(period='1y')
         history = [
             {'date': index.strftime('%Y-%m-%d'), 'close': float(row['Close'])}
             for index, row in prices.iterrows()
@@ -144,27 +161,33 @@ def get_stock_history(ticker: str) -> Tuple[dict, int]:
     except Exception as e:
         return {'error': str(e), 'history': []}, 200
 
-@stocks_bp.route('/users/<int:user_id>/stocks/<ticker>/holdings', methods=['GET'])
-def get_stock_holdings(user_id: int, ticker: str) -> Tuple[dict, int]:
+@assets_bp.route('/users/<int:user_id>/assets/<asset_type>/<ticker>/holdings', methods=['GET'])
+def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
     """
-    Get how many shares of a stock the user currently owns.
+    Get how many shares/units of an asset the user currently owns.
 
     Returns:
         dict: {'shares': float}
     """
+    if asset_type not in PROVIDERS:
+        return {'error': 'Unknown asset type'}, 404
+
     return {'shares': st.get_holding_qty(user_id, ticker)}, 200
 
-@stocks_bp.route('/users/<int:user_id>/stocks/buy', methods=['POST'])
-def buy_stock(user_id: int) -> Tuple[dict, int]:
+@assets_bp.route('/users/<int:user_id>/assets/<asset_type>/buy', methods=['POST'])
+def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
-    Buy stock for the user.
+    Buy an asset for the user.
 
     Body:
-        dict: {'ticker': str, 'quantity': int}
+        dict: {'ticker': str, 'quantity': float}
 
     Returns:
-        dict: A success message, or a 400/500 error.
+        dict: A success message, or a 400/404/500 error.
     """
+    if asset_type not in PROVIDERS:
+        return {'error': 'Unknown asset type'}, 404
+
     body = request.get_json(silent=True) or {}
     ticker = body.get('ticker')
     quantity = body.get('quantity')
@@ -172,24 +195,27 @@ def buy_stock(user_id: int) -> Tuple[dict, int]:
         return {'error': 'ticker and quantity are required'}, 400
 
     try:
-        if st.purchase_stock(user_id, ticker, quantity):
-            return {'message': 'Stock purchase successful!'}, 200
+        if st.purchase_asset(user_id, asset_type, ticker, quantity):
+            return {'message': 'Purchase successful!'}, 200
         else:
-            return {'error': 'Stock purchase failed. Check your balance.'}, 400
+            return {'error': 'Purchase failed. Check your balance.'}, 400
     except Exception as e:
         return {'error': str(e)}, 500
 
-@stocks_bp.route('/users/<int:user_id>/stocks/sell', methods=['POST'])
-def sell_stock(user_id: int) -> Tuple[dict, int]:
+@assets_bp.route('/users/<int:user_id>/assets/<asset_type>/sell', methods=['POST'])
+def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
-    Sell stock for the user.
+    Sell an asset for the user.
 
     Body:
-        dict: {'ticker': str, 'quantity': int}
+        dict: {'ticker': str, 'quantity': float}
 
     Returns:
-        dict: A success message, or a 400/500 error.
+        dict: A success message, or a 400/404/500 error.
     """
+    if asset_type not in PROVIDERS:
+        return {'error': 'Unknown asset type'}, 404
+
     body = request.get_json(silent=True) or {}
     ticker = body.get('ticker')
     quantity = body.get('quantity')
@@ -197,9 +223,9 @@ def sell_stock(user_id: int) -> Tuple[dict, int]:
         return {'error': 'ticker and quantity are required'}, 400
 
     try:
-        if st.sell_stock(user_id, ticker, quantity):
-            return {'message': 'Stock sale successful!'}, 200
+        if st.sell_asset(user_id, asset_type, ticker, quantity):
+            return {'message': 'Sale successful!'}, 200
         else:
-            return {'error': 'Stock sale failed. Check your holdings.'}, 400
+            return {'error': 'Sale failed. Check your holdings.'}, 400
     except Exception as e:
         return {'error': str(e)}, 500
