@@ -14,7 +14,9 @@ export async function login(firstName: string, lastName: string): Promise<User> 
   return res.json()
 }
 
-export type Stock = {
+export type AssetType = 'stock' | 'crypto'
+
+export type Asset = {
   symbol: string
   name: string
   currentPrice?: number
@@ -32,68 +34,78 @@ export async function fetchBalance(userId: number): Promise<number> {
   return data.balance
 }
 
-export async function fetchPopularStocks(): Promise<Stock[]> {
-  const res = await fetch('/stocks/popular')
-  if (!res.ok) throw new Error('Failed to fetch popular stocks')
+export async function fetchPopularAssets(assetType: AssetType): Promise<Asset[]> {
+  const res = await fetch(`/assets/${assetType}/popular`)
+  if (!res.ok) throw new Error('Failed to fetch popular assets')
   const data = await res.json()
   return data.results
 }
 
-export async function searchStocks(query: string): Promise<Stock[]> {
-  const res = await fetch(`/stocks/search?q=${encodeURIComponent(query)}`)
-  if (!res.ok) throw new Error('Failed to search stocks')
+export async function searchAssets(assetType: AssetType, query: string): Promise<Asset[]> {
+  const res = await fetch(`/assets/${assetType}/search?q=${encodeURIComponent(query)}`)
+  if (!res.ok) throw new Error('Failed to search assets')
   const data = await res.json()
   return data.results
 }
 
-export type StockDetail = Stock & {
+export type AssetDetail = Asset & {
   open?: number
   yearLow?: number
   yearHigh?: number
   volume?: number
 }
 
-export async function fetchStockDetail(symbol: string): Promise<StockDetail> {
-  const res = await fetch(`/stocks/${encodeURIComponent(symbol)}`)
+export async function fetchAssetDetail(assetType: AssetType, symbol: string): Promise<AssetDetail> {
+  const res = await fetch(`/assets/${assetType}/${encodeURIComponent(symbol)}`)
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Failed to fetch stock')
+  if (!res.ok) throw new Error(data.error || 'Failed to fetch asset')
   return data
 }
 
 export type PricePoint = { date: string; close: number }
 
-export async function fetchStockHistory(symbol: string): Promise<PricePoint[]> {
-  const res = await fetch(`/stocks/${encodeURIComponent(symbol)}/history`)
-  if (!res.ok) throw new Error('Failed to fetch stock history')
+export async function fetchAssetHistory(assetType: AssetType, symbol: string): Promise<PricePoint[]> {
+  const res = await fetch(`/assets/${assetType}/${encodeURIComponent(symbol)}/history`)
+  if (!res.ok) throw new Error('Failed to fetch asset history')
   const data = await res.json()
   return data.history
 }
 
-export async function fetchHoldings(userId: number, symbol: string): Promise<number> {
-  const res = await fetch(`/users/${userId}/stocks/${encodeURIComponent(symbol)}/holdings`)
+export async function fetchHoldings(userId: number, assetType: AssetType, symbol: string): Promise<number> {
+  const res = await fetch(`/users/${userId}/assets/${assetType}/${encodeURIComponent(symbol)}/holdings`)
   if (!res.ok) throw new Error('Failed to fetch holdings')
   const data = await res.json()
   return data.shares
 }
 
-export async function buyStock(userId: number, symbol: string, quantity: number): Promise<void> {
-  const res = await fetch(`/users/${userId}/stocks/buy`, {
+export async function buyAsset(
+  userId: number,
+  assetType: AssetType,
+  symbol: string,
+  quantity: number,
+): Promise<void> {
+  const res = await fetch(`/users/${userId}/assets/${assetType}/buy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker: symbol, quantity }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Stock purchase failed')
+  if (!res.ok) throw new Error(data.error || 'Purchase failed')
 }
 
-export async function sellStock(userId: number, symbol: string, quantity: number): Promise<void> {
-  const res = await fetch(`/users/${userId}/stocks/sell`, {
+export async function sellAsset(
+  userId: number,
+  assetType: AssetType,
+  symbol: string,
+  quantity: number,
+): Promise<void> {
+  const res = await fetch(`/users/${userId}/assets/${assetType}/sell`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker: symbol, quantity }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Stock sale failed')
+  if (!res.ok) throw new Error(data.error || 'Sale failed')
 }
 
 export type TransactionType = 'deposit' | 'withdraw'
