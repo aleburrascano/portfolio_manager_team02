@@ -19,3 +19,8 @@
   background: var(--accent-bg);
   color: var(--accent);
 }
+
+.asset-type-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

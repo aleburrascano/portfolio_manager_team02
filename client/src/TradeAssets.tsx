@@ -1,33 +1,76 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import SearchBar from './components/SearchBar'
 import AssetList from './components/AssetList'
 import AssetDetail from './components/AssetDetail'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from './api'
-import './Home.css'
+import './TradeAssets.css'
 
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
   { type: 'crypto', label: 'Crypto' },
 ]
 
-function Home({ user }: { user: User }) {
+const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
+  stock: 10000,
+  crypto: 5000,
+}
+
+function TradeAssets({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
+  const [popularLoading, setPopularLoading] = useState(true)
   const [searchResults, setSearchResults] = useState<Asset[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
   useEffect(() => {
-    async function loadPopularAssets() {
-      try {
-        setPopularAssets(await fetchPopularAssets(assetType))
-      } catch {
-        setPopularAssets([])
-      }
+    const cached = popularCache.current[assetType]
+    if (cached) {
+      setPopularAssets(cached)
+      setPopularLoading(false)
+      return
     }
 
-    loadPopularAssets()
+    let cancelled = false
+    setPopularLoading(true)
+
+    fetchPopularAssets(assetType)
+      .then((assets) => {
+        if (cancelled) return
+        popularCache.current[assetType] = assets
+        setPopularAssets(assets)
+      })
+      .catch(() => {
+        if (!cancelled) setPopularAssets([])
+      })
+      .finally(() => {
+        if (!cancelled) setPopularLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [assetType])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const interval = setInterval(() => {
+      fetchPopularAssets(assetType)
+        .then((assets) => {
+          if (cancelled) return
+          popularCache.current[assetType] = assets
+          setPopularAssets(assets)
+        })
+        .catch(() => {})
+    }, POPULAR_POLL_INTERVAL_MS[assetType])
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
   }, [assetType])
 
   useEffect(() => {
@@ -52,6 +95,7 @@ function Home({ user }: { user: User }) {
   }, [assetType, query])
 
   function switchAssetType(next: AssetType) {
+    if (popularLoading || next === assetType) return
     setAssetType(next)
     setQuery('')
     setSelectedSymbol(null)
@@ -60,7 +104,7 @@ function Home({ user }: { user: User }) {
   const isSearching = query.trim().length > 0
 
   return (
-    <section id="home-content">
+    <section id="trade-assets-content">
       {selectedSymbol ? (
         <AssetDetail
           assetType={assetType}
@@ -76,6 +120,7 @@ function Home({ user }: { user: User }) {
                 key={type}
                 type="button"
                 className={assetType === type ? 'active' : ''}
+                disabled={popularLoading}
                 onClick={() => switchAssetType(type)}
               >
                 {label}
@@ -89,8 +134,9 @@ function Home({ user }: { user: User }) {
                 ? 'Search Results'
                 : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
             }
+            assetType={assetType}
             assets={isSearching ? searchResults : popularAssets}
-            loading={isSearching && searching}
+            loading={isSearching ? searching : popularLoading}
             onSelect={setSelectedSymbol}
           />
         </>
@@ -99,4 +145,4 @@ function Home({ user }: { user: User }) {
   )
 }
 
-export default Home
+export default TradeAssets

@@ -21,7 +21,7 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
     if balance is None:
         return {'error': 'Database connection failed'}, 500
 
-    return {'userId': user_id, 'balance': balance}, 200
+    return {'userId': user_id, 'balance': round(float(balance), 2)}, 200
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
 def deposit_cash(user_id: int) -> Tuple[dict, int]:
