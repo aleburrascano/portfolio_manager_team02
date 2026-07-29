@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import AssetList from './components/AssetList'
 import AssetDetail from './components/AssetDetail'
@@ -16,7 +15,7 @@ const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
   crypto: 5000,
 }
 
-function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Home({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
@@ -105,47 +104,44 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const isSearching = query.trim().length > 0
 
   return (
-    <>
-      <Header user={user} onLogout={onLogout} />
-      <section id="home-content">
-        {selectedSymbol ? (
-          <AssetDetail
+    <section id="home-content">
+      {selectedSymbol ? (
+        <AssetDetail
+          assetType={assetType}
+          symbol={selectedSymbol}
+          user={user}
+          onBack={() => setSelectedSymbol(null)}
+        />
+      ) : (
+        <>
+          <div className="asset-type-tabs">
+            {ASSET_TYPES.map(({ type, label }) => (
+              <button
+                key={type}
+                type="button"
+                className={assetType === type ? 'active' : ''}
+                disabled={popularLoading}
+                onClick={() => switchAssetType(type)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <SearchBar value={query} onChange={setQuery} />
+          <AssetList
+            title={
+              isSearching
+                ? 'Search Results'
+                : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
+            }
             assetType={assetType}
-            symbol={selectedSymbol}
-            user={user}
-            onBack={() => setSelectedSymbol(null)}
+            assets={isSearching ? searchResults : popularAssets}
+            loading={isSearching ? searching : popularLoading}
+            onSelect={setSelectedSymbol}
           />
-        ) : (
-          <>
-            <div className="asset-type-tabs">
-              {ASSET_TYPES.map(({ type, label }) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={assetType === type ? 'active' : ''}
-                  disabled={popularLoading}
-                  onClick={() => switchAssetType(type)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <SearchBar value={query} onChange={setQuery} />
-            <AssetList
-              title={
-                isSearching
-                  ? 'Search Results'
-                  : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
-              }
-              assetType={assetType}
-              assets={isSearching ? searchResults : popularAssets}
-              loading={isSearching ? searching : popularLoading}
-              onSelect={setSelectedSymbol}
-            />
-          </>
-        )}
-      </section>
-    </>
+        </>
+      )}
+    </section>
   )
 }
 
