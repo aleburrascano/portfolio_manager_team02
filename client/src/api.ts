@@ -29,6 +29,12 @@ export type Asset = {
   dayHigh?: number
 }
 
+export async function fetchUser(userId: number): Promise<User> {
+  const res = await fetch(`${API_BASE}/users/${userId}`)
+  if (!res.ok) throw new Error(res.status === 404 ? 'User not found' : 'Failed to fetch user')
+  return res.json()
+}
+
 export async function fetchBalance(userId: number): Promise<number> {
   const res = await fetch(`${API_BASE}/users/${userId}/balance`)
   if (!res.ok) throw new Error('Failed to fetch balance')

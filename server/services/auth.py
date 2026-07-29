@@ -37,3 +37,29 @@ def login(first_name: str, last_name: str) -> Optional[Dict[str, Any]]:
 
     cursor.close()
     return user
+
+def get_user(user_id: int) -> tuple[Optional[Dict[str, Any]], bool]:
+    """
+    Look up a user by ID.
+
+    Args:
+        user_id (int): The ID of the user.
+
+    Returns:
+        tuple[dict | None, bool]: (user, db_error). `user` is the row dict, or
+        None if no such user exists. `db_error` is True if the lookup failed
+        because the database connection itself failed (distinct from a
+        legitimate "no such user").
+    """
+    db = get_db()
+    if db is None:
+        return None, True
+
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT userId, firstName, lastName FROM Users WHERE userId = %s",
+        (user_id,)
+    )
+    user = cursor.fetchone()
+    cursor.close()
+    return user, False
