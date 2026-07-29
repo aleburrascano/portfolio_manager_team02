@@ -1,7 +1,14 @@
 #dashboard-content {
   display: flex;
   flex-direction: column;
+  gap: 20px;
   padding: 24px 20px 40px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
 }
 
 .dashboard-placeholder {
@@ -12,4 +19,28 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
+}
+
+.dashboard-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 18px;
+  box-shadow: var(--shadow-soft);
+}
+
+.dashboard-card-header {
+  margin-bottom: 16px;
+}
+
+.dashboard-placeholder-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 280px;
+}
+
+.dashboard-placeholder-card p {
+  margin: 0;
+  color: var(--text-muted);
 }

@@ -131,3 +131,53 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> b
         db.rollback()
         print(f"Error performing {asset_type} sale: {e}")
         return False
+
+
+
+def get_portfolio_values(user_id: int) -> dict:
+    """
+    Compute the portfolio breakdown for a user.
+
+    Returns a dict with keys 'cash', 'stock', and 'crypto' representing
+    the current total value for each category. Cash is taken from the
+    user's net wallet balance (cash + asset transaction effects). Asset
+    values are computed from current prices multiplied by net holdings.
+    """
+    db = db_conn.get_db()
+    if db is None:
+        return {'cash': 0.0, 'stock': 0.0, 'crypto': 0.0}
+
+    cash = ut.get_user_balance(user_id) or 0.0
+
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT assetType, ticker, SUM(qty) as qty FROM AssetTransactions WHERE userId = %s GROUP BY assetType, ticker",
+        (user_id,)
+    )
+    rows = cursor.fetchall()
+    cursor.close()
+
+    totals = {'stock': 0.0, 'crypto': 0.0}
+
+    for row in rows:
+        qty = row.get('qty') or 0
+        if qty == 0:
+            continue
+        ticker = row.get('ticker')
+        asset_type = row.get('assetType')
+
+        price = 0.0
+        try:
+            asset = yf.Ticker(ticker)
+            fast_info = getattr(asset, 'fast_info', None) or {}
+            last_price = fast_info.get('lastPrice')
+            if last_price is not None:
+                price = float(last_price)
+            else:
+                price = float(asset.history(period="1d")['Close'].iloc[0])
+        except Exception:
+            price = 0.0
+
+        totals[asset_type] += float(qty) * float(price)
+
+    return {'cash': float(cash), 'stock': float(totals['stock']), 'crypto': float(totals['crypto'])}
