@@ -1,5 +1,6 @@
 """
-Buy and sell stock for a user, priced from live yfinance quotes.
+Buy and sell assets (stocks or crypto) for a user, priced from live
+yfinance quotes.
 """
 import yfinance as yf
 import services.user_transactions as ut
@@ -29,17 +30,16 @@ def get_holding_qty(user_id: int, ticker: str) -> float:
     cursor.close()
     return float(total_shares) if total_shares is not None else 0
 
-def purchase_stock(user_id: int, ticker: str, quantity: int) -> bool:
+def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: int) -> bool:
     """
-    Purchases stock for the user. Make sure that the user has sufficient 
-    funds to make the purchase before proceeding.
+    Purchases an asset (stock or crypto) for the user. Make sure that the
+    user has sufficient funds to make the purchase before proceeding.
 
     Args:
         user_id (int): The ID of the user.
-        ticker (str): The stock ticker symbol.
-        quantity (int): The number of shares to purchase.
-        cursor: The database cursor.
-        db: The database connection.
+        asset_type (str): 'stock' or 'crypto'.
+        ticker (str): The asset ticker symbol.
+        quantity (int): The number of shares/units to purchase.
 
     Returns:
         bool: True if the purchase was successful, False otherwise.
@@ -47,41 +47,40 @@ def purchase_stock(user_id: int, ticker: str, quantity: int) -> bool:
     try:
         db = db_conn.get_db()
         if db is None: return False
-        cursor = db.cursor() 
+        cursor = db.cursor()
 
-        # Get the current price of the stock
-        stock = yf.Ticker(ticker)
-        current_price = float(stock.history(period="1d")['Close'].iloc[0])
+        # Get the current price of the asset
+        asset = yf.Ticker(ticker)
+        current_price = float(asset.history(period="1d")['Close'].iloc[0])
 
         # Validate that the user has sufficient funds to make the purchase
         cost = abs(float(quantity) * current_price)
         wallet = ut.get_user_balance(user_id)
         if wallet is None or wallet < cost:
-            print("Insufficient funds for stock purchase.")
+            print(f"Insufficient funds for {asset_type} purchase.")
             return False
 
         # Insert the purchase into the database
         sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        val = ("stock", ticker, abs(quantity), current_price, -cost, "buy", user_id)
+        val = (asset_type, ticker, abs(quantity), current_price, -cost, "buy", user_id)
         cursor.execute(sql, val)
         db.commit()
         return True
     except Exception as e:
-        print(f"Error performing stock purchase: {e}")
+        print(f"Error performing {asset_type} purchase: {e}")
         return False
 
 
-def sell_stock(user_id: int, ticker: str, quantity: int) -> bool:
+def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: int) -> bool:
     """
-    Sells stock for the user. Make sure that the user owns enough 
-    shares of the stock to sell before proceeding.
+    Sells an asset (stock or crypto) for the user. Make sure that the user
+    owns enough shares/units to sell before proceeding.
 
     Args:
         user_id (int): The ID of the user.
-        ticker (str): The stock ticker symbol.
-        quantity (int): The number of shares to sell.
-        cursor: The database cursor.
-        db: The database connection.
+        asset_type (str): 'stock' or 'crypto'.
+        ticker (str): The asset ticker symbol.
+        quantity (int): The number of shares/units to sell.
 
     Returns:
         bool: True if the sale was successful, False otherwise.
@@ -90,23 +89,23 @@ def sell_stock(user_id: int, ticker: str, quantity: int) -> bool:
         db = db_conn.get_db()
         if db is None: return False
         cursor = db.cursor()
-        
-        # Get the current price of the stock
-        stock = yf.Ticker(ticker)
-        current_price = float(stock.history(period="1d")['Close'].iloc[0])
+
+        # Get the current price of the asset
+        asset = yf.Ticker(ticker)
+        current_price = float(asset.history(period="1d")['Close'].iloc[0])
         cost = abs(float(quantity) * current_price)
 
-        # Validate that the user owns enough shares to sell
+        # Validate that the user owns enough shares/units to sell
         if get_holding_qty(user_id, ticker) < quantity:
-            print("Insufficient shares for sale.")
+            print(f"Insufficient holdings for {asset_type} sale.")
             return False
 
         # Insert the sale into the database
         sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        val = ("stock", ticker, -abs(quantity), current_price, cost, "sell", user_id)
+        val = (asset_type, ticker, -abs(quantity), current_price, cost, "sell", user_id)
         cursor.execute(sql, val)
         db.commit()
         return True
     except Exception as e:
-        print(f"Error performing stock sale: {e}")
+        print(f"Error performing {asset_type} sale: {e}")
         return False

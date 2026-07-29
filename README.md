@@ -57,8 +57,8 @@ The API is available at `http://localhost:5000`.
 | ------ | ------------------------------ | --------------------------------------------- |
 | GET    | `/users/:userId/balance`       | Get a user's wallet balance                   |
 | GET    | `/users/:userId/transactions`  | Get a user's chronological transaction history |
-| GET    | `/stocks/search?q=`            | Search stocks by ticker or name (US exchanges) |
-| GET    | `/stocks/popular`              | Get the top 10 most actively traded stocks    |
+| GET    | `/assets/:assetType/search?q=` | Search assets by ticker or name (assetType: stock, crypto) |
+| GET    | `/assets/:assetType/popular`   | Get the top 10 most actively traded assets of that type |
 
 ## Client setup
 
@@ -68,7 +68,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs at `http://localhost:5173` and proxies `/users` and `/stocks`
+The dev server runs at `http://localhost:5173` and proxies `/users` and `/assets`
 requests to the Flask server at `http://localhost:5000`, so run both at once.
 
 Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
