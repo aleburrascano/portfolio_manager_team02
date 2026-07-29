@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import SearchBar from './components/SearchBar'
-import StockList from './components/StockList'
-import StockDetail from './components/StockDetail'
-import { fetchPopularStocks, searchStocks, type Stock, type User } from './api'
+import AssetList from './components/AssetList'
+import AssetDetail from './components/AssetDetail'
+import { fetchPopularAssets, searchAssets, type Asset, type User } from './api'
+
+const ASSET_TYPE = 'stock'
 
 function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [query, setQuery] = useState('')
-  const [popularStocks, setPopularStocks] = useState<Stock[]>([])
-  const [searchResults, setSearchResults] = useState<Stock[]>([])
+  const [popularAssets, setPopularAssets] = useState<Asset[]>([])
+  const [searchResults, setSearchResults] = useState<Asset[]>([])
   const [searching, setSearching] = useState(false)
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const [balanceRefreshKey, setBalanceRefreshKey] = useState(0)
 
   useEffect(() => {
-    async function loadPopularStocks() {
+    async function loadPopularAssets() {
       try {
-        setPopularStocks(await fetchPopularStocks())
+        setPopularAssets(await fetchPopularAssets(ASSET_TYPE))
       } catch {
-        setPopularStocks([])
+        setPopularAssets([])
       }
     }
 
-    loadPopularStocks()
+    loadPopularAssets()
   }, [])
 
   useEffect(() => {
@@ -35,7 +37,7 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
     setSearching(true)
     const timeout = setTimeout(async () => {
       try {
-        setSearchResults(await searchStocks(trimmed))
+        setSearchResults(await searchAssets(ASSET_TYPE, trimmed))
       } catch {
         setSearchResults([])
       } finally {
@@ -53,7 +55,8 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
       <Header user={user} onLogout={onLogout} refreshKey={balanceRefreshKey} />
       <section id="home-content">
         {selectedSymbol ? (
-          <StockDetail
+          <AssetDetail
+            assetType={ASSET_TYPE}
             symbol={selectedSymbol}
             user={user}
             onBack={() => setSelectedSymbol(null)}
@@ -62,9 +65,9 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
         ) : (
           <>
             <SearchBar value={query} onChange={setQuery} />
-            <StockList
+            <AssetList
               title={isSearching ? 'Search Results' : 'Most Active Stocks'}
-              stocks={isSearching ? searchResults : popularStocks}
+              assets={isSearching ? searchResults : popularAssets}
               loading={isSearching && searching}
               onSelect={setSelectedSymbol}
             />

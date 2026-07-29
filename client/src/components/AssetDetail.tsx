@@ -1,33 +1,36 @@
 import { useEffect, useState } from 'react'
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts'
 import {
-  buyStock,
+  buyAsset,
+  fetchAssetDetail,
+  fetchAssetHistory,
   fetchBalance,
   fetchHoldings,
-  fetchStockDetail,
-  fetchStockHistory,
-  sellStock,
+  sellAsset,
+  type AssetDetail as AssetDetailType,
+  type AssetType,
   type PricePoint,
-  type StockDetail as StockDetailType,
   type User,
 } from '../api'
 import StockLogo from './StockLogo'
-import './StockDetail.css'
+import './AssetDetail.css'
 
 type Side = 'buy' | 'sell'
 
-function StockDetail({
+function AssetDetail({
+  assetType,
   symbol,
   user,
   onBack,
   onTraded,
 }: {
+  assetType: AssetType
   symbol: string
   user: User
   onBack: () => void
   onTraded: () => void
 }) {
-  const [detail, setDetail] = useState<StockDetailType | null>(null)
+  const [detail, setDetail] = useState<AssetDetailType | null>(null)
   const [detailError, setDetailError] = useState('')
   const [history, setHistory] = useState<PricePoint[]>([])
   const [shares, setShares] = useState(0)
@@ -40,15 +43,15 @@ function StockDetail({
   useEffect(() => {
     setDetail(null)
     setDetailError('')
-    fetchStockDetail(symbol)
+    fetchAssetDetail(assetType, symbol)
       .then(setDetail)
       .catch((error) =>
-        setDetailError(error instanceof Error ? error.message : 'Failed to load stock.')
+        setDetailError(error instanceof Error ? error.message : 'Failed to load asset.')
       )
-    fetchStockHistory(symbol).then(setHistory).catch(() => setHistory([]))
-    fetchHoldings(user.userId, symbol).then(setShares).catch(() => setShares(0))
+    fetchAssetHistory(assetType, symbol).then(setHistory).catch(() => setHistory([]))
+    fetchHoldings(user.userId, assetType, symbol).then(setShares).catch(() => setShares(0))
     fetchBalance(user.userId).then(setBalance).catch(() => setBalance(null))
-  }, [symbol, user.userId])
+  }, [assetType, symbol, user.userId])
 
   const price = detail?.currentPrice ?? 0
   const isPositive = (detail?.change ?? 0) >= 0
@@ -83,11 +86,11 @@ function StockDetail({
     setSubmitting(true)
     try {
       if (side === 'buy') {
-        await buyStock(user.userId, symbol, parsedQuantity)
+        await buyAsset(user.userId, assetType, symbol, parsedQuantity)
       } else {
-        await sellStock(user.userId, symbol, parsedQuantity)
+        await sellAsset(user.userId, assetType, symbol, parsedQuantity)
       }
-      setShares(await fetchHoldings(user.userId, symbol))
+      setShares(await fetchHoldings(user.userId, assetType, symbol))
       setBalance(await fetchBalance(user.userId))
       setQuantity('1')
       setStatus(side === 'buy' ? 'Purchase successful!' : 'Sale successful!')
@@ -100,22 +103,22 @@ function StockDetail({
   }
 
   return (
-    <div className="stock-detail">
+    <div className="asset-detail">
       <button type="button" className="back-btn" onClick={onBack}>
         ← Back
       </button>
 
       {detailError ? (
-        <p className="stock-list-status">{detailError}</p>
+        <p className="asset-list-status">{detailError}</p>
       ) : !detail ? (
-        <p className="stock-list-status">Loading…</p>
+        <p className="asset-list-status">Loading…</p>
       ) : (
         <>
-          <div className="stock-detail-title">
+          <div className="asset-detail-title">
             <StockLogo symbol={detail.symbol} />
             <div>
               <h1>{detail.name}</h1>
-              <span className="stock-symbol">{detail.symbol}</span>
+              <span className="asset-symbol">{detail.symbol}</span>
             </div>
           </div>
 
@@ -225,4 +228,4 @@ function StockDetail({
   )
 }
 
-export default StockDetail
+export default AssetDetail
