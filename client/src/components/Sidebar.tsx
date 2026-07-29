@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import './Sidebar.css'
 
-export type Page = 'dashboard' | 'home'
+export type Page = 'dashboard' | 'trade-assets'
 
 const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   {
@@ -17,7 +17,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    page: 'home',
+    page: 'trade-assets',
     label: 'Trade Assets',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">

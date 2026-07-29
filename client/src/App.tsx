@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import Dashboard from './Dashboard'
-import Home from './Home'
+import TradeAssets from './TradeAssets'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
@@ -14,7 +14,7 @@ function App() {
     return stored ? JSON.parse(stored) : null
   })
   const [validating, setValidating] = useState(() => localStorage.getItem('user') !== null)
-  const [page, setPage] = useState<Page>('home')
+  const [page, setPage] = useState<Page>('trade-assets')
 
   useEffect(() => {
     if (!user) return
@@ -61,7 +61,7 @@ function App() {
         <div className="app-body">
           <Sidebar page={page} onNavigate={setPage} />
           <main className="app-page">
-            {page === 'dashboard' ? <Dashboard /> : <Home user={user} />}
+            {page === 'dashboard' ? <Dashboard /> : <TradeAssets user={user} />}
           </main>
         </div>
       </div>
