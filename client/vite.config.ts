@@ -6,9 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/users': 'http://localhost:5000',
-      '/assets': 'http://localhost:5000',
-      '/auth': 'http://localhost:5000',
+      '/api': 'http://localhost:5000',
     },
   },
 })

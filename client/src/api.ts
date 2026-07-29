@@ -1,3 +1,5 @@
+const API_BASE = '/api'
+
 export type User = {
   userId: number
   firstName: string
@@ -5,7 +7,7 @@ export type User = {
 }
 
 export async function login(firstName: string, lastName: string): Promise<User> {
-  const res = await fetch('/auth/login', {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ firstName, lastName }),
@@ -28,21 +30,21 @@ export type Asset = {
 }
 
 export async function fetchBalance(userId: number): Promise<number> {
-  const res = await fetch(`/users/${userId}/balance`)
+  const res = await fetch(`${API_BASE}/users/${userId}/balance`)
   if (!res.ok) throw new Error('Failed to fetch balance')
   const data = await res.json()
   return data.balance
 }
 
 export async function fetchPopularAssets(assetType: AssetType): Promise<Asset[]> {
-  const res = await fetch(`/assets/${assetType}/popular`)
+  const res = await fetch(`${API_BASE}/assets/${assetType}/popular`)
   if (!res.ok) throw new Error('Failed to fetch popular assets')
   const data = await res.json()
   return data.results
 }
 
 export async function searchAssets(assetType: AssetType, query: string): Promise<Asset[]> {
-  const res = await fetch(`/assets/${assetType}/search?q=${encodeURIComponent(query)}`)
+  const res = await fetch(`${API_BASE}/assets/${assetType}/search?q=${encodeURIComponent(query)}`)
   if (!res.ok) throw new Error('Failed to search assets')
   const data = await res.json()
   return data.results
@@ -56,7 +58,7 @@ export type AssetDetail = Asset & {
 }
 
 export async function fetchAssetDetail(assetType: AssetType, symbol: string): Promise<AssetDetail> {
-  const res = await fetch(`/assets/${assetType}/${encodeURIComponent(symbol)}`)
+  const res = await fetch(`${API_BASE}/assets/${assetType}/${encodeURIComponent(symbol)}`)
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error || 'Failed to fetch asset')
   return data
@@ -65,14 +67,14 @@ export async function fetchAssetDetail(assetType: AssetType, symbol: string): Pr
 export type PricePoint = { date: string; close: number }
 
 export async function fetchAssetHistory(assetType: AssetType, symbol: string): Promise<PricePoint[]> {
-  const res = await fetch(`/assets/${assetType}/${encodeURIComponent(symbol)}/history`)
+  const res = await fetch(`${API_BASE}/assets/${assetType}/${encodeURIComponent(symbol)}/history`)
   if (!res.ok) throw new Error('Failed to fetch asset history')
   const data = await res.json()
   return data.history
 }
 
 export async function fetchHoldings(userId: number, assetType: AssetType, symbol: string): Promise<number> {
-  const res = await fetch(`/users/${userId}/assets/${assetType}/${encodeURIComponent(symbol)}/holdings`)
+  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/${encodeURIComponent(symbol)}/holdings`)
   if (!res.ok) throw new Error('Failed to fetch holdings')
   const data = await res.json()
   return data.shares
@@ -84,7 +86,7 @@ export async function buyAsset(
   symbol: string,
   quantity: number,
 ): Promise<void> {
-  const res = await fetch(`/users/${userId}/assets/${assetType}/buy`, {
+  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/buy`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker: symbol, quantity }),
@@ -99,7 +101,7 @@ export async function sellAsset(
   symbol: string,
   quantity: number,
 ): Promise<void> {
-  const res = await fetch(`/users/${userId}/assets/${assetType}/sell`, {
+  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/sell`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ticker: symbol, quantity }),
@@ -114,7 +116,7 @@ export async function submitCashTransaction(
   type: TransactionType,
   amount: number,
 ): Promise<{ message: string }> {
-  const res = await fetch(`/users/${userId}/${type}`, {
+  const res = await fetch(`${API_BASE}/users/${userId}/${type}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ amount }),

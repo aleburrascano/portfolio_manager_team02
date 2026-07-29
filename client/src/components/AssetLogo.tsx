@@ -1,20 +1,20 @@
 import { useState } from 'react'
-import './StockLogo.css'
+import './AssetLogo.css'
 
-type StockLogoProps = {
+type AssetLogoProps = {
   symbol: string
 }
 
-function StockLogo({ symbol }: StockLogoProps) {
+function AssetLogo({ symbol }: AssetLogoProps) {
   const [failed, setFailed] = useState(false)
 
   if (failed) {
-    return <div className="stock-logo stock-logo-fallback">{symbol.slice(0, 2)}</div>
+    return <div className="asset-logo asset-logo-fallback">{symbol.slice(0, 2)}</div>
   }
 
   return (
     <img
-      className="stock-logo"
+      className="asset-logo"
       src={`https://assets.parqet.com/logos/symbol/${symbol}`}
       alt=""
       onError={() => setFailed(true)}
@@ -22,4 +22,4 @@ function StockLogo({ symbol }: StockLogoProps) {
   )
 }
 
-export default StockLogo
+export default AssetLogo

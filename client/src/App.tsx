@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Home from './Home'
 import Login from './components/Login'
+import { BalanceProvider } from './BalanceContext'
 import type { User } from './api'
 import './App.css'
 
@@ -24,7 +25,11 @@ function App() {
     return <Login onLogin={handleLogin} />
   }
 
-  return <Home user={user} onLogout={handleLogout} />
+  return (
+    <BalanceProvider userId={user.userId}>
+      <Home user={user} onLogout={handleLogout} />
+    </BalanceProvider>
+  )
 }
 
 export default App
