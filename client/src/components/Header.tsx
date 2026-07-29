@@ -1,38 +1,19 @@
-import { useEffect, useState } from 'react'
-import { fetchBalance, submitCashTransaction, type TransactionType, type User } from '../api'
+import { useState } from 'react'
+import { submitCashTransaction, type TransactionType, type User } from '../api'
+import { useBalance } from '../balance-context'
 import './Header.css'
 
 function formatCurrency(value: number) {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function Header({
-  user,
-  onLogout,
-  refreshKey,
-}: {
-  user: User
-  onLogout: () => void
-  refreshKey?: number
-}) {
-  const [balance, setBalance] = useState<number | null>(null)
+function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const { balance, refreshBalance } = useBalance()
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
   const [amount, setAmount] = useState('')
   const [statusMessage, setStatusMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  async function loadBalance() {
-      try {
-        setBalance(await fetchBalance(user.userId))
-      } catch {
-        setBalance(null)
-      }
-    }
-  
-  useEffect(() => {
-    loadBalance()
-  }, [user.userId, refreshKey])
 
   function openPopup(type: TransactionType) {
     setTransactionType(type)
@@ -60,7 +41,7 @@ function Header({
 
     try {
       await submitCashTransaction(user.userId, transactionType, parsedAmount)
-      await loadBalance()
+      await refreshBalance()
       setStatusMessage(`${transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'} submitted successfully.`)
       setAmount('')
       setTimeout(() => setIsPopupOpen(false), 500)
