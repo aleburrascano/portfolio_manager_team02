@@ -30,12 +30,30 @@
 }
 
 #root {
-  max-width: 720px;
-  margin: 0 auto;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+}
+
+.app-page {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }
 
 * {
