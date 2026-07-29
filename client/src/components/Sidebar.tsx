@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import './Sidebar.css'
 
-export type Page = 'dashboard' | 'trade-assets'
+export type Page = 'dashboard' | 'trade-assets' | 'transaction-history'
 
 const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   {
@@ -25,9 +25,34 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    page: 'transaction-history',
+    label: 'Transaction History',
+    icon: (
+      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="10" cy="10" r="7.25" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M10 5.5V10l3 2" />
+      </svg>
+    ),
+  },
 ]
 
-function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (page: Page) => void }) {
+const LOGOUT_ICON = (
+  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
+    <circle cx="10" cy="6.5" r="3.25" />
+    <path strokeLinecap="round" d="M3.5 17c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" />
+  </svg>
+)
+
+function Sidebar({
+  page,
+  onNavigate,
+  onLogout,
+}: {
+  page: Page
+  onNavigate: (page: Page) => void
+  onLogout: () => void
+}) {
   return (
     <nav className="sidebar">
       <ul className="sidebar-nav">
@@ -43,6 +68,12 @@ function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (page: Page) =>
             </button>
           </li>
         ))}
+        <li>
+          <button type="button" className="sidebar-logout" onClick={onLogout}>
+            <span className="sidebar-icon">{LOGOUT_ICON}</span>
+            Log Out
+          </button>
+        </li>
       </ul>
     </nav>
   )

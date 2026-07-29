@@ -123,6 +123,24 @@ export async function sellAsset(
   if (!res.ok) throw new Error(data.error || 'Sale failed')
 }
 
+export type Transaction = {
+  transactionId: number
+  type: 'cash' | AssetType
+  transactionType: string
+  transactionDate: string
+  signedAmount: number
+  ticker?: string
+  qty?: number
+  price?: number
+}
+
+export async function fetchTransactions(userId: number): Promise<Transaction[]> {
+  const res = await fetch(`${API_BASE}/users/${userId}/transactions`)
+  if (!res.ok) throw new Error('Failed to fetch transaction history')
+  const data = await res.json()
+  return data.transactions
+}
+
 export type TransactionType = 'deposit' | 'withdraw'
 export async function submitCashTransaction(
   userId: number,

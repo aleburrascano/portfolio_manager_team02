@@ -23,14 +23,14 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
         <h1>Welcome</h1>
         <input
           type="text"
-          placeholder="First name"
+          placeholder="First Name"
           value={firstName}
           onChange={(e) => setFirstName(e.target.value)}
           required
         />
         <input
           type="text"
-          placeholder="Last name"
+          placeholder="Last Name"
           value={lastName}
           onChange={(e) => setLastName(e.target.value)}
           required
