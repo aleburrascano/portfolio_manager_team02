@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Dashboard from './Dashboard'
 import TradeAssets from './TradeAssets'
+import TransactionHistory from './TransactionHistory'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
@@ -14,7 +15,7 @@ function App() {
     return stored ? JSON.parse(stored) : null
   })
   const [validating, setValidating] = useState(() => localStorage.getItem('user') !== null)
-  const [page, setPage] = useState<Page>('trade-assets')
+  const [page, setPage] = useState<Page>('dashboard')
 
   useEffect(() => {
     if (!user) return
@@ -57,11 +58,13 @@ function App() {
   return (
     <BalanceProvider userId={user.userId}>
       <div className="app-shell">
-        <Header user={user} onLogout={handleLogout} />
+        <Header user={user} />
         <div className="app-body">
-          <Sidebar page={page} onNavigate={setPage} />
+          <Sidebar page={page} onNavigate={setPage} onLogout={handleLogout} />
           <main className="app-page">
-            {page === 'dashboard' ? <Dashboard /> : <TradeAssets user={user} />}
+            {page === 'dashboard' && <Dashboard />}
+            {page === 'trade-assets' && <TradeAssets user={user} />}
+            {page === 'transaction-history' && <TransactionHistory user={user} />}
           </main>
         </div>
       </div>

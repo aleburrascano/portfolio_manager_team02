@@ -7,7 +7,7 @@ function formatCurrency(value: number) {
   return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Header({ user }: { user: User }) {
   const { balance, refreshBalance } = useBalance()
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
@@ -66,9 +66,6 @@ function Header({ user, onLogout }: { user: User; onLogout: () => void }) {
         <span className="balance">
           {balance !== null ? formatCurrency(balance) : '...'}
         </span>
-        <button type="button" className="logout-btn" onClick={onLogout}>
-          Log out
-        </button>
       </div>
     </header>
 
