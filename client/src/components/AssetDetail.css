@@ -29,6 +29,35 @@
   margin: 0;
 }
 
+.asset-detail-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.asset-detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.asset-detail-side {
+  position: sticky;
+  top: 16px;
+}
+
+@media (max-width: 760px) {
+  .asset-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .asset-detail-side {
+    position: static;
+  }
+}
+
 .chart-card,
 .trade-card {
   background: var(--surface);
