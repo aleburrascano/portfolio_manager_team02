@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import Header from './components/Header'
 import SearchBar from './components/SearchBar'
 import AssetList from './components/AssetList'
 import AssetDetail from './components/AssetDetail'
@@ -11,7 +10,7 @@ const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'crypto', label: 'Crypto' },
 ]
 
-function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
+function Home({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
@@ -61,45 +60,42 @@ function Home({ user, onLogout }: { user: User; onLogout: () => void }) {
   const isSearching = query.trim().length > 0
 
   return (
-    <>
-      <Header user={user} onLogout={onLogout} />
-      <section id="home-content">
-        {selectedSymbol ? (
-          <AssetDetail
-            assetType={assetType}
-            symbol={selectedSymbol}
-            user={user}
-            onBack={() => setSelectedSymbol(null)}
+    <section id="home-content">
+      {selectedSymbol ? (
+        <AssetDetail
+          assetType={assetType}
+          symbol={selectedSymbol}
+          user={user}
+          onBack={() => setSelectedSymbol(null)}
+        />
+      ) : (
+        <>
+          <div className="asset-type-tabs">
+            {ASSET_TYPES.map(({ type, label }) => (
+              <button
+                key={type}
+                type="button"
+                className={assetType === type ? 'active' : ''}
+                onClick={() => switchAssetType(type)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <SearchBar value={query} onChange={setQuery} />
+          <AssetList
+            title={
+              isSearching
+                ? 'Search Results'
+                : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
+            }
+            assets={isSearching ? searchResults : popularAssets}
+            loading={isSearching && searching}
+            onSelect={setSelectedSymbol}
           />
-        ) : (
-          <>
-            <div className="asset-type-tabs">
-              {ASSET_TYPES.map(({ type, label }) => (
-                <button
-                  key={type}
-                  type="button"
-                  className={assetType === type ? 'active' : ''}
-                  onClick={() => switchAssetType(type)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <SearchBar value={query} onChange={setQuery} />
-            <AssetList
-              title={
-                isSearching
-                  ? 'Search Results'
-                  : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
-              }
-              assets={isSearching ? searchResults : popularAssets}
-              loading={isSearching && searching}
-              onSelect={setSelectedSymbol}
-            />
-          </>
-        )}
-      </section>
-    </>
+        </>
+      )}
+    </section>
   )
 }
 
