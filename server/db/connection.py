@@ -28,6 +28,21 @@ def get_db() -> Optional[MySQLConnection]:
             g.db = None
     return g.db
 
+def lock_user(db: MySQLConnection, user_id: int) -> bool:
+    """
+    Acquire a row lock on the given user, serializing concurrent
+    balance-affecting requests (buy/sell/withdraw) for that user so
+    balance/holdings checks can't race each other.
+
+    Returns:
+        bool: True if the user exists (and is now locked), False otherwise.
+    """
+    cursor = db.cursor()
+    cursor.execute("SELECT userId FROM Users WHERE userId = %s FOR UPDATE", (user_id,))
+    found = cursor.fetchone() is not None
+    cursor.close()
+    return found
+
 def close_db(exception: Optional[BaseException] = None) -> None:
     """Close the request-scoped MySQL connection, if one was opened."""
     db = g.pop('db', None)

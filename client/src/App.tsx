@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Dashboard from './Dashboard'
-import Home from './Home'
+import TradeAssets from './TradeAssets'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
 import { BalanceProvider } from './BalanceContext'
-import type { User } from './api'
+import { fetchUser, type User } from './api'
 import './App.css'
 
 function App() {
@@ -13,7 +13,28 @@ function App() {
     const stored = localStorage.getItem('user')
     return stored ? JSON.parse(stored) : null
   })
-  const [page, setPage] = useState<Page>('dashboard')
+  const [validating, setValidating] = useState(() => localStorage.getItem('user') !== null)
+  const [page, setPage] = useState<Page>('trade-assets')
+
+  useEffect(() => {
+    if (!user) return
+
+    let cancelled = false
+    fetchUser(user.userId).catch((err) => {
+      if (cancelled) return
+      if (err instanceof Error && err.message === 'User not found') {
+        handleLogout()
+      }
+    }).finally(() => {
+      if (!cancelled) setValidating(false)
+    })
+
+    return () => {
+      cancelled = true
+    }
+    // Only re-validate when a different user logs in, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.userId])
 
   function handleLogin(user: User) {
     localStorage.setItem('user', JSON.stringify(user))
@@ -23,6 +44,10 @@ function App() {
   function handleLogout() {
     localStorage.removeItem('user')
     setUser(null)
+  }
+
+  if (validating) {
+    return null
   }
 
   if (!user) {
@@ -36,7 +61,7 @@ function App() {
         <div className="app-body">
           <Sidebar page={page} onNavigate={setPage} />
           <main className="app-page">
-            {page === 'dashboard' ? <Dashboard /> : <Home user={user} />}
+            {page === 'dashboard' ? <Dashboard /> : <TradeAssets user={user} />}
           </main>
         </div>
       </div>

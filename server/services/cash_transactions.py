@@ -49,23 +49,31 @@ def withdraw_cash(user_id: int, amount: float) -> bool:
     Returns:
         bool: True if the withdrawal was successful, False otherwise.
     """
+    db = db_conn.get_db()
+    if db is None: return False
+
     try:
-        db = db_conn.get_db()
-        if db is None: return False
-        cursor = db.cursor()
-        
-        # Validate that the user has sufficient funds to make the withdrawal
+        if not db_conn.lock_user(db, user_id):
+            db.rollback()
+            return False
+
+        # Validate that the user has sufficient funds to make the withdrawal,
+        # re-checked under the user row lock so no other request can race it
         wallet = ut.get_user_balance(user_id)
         if wallet is None or wallet < abs(amount):
             print("Insufficient funds for withdrawal.")
+            db.rollback()
             return False
 
         # Insert the withdrawal into the database
+        cursor = db.cursor()
         sql = "INSERT INTO CashTransactions (amount, cashTransactionType, userId) VALUES (%s, %s, %s)"
         val = (-abs(amount), "withdraw", user_id)
         cursor.execute(sql, val)
         db.commit()
+        cursor.close()
         return True
     except Exception as e:
+        db.rollback()
         print(f"Error performing cash withdrawal: {e}")
         return False
