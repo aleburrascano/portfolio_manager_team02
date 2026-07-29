@@ -53,12 +53,15 @@ The API is available at `http://localhost:5000`.
 
 ### Endpoints
 
-| Method | Route                          | Description                                  |
-| ------ | ------------------------------ | --------------------------------------------- |
-| GET    | `/users/:userId/balance`       | Get a user's wallet balance                   |
-| GET    | `/users/:userId/transactions`  | Get a user's chronological transaction history |
-| GET    | `/assets/:assetType/search?q=` | Search assets by ticker or name (assetType: stock, crypto) |
-| GET    | `/assets/:assetType/popular`   | Get the top 10 most actively traded assets of that type |
+All routes are served under an `/api` prefix (kept separate from Vite's build
+output, which also lives under `/assets` in production).
+
+| Method | Route                              | Description                                  |
+| ------ | ----------------------------------- | --------------------------------------------- |
+| GET    | `/api/users/:userId/balance`        | Get a user's wallet balance                   |
+| GET    | `/api/users/:userId/transactions`   | Get a user's chronological transaction history |
+| GET    | `/api/assets/:assetType/search?q=`  | Search assets by ticker or name (assetType: stock, crypto) |
+| GET    | `/api/assets/:assetType/popular`    | Get popular assets of that type               |
 
 ## Client setup
 
@@ -68,7 +71,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs at `http://localhost:5173` and proxies `/users` and `/assets`
-requests to the Flask server at `http://localhost:5000`, so run both at once.
+The dev server runs at `http://localhost:5173` and proxies `/api` requests to
+the Flask server at `http://localhost:5000`, so run both at once.
 
 Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
