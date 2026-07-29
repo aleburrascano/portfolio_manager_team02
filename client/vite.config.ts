@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/users': 'http://localhost:5000',
-      '/stocks': 'http://localhost:5000',
+      '/assets': 'http://localhost:5000',
       '/auth': 'http://localhost:5000',
     },
   },
