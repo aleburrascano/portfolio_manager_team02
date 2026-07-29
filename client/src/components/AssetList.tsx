@@ -1,5 +1,5 @@
 import type { Asset } from '../api'
-import StockLogo from './StockLogo'
+import AssetLogo from './AssetLogo'
 import './AssetList.css'
 
 type AssetListProps = {
@@ -29,7 +29,7 @@ function AssetList({ title, assets, loading, onSelect }: AssetListProps) {
                 role={onSelect ? 'button' : undefined}
                 tabIndex={onSelect ? 0 : undefined}
               >
-                <StockLogo symbol={asset.symbol} />
+                <AssetLogo symbol={asset.symbol} />
                 <div className="asset-info">
                   <span className="asset-name">{asset.name}</span>
                   <span className="asset-symbol">{asset.symbol}</span>

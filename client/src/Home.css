@@ -1,0 +1,21 @@
+.asset-type-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.asset-type-tabs button {
+  flex: 1;
+  border: none;
+  background: var(--surface);
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.asset-type-tabs button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}

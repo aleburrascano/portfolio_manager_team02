@@ -6,22 +6,9 @@ from typing import Tuple
 from flask import Blueprint, request
 import yfinance as yf
 import services.asset_transactions as st
-from routes.asset_providers import PROVIDERS
+from routes.asset_providers import PROVIDERS, _quote_fields
 
 assets_bp = Blueprint('assets', __name__)
-
-def _quote_fields(fast_info) -> dict:
-    """Extract price/change/day-range fields from a fast_info object."""
-    last_price = fast_info.get('lastPrice')
-    previous_close = fast_info.get('previousClose')
-    change = last_price - previous_close if last_price is not None and previous_close else None
-    return {
-        'currentPrice': last_price,
-        'change': change,
-        'changePercent': change / previous_close * 100 if change is not None and previous_close else None,
-        'dayLow': fast_info.get('dayLow'),
-        'dayHigh': fast_info.get('dayHigh'),
-    }
 
 @assets_bp.route('/assets/<asset_type>/search', methods=['GET'])
 def search_assets(asset_type: str) -> Tuple[dict, int]:
@@ -69,7 +56,7 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
 @assets_bp.route('/assets/<asset_type>/popular', methods=['GET'])
 def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
     """
-    Get the top 10 most actively traded assets of this type.
+    Get around 10 popular assets of this type.
 
     Returns:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
@@ -80,27 +67,8 @@ def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
     if provider is None:
         return {'error': 'Unknown asset type'}, 404
 
-    screener = provider.popular_screener()
-    if screener is None:
-        return {'results': []}, 200
-
     try:
-        results = yf.screen(screener)
-        assets = []
-
-        for quote in results.get('quotes', [])[:10]:
-            assets.append({
-                'symbol': quote['symbol'],
-                'name': quote.get('shortName', 'N/A'),
-                'currentPrice': quote.get('regularMarketPrice'),
-                'volume': quote.get('regularMarketVolume'),
-                'change': quote.get('regularMarketChange'),
-                'changePercent': quote.get('regularMarketChangePercent'),
-                'dayLow': quote.get('regularMarketDayLow'),
-                'dayHigh': quote.get('regularMarketDayHigh'),
-            })
-
-        return {'results': assets}, 200
+        return {'results': provider.fetch_popular()}, 200
     except Exception as e:
         return {'error': str(e), 'results': []}, 200
 

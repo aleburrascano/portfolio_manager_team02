@@ -1,4 +1,4 @@
-.stock-logo {
+.asset-logo {
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -8,7 +8,7 @@
   flex-shrink: 0;
 }
 
-.stock-logo-fallback {
+.asset-logo-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
