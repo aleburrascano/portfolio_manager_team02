@@ -35,6 +35,13 @@ export async function fetchUser(userId: number): Promise<User> {
   return res.json()
 }
 
+export async function fetchPortfolioBreakdown(userId: number): Promise<{ cash: number; stock: number; crypto: number }> {
+  const res = await fetch(`${API_BASE}/users/${userId}/portfolio`)
+  if (!res.ok) throw new Error('Failed to fetch portfolio breakdown')
+  const data = await res.json()
+  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0 }
+}
+
 export async function fetchBalance(userId: number): Promise<number> {
   const res = await fetch(`${API_BASE}/users/${userId}/balance`)
   if (!res.ok) throw new Error('Failed to fetch balance')

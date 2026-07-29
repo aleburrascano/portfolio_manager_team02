@@ -5,6 +5,7 @@ from typing import Tuple
 from flask import Blueprint, request
 from services.user_transactions import get_user_balance
 import services.cash_transactions as ct
+import services.asset_transactions as at
 
 wallet_bp = Blueprint('wallet', __name__)
 
@@ -22,6 +23,20 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
         return {'error': 'Database connection failed'}, 500
 
     return {'userId': user_id, 'balance': round(float(balance), 2)}, 200
+
+@wallet_bp.route('/users/<int:user_id>/portfolio', methods=['GET'])
+def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
+    """
+    Get a user's portfolio breakdown across cash, stocks, and crypto.
+
+    Returns:
+        dict: {'cash': float, 'stock': float, 'crypto': float}
+    """
+    try:
+        data = at.get_portfolio_values(user_id)
+        return data, 200
+    except Exception as e:
+        return {'error': str(e)}, 500
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
 def deposit_cash(user_id: int) -> Tuple[dict, int]:
