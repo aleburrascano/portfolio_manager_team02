@@ -164,7 +164,7 @@ function AssetDetail({
       ) : (
         <>
           <div className="asset-detail-title">
-            <AssetLogo symbol={detail.symbol} />
+            <AssetLogo symbol={detail.symbol} assetType={assetType} />
             <div>
               <h1>{detail.name}</h1>
               <span className="asset-symbol">{detail.symbol}</span>
