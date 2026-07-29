@@ -15,10 +15,10 @@ load_dotenv()
 app = Flask(__name__)
 init_db(app)
 
-app.register_blueprint(wallet_bp)
-app.register_blueprint(assets_bp)
-app.register_blueprint(history_bp)
-app.register_blueprint(auth_bp)
+app.register_blueprint(wallet_bp, url_prefix='/api')
+app.register_blueprint(assets_bp, url_prefix='/api')
+app.register_blueprint(history_bp, url_prefix='/api')
+app.register_blueprint(auth_bp, url_prefix='/api')
 
 @app.route('/')
 def index() -> dict:
