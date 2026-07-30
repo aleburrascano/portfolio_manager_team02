@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { PieChart, Pie, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { PieChart, Pie, Tooltip, Legend, ResponsiveContainer, type TooltipValueType } from 'recharts'
 import './PortfolioComposition.css'
 
 export type PortfolioCompositionDatum = {
@@ -13,9 +13,9 @@ interface PortfolioCompositionProps {
   title?: string
 }
 
-const DEFAULT_COLORS = ['#3f66af', '#67c4e0', '#697ada']
+const DEFAULT_COLORS = ['#3f66af', '#67c4e0', '#697ada', '#80d8a0']
 
-function formatTooltipValue(value: number | string | undefined) {
+function formatTooltipValue(value: TooltipValueType | undefined) {
   if (value == null) {
     return ''
   }
@@ -36,8 +36,6 @@ function PortfolioComposition({ data, title = 'Portfolio Composition' }: Portfol
       })),
     [data],
   )
-
-  const total = chartData.reduce((sum, entry) => sum + entry.value, 0)
 
   return (
     <section className="dashboard-card portfolio-composition-card">

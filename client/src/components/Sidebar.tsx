@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
+import ConfirmDialog from './ConfirmDialog'
 import './Sidebar.css'
 
 export type Page = 'dashboard' | 'trade-assets' | 'transaction-history'
@@ -53,29 +54,43 @@ function Sidebar({
   onNavigate: (page: Page) => void
   onLogout: () => void
 }) {
+  const [confirmingLogout, setConfirmingLogout] = useState(false)
+
   return (
-    <nav className="sidebar">
-      <ul className="sidebar-nav">
-        {NAV_ITEMS.map((item) => (
-          <li key={item.page}>
-            <button
-              type="button"
-              className={page === item.page ? 'active' : ''}
-              onClick={() => onNavigate(item.page)}
-            >
-              <span className="sidebar-icon">{item.icon}</span>
-              {item.label}
-            </button>
-          </li>
-        ))}
-        <li>
-          <button type="button" className="sidebar-logout" onClick={onLogout}>
-            <span className="sidebar-icon">{LOGOUT_ICON}</span>
-            Log Out
-          </button>
-        </li>
-      </ul>
-    </nav>
+    <>
+      <nav className="sidebar">
+        <ul className="sidebar-nav">
+          {NAV_ITEMS.map((item) => (
+            <li key={item.page}>
+              <button
+                type="button"
+                className={page === item.page ? 'active' : ''}
+                onClick={() => onNavigate(item.page)}
+              >
+                <span className="sidebar-icon">{item.icon}</span>
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <button type="button" className="sidebar-logout" onClick={() => setConfirmingLogout(true)}>
+          <span className="sidebar-icon">{LOGOUT_ICON}</span>
+          Log Out
+        </button>
+      </nav>
+
+      {confirmingLogout && (
+        <ConfirmDialog
+          title="Log out?"
+          message="You'll need to sign in again to get back to your portfolio."
+          confirmLabel="Log Out"
+          destructive
+          onConfirm={onLogout}
+          onCancel={() => setConfirmingLogout(false)}
+        />
+      )}
+    </>
   )
 }
 

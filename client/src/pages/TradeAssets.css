@@ -1,3 +1,11 @@
+#trade-assets-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 20px 40px;
+  text-align: left;
+}
+
 .asset-type-tabs {
   display: flex;
   border: 1px solid var(--border);

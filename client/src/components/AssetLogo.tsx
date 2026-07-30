@@ -11,7 +11,7 @@ function AssetLogo({ symbol, assetType }: AssetLogoProps) {
   const [failed, setFailed] = useState(false)
   const logoSymbol = symbol.split('-')[0]
 
-  if (failed) {
+  if (failed || assetType === 'bond') {
     return <div className="asset-logo asset-logo-fallback">{logoSymbol.slice(0, 2)}</div>
   }
 
