@@ -40,6 +40,17 @@
   color: var(--positive);
 }
 
+.login-form .login-switch {
+  background: none;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 0;
+}
+
+.login-form .login-switch:hover {
+  color: var(--text-h);
+}
+
 .login-error {
   color: var(--negative);
   font-size: 13px;
