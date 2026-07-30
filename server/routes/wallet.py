@@ -7,6 +7,7 @@ from services.user_transactions import get_user_balance
 import services.cash_transactions as ct
 import services.asset_transactions as at
 from authorization import require_user
+from idempotency import idempotent
 from errors import error_response
 from links import balance_links, portfolio_links
 
@@ -40,6 +41,7 @@ def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
 @require_user
+@idempotent
 def deposit_cash(user_id: int) -> Tuple[dict, int]:
     """
     Deposit cash into the user's account.
@@ -59,6 +61,7 @@ def deposit_cash(user_id: int) -> Tuple[dict, int]:
 
 @wallet_bp.route('/users/<int:user_id>/withdraw', methods=['POST'])
 @require_user
+@idempotent
 def withdraw_cash(user_id: int) -> Tuple[dict, int]:
     """
     Withdraw cash from the user's account.

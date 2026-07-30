@@ -63,11 +63,12 @@ export async function buyAsset(
   assetType: AssetType,
   symbol: string,
   quantity: number,
+  idempotencyKey?: string,
 ): Promise<void> {
   await apiFetch(
     `/users/${userId}/assets/${assetType}/buy`,
     'Purchase failed',
-    post({ ticker: symbol, quantity }),
+    post({ ticker: symbol, quantity }, idempotencyKey),
   )
 }
 
@@ -76,10 +77,11 @@ export async function sellAsset(
   assetType: AssetType,
   symbol: string,
   quantity: number,
+  idempotencyKey?: string,
 ): Promise<void> {
   await apiFetch(
     `/users/${userId}/assets/${assetType}/sell`,
     'Sale failed',
-    post({ ticker: symbol, quantity }),
+    post({ ticker: symbol, quantity }, idempotencyKey),
   )
 }

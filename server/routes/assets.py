@@ -15,6 +15,7 @@ import services.asset_transactions as st
 import services.market_data as market_data
 from services.asset_providers import PROVIDERS
 from authorization import require_user
+from idempotency import idempotent
 from errors import error_response
 from links import asset_detail_links, asset_summary_links, holdings_links
 
@@ -127,6 +128,7 @@ def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/buy', methods=['POST'])
 @require_user
 @known_asset_type
+@idempotent
 def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Buy an asset for the user.
@@ -148,6 +150,7 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/sell', methods=['POST'])
 @require_user
 @known_asset_type
+@idempotent
 def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Sell an asset for the user.

@@ -7,8 +7,9 @@ conventions.
 """
 from datetime import datetime
 from decimal import Decimal
+from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Money and quantities are DECIMAL(18,8) so balance/holdings math is exact.
@@ -30,6 +31,30 @@ class User(Base):
     lastName: Mapped[str] = mapped_column(String(32))
     # Werkzeug PBKDF2 digest, never the password itself.
     passwordHash: Mapped[str] = mapped_column(String(255))
+
+
+class IdempotentRequest(Base):
+    """
+    One row per Idempotency-Key a user has spent on a money-moving request.
+
+    The composite primary key both scopes keys to their own user and gives
+    the uniqueness constraint that makes claiming a key atomic: two
+    concurrent requests race to insert, and exactly one wins.
+    """
+
+    __tablename__ = 'IdempotentRequests'
+
+    userId: Mapped[int] = mapped_column(
+        ForeignKey('Users.userId', ondelete='CASCADE'), primary_key=True
+    )
+    idempotencyKey: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Hash of the request the key was claimed for, so reusing a key for a
+    # different request is caught instead of silently replaying the old one.
+    fingerprint: Mapped[str] = mapped_column(String(64))
+    # Null until the request succeeds; a null response means "in progress".
+    statusCode: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    responseBody: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class CashTransaction(Base):

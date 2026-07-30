@@ -24,11 +24,20 @@ export async function apiFetch<T>(path: string, fallbackError: string, init?: Re
   return data as T
 }
 
-/** Build the RequestInit for a JSON POST. */
-export function post(body?: unknown): RequestInit {
+/**
+ * Build the RequestInit for a JSON POST.
+ *
+ * An idempotencyKey makes the request safe to retry: the server does the
+ * work for whichever request claims the key first and replays that same
+ * response to any repeat.
+ */
+export function post(body?: unknown, idempotencyKey?: string): RequestInit {
   return {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(idempotencyKey && { 'Idempotency-Key': idempotencyKey }),
+    },
     body: JSON.stringify(body ?? {}),
   }
 }
