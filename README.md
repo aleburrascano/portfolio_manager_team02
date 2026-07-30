@@ -64,7 +64,8 @@ so future breaking changes can live alongside it at `/api/v2`).
 | GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |
 | GET    | `/api/v1/assets/:assetType/popular`      | Get popular assets of that type               |
 
-Errors are always shaped as `{'error': {'message': str, 'code': str}}`.
+Responses include a `_links` map of related endpoint URLs (HATEOAS), and
+errors are always shaped as `{'error': {'message': str, 'code': str}}`.
 
 Set `CORS_ORIGINS` (comma-separated) in `.env` to allow the client's origin;
 defaults to `http://localhost:5173`.
