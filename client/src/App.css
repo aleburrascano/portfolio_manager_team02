@@ -1,7 +1,21 @@
-#trade-assets-content {
+/* Layout of the app shell itself: header, sidebar, and the page slot. */
+
+.app-shell {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 20px 40px;
-  text-align: left;
+  flex: 1;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  align-items: stretch;
+}
+
+.app-page {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
 }

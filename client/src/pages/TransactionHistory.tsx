@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchTransactions, type Transaction, type User } from './api'
+import { fetchTransactions, type Transaction, type User } from '../api'
 import './TransactionHistory.css'
 
 function describe(transaction: Transaction): string {
