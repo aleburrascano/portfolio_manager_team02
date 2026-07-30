@@ -84,11 +84,16 @@ def close_session(exception: Optional[BaseException] = None) -> None:
 
 def init_db() -> None:
     """
-    Create the tables when running on SQLite, so a dev database needs no
-    manual setup. MySQL keeps being provisioned from db/schema/schema.sql.
+    Create the tables for an in-memory SQLite database, which lives and dies
+    with the process and so can't be migrated ahead of time (tests,
+    throwaway runs).
+
+    Every persistent database - MySQL and SQLite files alike - is created
+    and updated with `alembic upgrade head`, so there is one schema history
+    rather than two ways to build a schema.
     """
     engine = get_engine()
-    if engine.dialect.name == 'sqlite':
+    if engine.dialect.name == 'sqlite' and engine.url.database in (None, ':memory:'):
         Base.metadata.create_all(engine)
 
 

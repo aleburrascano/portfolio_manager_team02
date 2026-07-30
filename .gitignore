@@ -11,3 +11,6 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .egg
+
+# Local database dumps
+backups/

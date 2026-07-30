@@ -21,7 +21,8 @@ server/
   links.py          HATEOAS _links builders
   routes/           blueprints - HTTP only, no business logic
   services/         business logic, market data, domain exceptions
-  db/               SQLAlchemy models, engine/session, schema + seed
+  db/               SQLAlchemy models, engine/session, seed + admin scripts
+  migrations/       Alembic revisions - the one source of schema history
 client/
   src/api/          one module per resource, behind a shared fetch helper
   src/pages/        one per sidebar destination
@@ -48,29 +49,57 @@ pip install -r requirements.txt
 ### Database
 
 The server talks to the database through SQLAlchemy, so the backend is
-switchable via a single `DATABASE_URL` in `.env`.
-
-For local development, SQLite needs no setup — the tables are created on
-first run:
+switchable via a single `DATABASE_URL` in `.env`:
 
 ```
-DATABASE_URL=sqlite:///dev.db
+DATABASE_URL=sqlite:///dev.db                                              # local dev
+DATABASE_URL=mysql+mysqlconnector://root:password@localhost/portfolio_manager
 ```
 
-For MySQL, create the database and load the schema first:
+Leave it blank to fall back to the `DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`
+variables. MySQL needs its (empty) database to exist first; SQLite doesn't.
+
+Create or update the schema with Alembic — the same command for either
+backend, and the only supported way to build one:
 
 ```bash
-mysql -u root -p < db/schema/schema.sql
+alembic upgrade head
 ```
-
-then either set `DATABASE_URL=mysql+mysqlconnector://root:password@localhost/portfolio_manager`,
-or leave it blank and fill in the `DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`
-variables it falls back to.
 
 Optionally load ~2 years of demo transactions for a user:
 
 ```bash
 python -m db.seed --first Demo --last User
+```
+
+#### Changing the schema
+
+Edit `db/models.py`, then autogenerate the migration and read what it wrote
+before committing it:
+
+```bash
+alembic revision --autogenerate -m "what changed"
+alembic upgrade head
+```
+
+`alembic check` fails when the models and the migration history disagree,
+which is what keeps them from drifting apart — worth running in CI.
+
+Two notes for existing databases. One created before Alembic was adopted
+already has the `0001` schema, so tell Alembic that rather than re-running
+it:
+
+```bash
+alembic stamp 0001 && alembic upgrade head
+```
+
+And migration `0002` backfills pre-existing users with an empty password
+hash, which never matches, so those accounts can't be logged into until a
+password is set:
+
+```bash
+python -m db.set_password --list
+python -m db.set_password <username> <password>
 ```
 
 Run the server:
