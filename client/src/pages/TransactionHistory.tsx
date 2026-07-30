@@ -18,9 +18,9 @@ function TransactionHistory({ user }: { user: User }) {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
+    // No loading/error reset up here: both already start in the right
+    // state, and the user can't change without this page unmounting.
     fetchTransactions(user.userId)
       .then((data) => {
         if (!cancelled) setTransactions(data)
