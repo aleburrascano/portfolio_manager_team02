@@ -18,6 +18,9 @@ server/
   app.py            Flask entry point: config, blueprints
   authorization.py  session identity + the require_user route guard
   errors.py         the single JSON error envelope, and the handlers feeding it
+  idempotency.py    Idempotency-Key claim/replay for money-moving routes
+  realtime.py       Socket.IO quote push, replacing client-side polling
+  validation.py     amount/quantity checks at the API boundary
   links.py          HATEOAS _links builders
   routes/           blueprints - HTTP only, no business logic
   services/         business logic, market data, domain exceptions
@@ -129,6 +132,19 @@ so future breaking changes can live alongside it at `/api/v2`).
 
 Responses include a `_links` map of related endpoint URLs (HATEOAS), and
 errors are always shaped as `{'error': {'message': str, 'code': str}}`.
+
+### Live prices
+
+Prices are pushed over a Socket.IO WebSocket on the same port as the REST
+API, rather than polled. A client emits `subscribe` with `{symbols: [...]}`
+and gets a `quote` event per symbol immediately, then again every
+`BROADCAST_INTERVAL_SECONDS` (5) for as long as it stays subscribed;
+`unsubscribe` and disconnecting both stop it.
+
+Only symbols with at least one subscriber are ever fetched, so an idle
+server does no work. Quotes are public, matching the REST asset routes.
+
+### Idempotency
 
 The four routes that move money — `deposit`, `withdraw`, `buy`, `sell` —
 accept an optional `Idempotency-Key` header so a retry can't do the work

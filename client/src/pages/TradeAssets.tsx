@@ -3,17 +3,13 @@ import SearchBar from '../components/SearchBar'
 import AssetList from '../components/AssetList'
 import AssetDetail from '../components/AssetDetail'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
+import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
   { type: 'crypto', label: 'Crypto' },
 ]
-
-const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
-  stock: 10000,
-  crypto: 5000,
-}
 
 function TradeAssets({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
@@ -56,25 +52,6 @@ function TradeAssets({ user }: { user: User }) {
     }
   }, [assetType])
 
-  useEffect(() => {
-    let cancelled = false
-
-    const interval = setInterval(() => {
-      fetchPopularAssets(assetType)
-        .then((assets) => {
-          if (cancelled) return
-          popularCache.current[assetType] = assets
-          setPopularAssets(assets)
-        })
-        .catch(() => {})
-    }, POPULAR_POLL_INTERVAL_MS[assetType])
-
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [assetType])
-
   const trimmedQuery = query.trim()
   const isSearching = trimmedQuery.length > 0
   const searchKey = `${assetType}:${trimmedQuery}`
@@ -99,6 +76,12 @@ function TradeAssets({ user }: { user: User }) {
       clearTimeout(timeout)
     }
   }, [assetType, trimmedQuery, isSearching, searchKey])
+
+  // Only the rows actually on screen are subscribed to, so switching tabs
+  // or searching moves the server's work with the user.
+  const listed = isSearching ? search.assets : popularAssets
+  const live = useLiveQuotes(listed.map((asset) => asset.symbol))
+  const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
 
   function switchAssetType(next: AssetType) {
     if (popularLoading || next === assetType) return
@@ -139,7 +122,7 @@ function TradeAssets({ user }: { user: User }) {
                 : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
             }
             assetType={assetType}
-            assets={isSearching ? search.assets : popularAssets}
+            assets={assets}
             loading={isSearching ? searchLoading : popularLoading}
             onSelect={setSelectedSymbol}
           />
