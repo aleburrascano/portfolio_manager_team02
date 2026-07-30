@@ -1,5 +1,12 @@
 const API_BASE = '/api/v1'
 
+type ApiErrorBody = { error?: { message?: string } | string }
+
+function errorMessage(data: ApiErrorBody, fallback: string): string {
+  if (typeof data.error === 'string') return data.error
+  return data.error?.message || fallback
+}
+
 export type User = {
   userId: number
   firstName: string
@@ -73,7 +80,7 @@ export type AssetDetail = Asset & {
 export async function fetchAssetDetail(assetType: AssetType, symbol: string): Promise<AssetDetail> {
   const res = await fetch(`${API_BASE}/assets/${assetType}/${encodeURIComponent(symbol)}`)
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Failed to fetch asset')
+  if (!res.ok) throw new Error(errorMessage(data, 'Failed to fetch asset'))
   return data
 }
 
@@ -105,7 +112,7 @@ export async function buyAsset(
     body: JSON.stringify({ ticker: symbol, quantity }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Purchase failed')
+  if (!res.ok) throw new Error(errorMessage(data, 'Purchase failed'))
 }
 
 export async function sellAsset(
@@ -120,7 +127,7 @@ export async function sellAsset(
     body: JSON.stringify({ ticker: symbol, quantity }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(data.error || 'Sale failed')
+  if (!res.ok) throw new Error(errorMessage(data, 'Sale failed'))
 }
 
 export type Transaction = {
@@ -156,7 +163,7 @@ export async function submitCashTransaction(
   const data = await res.json().catch(() => ({}))
 
   if (!res.ok) {
-    throw new Error(data.error || `Unable to ${type} funds!`)
+    throw new Error(errorMessage(data, `Unable to ${type} funds!`))
   }
 
   return data

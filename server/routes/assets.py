@@ -7,6 +7,7 @@ from flask import Blueprint, request
 import yfinance as yf
 import services.asset_transactions as st
 from routes.asset_providers import PROVIDERS, _quote_fields
+from errors import error_body, error_response
 
 assets_bp = Blueprint('assets', __name__)
 
@@ -24,11 +25,11 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
     """
     provider = PROVIDERS.get(asset_type)
     if provider is None:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     query = request.args.get('q', '').strip()
     if not query:
-        return {'error': 'Search query required'}, 400
+        return error_response('Search query required', 400)
 
     try:
         search = yf.Search(query, max_results=10)
@@ -51,7 +52,7 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
 
         return {'results': results}, 200
     except Exception as e:
-        return {'error': str(e), 'results': []}, 200
+        return {**error_body(str(e)), 'results': []}, 200
 
 @assets_bp.route('/assets/<asset_type>/popular', methods=['GET'])
 def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
@@ -65,12 +66,12 @@ def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
     """
     provider = PROVIDERS.get(asset_type)
     if provider is None:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     try:
         return {'results': provider.fetch_popular()}, 200
     except Exception as e:
-        return {'error': str(e), 'results': []}, 200
+        return {**error_body(str(e)), 'results': []}, 200
 
 @assets_bp.route('/assets/<asset_type>/<ticker>', methods=['GET'])
 def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
@@ -83,14 +84,14 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
         404 if the asset type or ticker isn't found.
     """
     if asset_type not in PROVIDERS:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     try:
         asset = yf.Ticker(ticker)
         fast_info = asset.fast_info
         last_price = fast_info.get('lastPrice')
         if last_price is None:
-            return {'error': 'Asset not found'}, 404
+            return error_response('Asset not found', 404)
 
         previous_close = fast_info.get('previousClose')
         change = last_price - previous_close if previous_close else None
@@ -105,7 +106,7 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
             'volume': fast_info.get('lastVolume'),
         }, 200
     except Exception:
-        return {'error': 'Asset not found'}, 404
+        return error_response('Asset not found', 404)
 
 @assets_bp.route('/assets/<asset_type>/<ticker>/history', methods=['GET'])
 def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
@@ -116,7 +117,7 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
         dict: {'history': list[{'date': str, 'close': float}]}
     """
     if asset_type not in PROVIDERS:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     try:
         asset = yf.Ticker(ticker)
@@ -127,7 +128,7 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
         ]
         return {'history': history}, 200
     except Exception as e:
-        return {'error': str(e), 'history': []}, 200
+        return {**error_body(str(e)), 'history': []}, 200
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/<ticker>/holdings', methods=['GET'])
 def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
@@ -138,7 +139,7 @@ def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict
         dict: {'shares': float}
     """
     if asset_type not in PROVIDERS:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     return {'shares': st.get_holding_qty(user_id, ticker)}, 200
 
@@ -154,21 +155,21 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
         dict: A success message, or a 400/404/500 error.
     """
     if asset_type not in PROVIDERS:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     body = request.get_json(silent=True) or {}
     ticker = body.get('ticker')
     quantity = body.get('quantity')
     if not ticker or not quantity:
-        return {'error': 'ticker and quantity are required'}, 400
+        return error_response('ticker and quantity are required', 400)
 
     try:
         if st.purchase_asset(user_id, asset_type, ticker, quantity):
             return {'message': 'Purchase successful!'}, 200
         else:
-            return {'error': 'Purchase failed. Check your balance.'}, 400
+            return error_response('Purchase failed. Check your balance.', 400)
     except Exception as e:
-        return {'error': str(e)}, 500
+        return error_response(str(e), 500)
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/sell', methods=['POST'])
 def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
@@ -182,18 +183,18 @@ def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
         dict: A success message, or a 400/404/500 error.
     """
     if asset_type not in PROVIDERS:
-        return {'error': 'Unknown asset type'}, 404
+        return error_response('Unknown asset type', 404)
 
     body = request.get_json(silent=True) or {}
     ticker = body.get('ticker')
     quantity = body.get('quantity')
     if not ticker or not quantity:
-        return {'error': 'ticker and quantity are required'}, 400
+        return error_response('ticker and quantity are required', 400)
 
     try:
         if st.sell_asset(user_id, asset_type, ticker, quantity):
             return {'message': 'Sale successful!'}, 200
         else:
-            return {'error': 'Sale failed. Check your holdings.'}, 400
+            return error_response('Sale failed. Check your holdings.', 400)
     except Exception as e:
-        return {'error': str(e)}, 500
+        return error_response(str(e), 500)

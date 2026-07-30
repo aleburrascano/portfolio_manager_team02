@@ -1,6 +1,7 @@
 from typing import Tuple
 from flask import Blueprint
 from services.user_transactions import get_user_transactions
+from errors import error_response
 
 history_bp = Blueprint('history', __name__)
 
@@ -15,6 +16,6 @@ def get_transaction_history(user_id: int) -> Tuple[dict, int]:
     """
     transactions = get_user_transactions(user_id)
     if transactions is None:
-        return {'error': 'Database connection failed'}, 500
+        return error_response('Database connection failed', 500)
 
     return {'userId': user_id, 'transactions': transactions}, 200
