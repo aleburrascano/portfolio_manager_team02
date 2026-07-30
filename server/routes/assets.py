@@ -8,6 +8,7 @@ import yfinance as yf
 import services.asset_transactions as st
 from routes.asset_providers import PROVIDERS, _quote_fields
 from errors import error_body, error_response
+from links import asset_detail_links, asset_summary_links, holdings_links
 
 assets_bp = Blueprint('assets', __name__)
 
@@ -48,6 +49,7 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
                     asset.update(_quote_fields(tickers.tickers[symbol].fast_info))
                 except Exception:
                     pass
+                asset['_links'] = asset_summary_links(asset_type, symbol)
                 results.append(asset)
 
         return {'results': results}, 200
@@ -69,7 +71,10 @@ def get_popular_assets(asset_type: str) -> Tuple[dict, int]:
         return error_response('Unknown asset type', 404)
 
     try:
-        return {'results': provider.fetch_popular()}, 200
+        results = provider.fetch_popular()
+        for asset in results:
+            asset['_links'] = asset_summary_links(asset_type, asset['symbol'])
+        return {'results': results}, 200
     except Exception as e:
         return {**error_body(str(e)), 'results': []}, 200
 
@@ -104,6 +109,7 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
             'yearLow': fast_info.get('yearLow'),
             'yearHigh': fast_info.get('yearHigh'),
             'volume': fast_info.get('lastVolume'),
+            '_links': asset_detail_links(asset_type, ticker),
         }, 200
     except Exception:
         return error_response('Asset not found', 404)
@@ -141,7 +147,10 @@ def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict
     if asset_type not in PROVIDERS:
         return error_response('Unknown asset type', 404)
 
-    return {'shares': st.get_holding_qty(user_id, ticker)}, 200
+    return {
+        'shares': st.get_holding_qty(user_id, ticker),
+        '_links': holdings_links(user_id, asset_type, ticker),
+    }, 200
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/buy', methods=['POST'])
 def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
@@ -165,7 +174,7 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
 
     try:
         if st.purchase_asset(user_id, asset_type, ticker, quantity):
-            return {'message': 'Purchase successful!'}, 200
+            return {'message': 'Purchase successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200
         else:
             return error_response('Purchase failed. Check your balance.', 400)
     except Exception as e:
@@ -193,7 +202,7 @@ def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
 
     try:
         if st.sell_asset(user_id, asset_type, ticker, quantity):
-            return {'message': 'Sale successful!'}, 200
+            return {'message': 'Sale successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200
         else:
             return error_response('Sale failed. Check your holdings.', 400)
     except Exception as e:
