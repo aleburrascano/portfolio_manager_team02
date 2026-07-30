@@ -4,6 +4,7 @@ Routes for registering an account and logging in with a password.
 from typing import Tuple
 from flask import Blueprint, request
 from services.auth import authenticate, get_user, register
+from authorization import current_user_id, log_in, log_out, require_user
 from errors import error_response
 from links import user_links
 
@@ -12,9 +13,10 @@ auth_bp = Blueprint('auth', __name__)
 MIN_PASSWORD_LENGTH = 8
 
 @auth_bp.route('/users/<int:user_id>', methods=['GET'])
+@require_user
 def get_user_route(user_id: int) -> Tuple[dict, int]:
     """
-    Look up a user by ID, used to validate a client-stored session on load.
+    Look up a user by ID.
 
     Returns:
         dict: {'userId': int, 'username': str, 'firstName': str,
@@ -25,6 +27,24 @@ def get_user_route(user_id: int) -> Tuple[dict, int]:
         return error_response('User not found', 404)
 
     return {**user, '_links': user_links(user_id)}, 200
+
+@auth_bp.route('/auth/me', methods=['GET'])
+def get_current_user_route() -> Tuple[dict, int]:
+    """
+    Get the user owning the caller's session, used by the client to restore
+    a login on page load.
+
+    Returns:
+        dict: The current user, or a 401 error if there's no live session.
+    """
+    user_id = current_user_id()
+    user = get_user(user_id) if user_id is not None else None
+    if user is None:
+        # The session outlived the user record it points at.
+        log_out()
+        return error_response('Authentication required', 401)
+
+    return {**user, '_links': user_links(user['userId'])}, 200
 
 @auth_bp.route('/auth/register', methods=['POST'])
 def register_route() -> Tuple[dict, int]:
@@ -52,6 +72,7 @@ def register_route() -> Tuple[dict, int]:
     if user is None:
         return error_response('That username is already taken', 409)
 
+    log_in(user['userId'])
     return {**user, '_links': user_links(user['userId'])}, 201
 
 @auth_bp.route('/auth/login', methods=['POST'])
@@ -75,4 +96,16 @@ def login_route() -> Tuple[dict, int]:
     if user is None:
         return error_response('Incorrect username or password', 401)
 
+    log_in(user['userId'])
     return {**user, '_links': user_links(user['userId'])}, 200
+
+@auth_bp.route('/auth/logout', methods=['POST'])
+def logout_route() -> Tuple[dict, int]:
+    """
+    End the caller's session.
+
+    Returns:
+        dict: A success message.
+    """
+    log_out()
+    return {'message': 'Logged out.'}, 200

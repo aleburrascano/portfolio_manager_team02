@@ -1,25 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './Dashboard.css'
-import { fetchPortfolioBreakdown } from './api'
+import { fetchPortfolioBreakdown, type User } from './api'
 import PortfolioComposition from './components/PortfolioComposition'
 
-function Dashboard() {
+function Dashboard({ user }: { user: User }) {
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const user = useMemo(() => {
-    const s = localStorage.getItem('user')
-    return s ? JSON.parse(s) : null
-  }, [])
-
   useEffect(() => {
     async function load() {
-      if (!user?.userId) {
-        setError('No user')
-        setLoading(false)
-        return
-      }
       setLoading(true)
       try {
         const res = await fetchPortfolioBreakdown(user.userId)
@@ -36,7 +26,7 @@ function Dashboard() {
       }
     }
     void load()
-  }, [user])
+  }, [user.userId])
 
   if (loading) {
     return (

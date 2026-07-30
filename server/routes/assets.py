@@ -7,6 +7,7 @@ from flask import Blueprint, request
 import yfinance as yf
 import services.asset_transactions as st
 from routes.asset_providers import PROVIDERS, _quote_fields
+from authorization import require_user
 from errors import error_body, error_response
 from links import asset_detail_links, asset_summary_links, holdings_links
 
@@ -137,6 +138,7 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
         return {**error_body(str(e)), 'history': []}, 200
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/<ticker>/holdings', methods=['GET'])
+@require_user
 def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
     """
     Get how many shares/units of an asset the user currently owns.
@@ -153,6 +155,7 @@ def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict
     }, 200
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/buy', methods=['POST'])
+@require_user
 def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Buy an asset for the user.
@@ -181,6 +184,7 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
         return error_response(str(e), 500)
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/sell', methods=['POST'])
+@require_user
 def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Sell an asset for the user.

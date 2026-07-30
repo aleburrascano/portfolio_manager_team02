@@ -6,12 +6,14 @@ from flask import Blueprint, request
 from services.user_transactions import get_user_balance
 import services.cash_transactions as ct
 import services.asset_transactions as at
+from authorization import require_user
 from errors import error_response
 from links import balance_links, portfolio_links
 
 wallet_bp = Blueprint('wallet', __name__)
 
 @wallet_bp.route('/users/<int:user_id>/balance', methods=['GET'])
+@require_user
 def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
     """
     Get a user's current wallet balance.
@@ -26,6 +28,7 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
     }, 200
 
 @wallet_bp.route('/users/<int:user_id>/portfolio', methods=['GET'])
+@require_user
 def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
     """
     Get a user's portfolio breakdown across cash, stocks, and crypto.
@@ -40,6 +43,7 @@ def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
         return error_response(str(e), 500)
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
+@require_user
 def deposit_cash(user_id: int) -> Tuple[dict, int]:
     """
     Deposit cash into the user's account.
@@ -63,6 +67,7 @@ def deposit_cash(user_id: int) -> Tuple[dict, int]:
         return error_response(str(e), 500)
 
 @wallet_bp.route('/users/<int:user_id>/withdraw', methods=['POST'])
+@require_user
 def withdraw_cash(user_id: int) -> Tuple[dict, int]:
     """
     Withdraw cash from the user's account.
