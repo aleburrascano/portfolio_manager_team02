@@ -36,11 +36,7 @@ def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
     Returns:
         dict: {'cash': float, 'stock': float, 'crypto': float, '_links': dict}
     """
-    try:
-        data = at.get_portfolio_values(user_id)
-        return {**data, '_links': portfolio_links(user_id)}, 200
-    except Exception as e:
-        return error_response(str(e), 500)
+    return {**at.get_portfolio_values(user_id), '_links': portfolio_links(user_id)}, 200
 
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
 @require_user
@@ -52,19 +48,14 @@ def deposit_cash(user_id: int) -> Tuple[dict, int]:
         dict: {'amount': float}
 
     Returns:
-        dict: A success message, or a 400/500 error.
+        dict: A success message, or a 400 error.
     """
     amount = (request.get_json(silent=True) or {}).get('amount')
     if amount is None:
         return error_response('amount is required', 400)
 
-    try:
-        if ct.deposit_cash(user_id, amount):
-            return {'message': 'Cash deposit successful!', '_links': balance_links(user_id)}, 200
-        else:
-            return error_response('Cash deposit failed.', 400)
-    except Exception as e:
-        return error_response(str(e), 500)
+    ct.deposit_cash(user_id, amount)
+    return {'message': 'Cash deposit successful!', '_links': balance_links(user_id)}, 200
 
 @wallet_bp.route('/users/<int:user_id>/withdraw', methods=['POST'])
 @require_user
@@ -76,16 +67,11 @@ def withdraw_cash(user_id: int) -> Tuple[dict, int]:
         dict: {'amount': float}
 
     Returns:
-        dict: A success message, or a 400/500 error.
+        dict: A success message, or a 400 error.
     """
     amount = (request.get_json(silent=True) or {}).get('amount')
     if amount is None:
         return error_response('amount is required', 400)
 
-    try:
-        if ct.withdraw_cash(user_id, amount):
-            return {'message': 'Cash withdrawal successful!', '_links': balance_links(user_id)}, 200
-        else:
-            return error_response('Cash withdrawal failed.', 400)
-    except Exception as e:
-        return error_response(str(e), 500)
+    ct.withdraw_cash(user_id, amount)
+    return {'message': 'Cash withdrawal successful!', '_links': balance_links(user_id)}, 200

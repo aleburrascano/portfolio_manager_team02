@@ -47,6 +47,9 @@ def require_user(view):
             return error_response('You cannot access another user\'s data', 403)
         return view(*args, **kwargs)
 
+    # Lets a test assert that every user-scoped route is actually guarded,
+    # without depending on how many other decorators are stacked on it.
+    wrapped.requires_user = True
     return wrapped
 
 

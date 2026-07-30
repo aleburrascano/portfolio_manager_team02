@@ -18,13 +18,13 @@ import sys
 from datetime import timedelta
 from decimal import Decimal
 
-import yfinance as yf
 from dotenv import load_dotenv
 from faker import Faker
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash
 
+import services.market_data as market_data
 from db.connection import get_engine, init_db
 from db.models import AssetTransaction, CashTransaction, User
 
@@ -65,12 +65,11 @@ def clear_user_transactions(session, user_id):
 def fetch_price_histories(tickers, days):
     histories = {}
     for ticker in tickers:
-        hist = yf.Ticker(ticker).history(period=f"{days + 10}d")
-        if hist.empty:
+        closes = market_data.close_series(ticker, days + 10)
+        if closes is None:
             print(f"warning: no price history for {ticker}, skipping it", file=sys.stderr)
             continue
-        hist.index = hist.index.tz_localize(None)
-        histories[ticker] = hist['Close']
+        histories[ticker] = closes
     if not histories:
         raise RuntimeError("no price history could be fetched for any ticker")
     return histories

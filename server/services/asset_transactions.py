@@ -1,15 +1,17 @@
 """
 Buy and sell assets (stocks or crypto) for a user, priced from live
-yfinance quotes.
+market data.
 """
 from decimal import Decimal
 
-import yfinance as yf
 from sqlalchemy import func, select
 
 import db.connection as db_conn
+import services.market_data as market_data
 import services.user_transactions as ut
 from db.models import AssetTransaction
+from services.exceptions import InsufficientFunds, InsufficientHoldings, UnknownUser
+
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
     """
@@ -24,6 +26,7 @@ def get_holding_qty(user_id: int, ticker: str) -> float:
     """
     return float(_get_holding_qty_decimal(user_id, ticker))
 
+
 def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
     total_shares = db_conn.get_session().scalar(
         select(func.coalesce(func.sum(AssetTransaction.qty), 0))
@@ -31,10 +34,11 @@ def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
     )
     return Decimal(str(total_shares))
 
-def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> bool:
+
+def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> None:
     """
-    Purchases an asset (stock or crypto) for the user. Make sure that the
-    user has sufficient funds to make the purchase before proceeding.
+    Purchase an asset (stock or crypto) for the user, at the current market
+    price, provided their wallet covers it.
 
     Args:
         user_id (int): The ID of the user.
@@ -42,50 +46,45 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
         ticker (str): The asset ticker symbol.
         quantity (float): The number of shares/units to purchase.
 
-    Returns:
-        bool: True if the purchase was successful, False otherwise.
+    Raises:
+        UnknownUser: if no such user exists.
+        MarketDataUnavailable: if the asset can't be priced.
+        InsufficientFunds: if the wallet doesn't cover the purchase.
     """
     session = db_conn.get_session()
 
     try:
         if not db_conn.lock_user(session, user_id):
-            session.rollback()
-            return False
+            raise UnknownUser('No such user.')
 
-        # Get the current price of the asset
-        asset = yf.Ticker(ticker)
-        current_price = Decimal(str(asset.history(period="1d")['Close'].iloc[0]))
+        price = market_data.trade_price(ticker)
         qty = Decimal(str(abs(quantity)))
+        cost = qty * price
 
-        # Validate that the user has sufficient funds to make the purchase,
-        # re-checked under the user row lock so no other request can race it
-        cost = qty * current_price
+        # Re-checked under the user row lock, so no concurrent request can
+        # spend the same balance twice.
         if ut.get_user_balance(user_id) < cost:
-            print(f"Insufficient funds for {asset_type} purchase.")
-            session.rollback()
-            return False
+            raise InsufficientFunds('Not enough cash for this purchase.')
 
         session.add(AssetTransaction(
             assetType=asset_type,
             ticker=ticker,
             qty=qty,
-            price=current_price,
+            price=price,
             val=-cost,
             assetTransactionType='buy',
             userId=user_id,
         ))
         session.commit()
-        return True
-    except Exception as e:
+    except Exception:
         session.rollback()
-        print(f"Error performing {asset_type} purchase: {e}")
-        return False
+        raise
 
 
-def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> bool:
+def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> None:
     """
-    Sells an asset (stock or crypto) for the user. Make sure that the user
-    owns enough shares/units to sell before proceeding.
+    Sell an asset (stock or crypto) for the user, at the current market
+    price, provided they hold enough of it.
 
     Args:
         user_id (int): The ID of the user.
@@ -93,45 +92,39 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> b
         ticker (str): The asset ticker symbol.
         quantity (float): The number of shares/units to sell.
 
-    Returns:
-        bool: True if the sale was successful, False otherwise.
+    Raises:
+        UnknownUser: if no such user exists.
+        MarketDataUnavailable: if the asset can't be priced.
+        InsufficientHoldings: if the user doesn't hold that many units.
     """
     session = db_conn.get_session()
 
     try:
         if not db_conn.lock_user(session, user_id):
-            session.rollback()
-            return False
+            raise UnknownUser('No such user.')
 
-        # Get the current price of the asset
-        asset = yf.Ticker(ticker)
-        current_price = Decimal(str(asset.history(period="1d")['Close'].iloc[0]))
+        price = market_data.trade_price(ticker)
         qty = Decimal(str(abs(quantity)))
-        proceeds = qty * current_price
+        proceeds = qty * price
 
-        # Validate that the user owns enough shares/units to sell, re-checked
-        # under the user row lock so no other request can race it
+        # Re-checked under the user row lock, so no concurrent request can
+        # sell the same shares twice.
         if _get_holding_qty_decimal(user_id, ticker) < qty:
-            print(f"Insufficient holdings for {asset_type} sale.")
-            session.rollback()
-            return False
+            raise InsufficientHoldings('Not enough shares to sell.')
 
         session.add(AssetTransaction(
             assetType=asset_type,
             ticker=ticker,
             qty=-qty,
-            price=current_price,
+            price=price,
             val=proceeds,
             assetTransactionType='sell',
             userId=user_id,
         ))
         session.commit()
-        return True
-    except Exception as e:
+    except Exception:
         session.rollback()
-        print(f"Error performing {asset_type} sale: {e}")
-        return False
-
+        raise
 
 
 def get_portfolio_values(user_id: int) -> dict:
@@ -141,35 +134,19 @@ def get_portfolio_values(user_id: int) -> dict:
     Returns a dict with keys 'cash', 'stock', and 'crypto' representing
     the current total value for each category. Cash is taken from the
     user's net wallet balance (cash + asset transaction effects). Asset
-    values are computed from current prices multiplied by net holdings.
+    values are current prices multiplied by net holdings.
     """
     session = db_conn.get_session()
-    cash = ut.get_user_balance(user_id)
 
-    rows = session.execute(
+    holdings = session.execute(
         select(AssetTransaction.assetType, AssetTransaction.ticker, func.sum(AssetTransaction.qty))
         .where(AssetTransaction.userId == user_id)
         .group_by(AssetTransaction.assetType, AssetTransaction.ticker)
     ).all()
 
     totals = {'stock': 0.0, 'crypto': 0.0}
+    for asset_type, ticker, qty in holdings:
+        if qty:
+            totals[asset_type] += float(qty) * market_data.valuation_price(ticker)
 
-    for asset_type, ticker, qty in rows:
-        if not qty:
-            continue
-
-        price = 0.0
-        try:
-            asset = yf.Ticker(ticker)
-            fast_info = getattr(asset, 'fast_info', None) or {}
-            last_price = fast_info.get('lastPrice')
-            if last_price is not None:
-                price = float(last_price)
-            else:
-                price = float(asset.history(period="1d")['Close'].iloc[0])
-        except Exception:
-            price = 0.0
-
-        totals[asset_type] += float(qty) * price
-
-    return {'cash': float(cash), 'stock': totals['stock'], 'crypto': totals['crypto']}
+    return {'cash': float(ut.get_user_balance(user_id)), **totals}
