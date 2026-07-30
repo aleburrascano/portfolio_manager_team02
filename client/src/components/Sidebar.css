@@ -20,7 +20,8 @@
   gap: 4px;
 }
 
-.sidebar-nav button {
+.sidebar-nav button,
+.sidebar-logout {
   width: 100%;
   display: flex;
   align-items: center;
@@ -58,7 +59,13 @@
   height: 100%;
 }
 
-.sidebar-nav .sidebar-logout:hover {
+/* auto margin pins it to the bottom of the sidebar column, clear of the
+   navigation items, so it can't be hit while reaching for them. */
+.sidebar-logout {
+  margin-top: auto;
+}
+
+.sidebar-logout:hover {
   background: var(--negative-bg);
   color: var(--negative);
 }

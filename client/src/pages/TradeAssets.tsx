@@ -1,27 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
-import SearchBar from './components/SearchBar'
-import AssetList from './components/AssetList'
-import AssetDetail from './components/AssetDetail'
-import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from './api'
+import SearchBar from '../components/SearchBar'
+import AssetList from '../components/AssetList'
+import AssetDetail from '../components/AssetDetail'
+import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
+import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
   { type: 'crypto', label: 'Crypto' },
+  { type: 'bond', label: 'Bonds' },
 ]
 
-const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
-  stock: 10000,
-  crypto: 5000,
-}
+// Derived from the tab list so a new asset type only has to be added once.
+const ASSET_TYPE_LABELS = Object.fromEntries(
+  ASSET_TYPES.map(({ type, label }) => [type, label]),
+) as Record<AssetType, string>
 
 function TradeAssets({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
   const [popularLoading, setPopularLoading] = useState(true)
-  const [searchResults, setSearchResults] = useState<Asset[]>([])
-  const [searching, setSearching] = useState(false)
+  // Results are tagged with the search they answer, so "still loading" is
+  // derived from what we hold rather than tracked in a separate flag that
+  // could drift out of sync with it.
+  const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
@@ -54,45 +58,36 @@ function TradeAssets({ user }: { user: User }) {
     }
   }, [assetType])
 
-  useEffect(() => {
-    let cancelled = false
+  const trimmedQuery = query.trim()
+  const isSearching = trimmedQuery.length > 0
+  const searchKey = `${assetType}:${trimmedQuery}`
+  const searchLoading = isSearching && search.key !== searchKey
 
-    const interval = setInterval(() => {
-      fetchPopularAssets(assetType)
-        .then((assets) => {
-          if (cancelled) return
-          popularCache.current[assetType] = assets
-          setPopularAssets(assets)
-        })
-        .catch(() => {})
-    }, POPULAR_POLL_INTERVAL_MS[assetType])
+  useEffect(() => {
+    if (!isSearching) return
+
+    let cancelled = false
+    const timeout = setTimeout(async () => {
+      let assets: Asset[]
+      try {
+        assets = await searchAssets(assetType, trimmedQuery)
+      } catch {
+        assets = []
+      }
+      if (!cancelled) setSearch({ key: searchKey, assets })
+    }, 300)
 
     return () => {
       cancelled = true
-      clearInterval(interval)
+      clearTimeout(timeout)
     }
-  }, [assetType])
+  }, [assetType, trimmedQuery, isSearching, searchKey])
 
-  useEffect(() => {
-    const trimmed = query.trim()
-    if (!trimmed) {
-      setSearchResults([])
-      return
-    }
-
-    setSearching(true)
-    const timeout = setTimeout(async () => {
-      try {
-        setSearchResults(await searchAssets(assetType, trimmed))
-      } catch {
-        setSearchResults([])
-      } finally {
-        setSearching(false)
-      }
-    }, 300)
-
-    return () => clearTimeout(timeout)
-  }, [assetType, query])
+  // Only the rows actually on screen are subscribed to, so switching tabs
+  // or searching moves the server's work with the user.
+  const listed = isSearching ? search.assets : popularAssets
+  const live = useLiveQuotes(assetType, listed.map((asset) => asset.symbol))
+  const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
 
   function switchAssetType(next: AssetType) {
     if (popularLoading || next === assetType) return
@@ -100,8 +95,6 @@ function TradeAssets({ user }: { user: User }) {
     setQuery('')
     setSelectedSymbol(null)
   }
-
-  const isSearching = query.trim().length > 0
 
   return (
     <section id="trade-assets-content">
@@ -132,11 +125,11 @@ function TradeAssets({ user }: { user: User }) {
             title={
               isSearching
                 ? 'Search Results'
-                : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
+                : `Most Active ${ASSET_TYPE_LABELS[assetType]}`
             }
             assetType={assetType}
-            assets={isSearching ? searchResults : popularAssets}
-            loading={isSearching ? searching : popularLoading}
+            assets={assets}
+            loading={isSearching ? searchLoading : popularLoading}
             onSelect={setSelectedSymbol}
           />
         </>

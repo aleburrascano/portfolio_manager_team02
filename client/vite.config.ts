@@ -7,6 +7,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:5000',
+      // ws so the Socket.IO connection upgrades through the dev proxy
+      // instead of being stuck on long-polling.
+      '/socket.io': { target: 'http://localhost:5000', ws: true },
     },
   },
 })

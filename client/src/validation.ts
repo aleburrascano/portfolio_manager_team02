@@ -12,6 +12,22 @@ export function validateName(value: string, field: string): string | null {
   return null
 }
 
+export function validateUsername(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) return 'Username is required.'
+  if (trimmed.length > 32) return 'Username must be 32 characters or fewer.'
+  if (!/^[A-Za-z0-9_.-]+$/.test(trimmed)) {
+    return 'Username can only contain letters, numbers, underscores, dots, and hyphens.'
+  }
+  return null
+}
+
+// Mirrors MIN_PASSWORD_LENGTH in the server's auth routes.
+export function validatePassword(value: string): string | null {
+  if (value.length < 8) return 'Password must be at least 8 characters.'
+  return null
+}
+
 export function validateAmountInput(raw: string): string | null {
   const trimmed = raw.trim()
   if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) {

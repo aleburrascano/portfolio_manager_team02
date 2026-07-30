@@ -5,23 +5,28 @@ graphs. Prices are pulled from real yfinance daily history so the resulting
 portfolio value curve looks realistic; transaction dates/amounts are
 generated with Faker.
 
-Usage:
-    python db/seed.py [--first Demo] [--last User] [--days 730]
+Usage (from the server/ directory):
+    python -m scripts.seed [--username demo] [--password demopassword]
+                      [--first Demo] [--last User] [--days 730]
 
 Re-running clears and regenerates that user's transactions, so it's safe to
 run repeatedly while iterating on the demo.
 """
 import argparse
-import os
 import random
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
-import mysql.connector
-import yfinance as yf
 from dotenv import load_dotenv
 from faker import Faker
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+from werkzeug.security import generate_password_hash
+
+import services.market_data as market_data
+from db.connection import get_engine, init_db
+from db.models import Asset, AssetTransaction, CashTransaction, User
 
 STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA']
 CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD']
@@ -37,53 +42,42 @@ CASH_RESERVE = Decimal('2000')  # keep a cash cushion so buys don't drain the wa
 EVENT_WEIGHTS = {'buy': 0.45, 'deposit': 0.30, 'sell': 0.15, 'withdraw': 0.10}
 
 
-def get_connection():
-    load_dotenv()
-    return mysql.connector.connect(
-        host=os.environ.get('DB_HOST', 'localhost'),
-        user=os.environ.get('DB_USER', 'root'),
-        password=os.environ.get('DB_PASSWORD', ''),
-        database=os.environ.get('DB_NAME', 'portfolio_manager'),
-    )
-
-
-def find_or_create_user(conn, first_name, last_name):
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT userId FROM Users WHERE firstName = %s AND lastName = %s",
-        (first_name, last_name),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        cursor.execute(
-            "INSERT INTO Users (firstName, lastName) VALUES (%s, %s)",
-            (first_name, last_name),
+def find_or_create_user(session, username, password, first_name, last_name):
+    user = session.scalar(select(User).where(User.username == username))
+    if user is None:
+        user = User(
+            username=username,
+            firstName=first_name,
+            lastName=last_name,
+            passwordHash=generate_password_hash(password),
         )
-        conn.commit()
-        user_id = cursor.lastrowid
-    else:
-        user_id = row['userId']
-    cursor.close()
-    return user_id
+        session.add(user)
+        session.commit()
+    return user.userId
 
 
-def clear_user_transactions(conn, user_id):
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM CashTransactions WHERE userId = %s", (user_id,))
-    cursor.execute("DELETE FROM AssetTransactions WHERE userId = %s", (user_id,))
-    conn.commit()
-    cursor.close()
+def register_assets(session):
+    """Assets have to exist before transactions can reference them."""
+    for ticker, asset_type in TICKERS.items():
+        if session.get(Asset, ticker) is None:
+            session.add(Asset(ticker=ticker, assetType=asset_type))
+    session.commit()
+
+
+def clear_user_transactions(session, user_id):
+    session.execute(delete(CashTransaction).where(CashTransaction.userId == user_id))
+    session.execute(delete(AssetTransaction).where(AssetTransaction.userId == user_id))
+    session.commit()
 
 
 def fetch_price_histories(tickers, days):
     histories = {}
     for ticker in tickers:
-        hist = yf.Ticker(ticker).history(period=f"{days + 10}d")
-        if hist.empty:
+        closes = market_data.close_series(ticker, days + 10)
+        if closes is None:
             print(f"warning: no price history for {ticker}, skipping it", file=sys.stderr)
             continue
-        hist.index = hist.index.tz_localize(None)
-        histories[ticker] = hist['Close']
+        histories[ticker] = closes
     if not histories:
         raise RuntimeError("no price history could be fetched for any ticker")
     return histories
@@ -108,14 +102,18 @@ def build_events(fake, start, end):
     return events
 
 
-def run(first_name, last_name, days):
+def run(username, password, first_name, last_name, days):
     fake = Faker()
-    conn = get_connection()
+    load_dotenv()
+    init_db()
+    session = Session(get_engine())
 
-    user_id = find_or_create_user(conn, first_name, last_name)
-    clear_user_transactions(conn, user_id)
+    user_id = find_or_create_user(session, username, password, first_name, last_name)
+    register_assets(session)
+    clear_user_transactions(session, user_id)
 
-    now = fake.date_time_between(start_date='now', end_date='now')
+    # UTC, to match the clock the database writes its own defaults on.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = now - timedelta(days=days)
     histories = fetch_price_histories(TICKERS.keys(), days)
     available_tickers = list(histories.keys())
@@ -162,7 +160,7 @@ def run(first_name, last_name, days):
             if qty <= 0:
                 continue
             cost = (qty * price).quantize(Decimal('0.00000001'))
-            asset_rows.append((TICKERS[ticker], ticker, qty, price, -cost, 'buy', when))
+            asset_rows.append((ticker, qty, price, 'buy', when))
             cash_balance -= cost
             holdings[ticker] += qty
 
@@ -175,26 +173,28 @@ def run(first_name, last_name, days):
             if qty <= 0:
                 continue
             proceeds = (qty * price).quantize(Decimal('0.00000001'))
-            asset_rows.append((TICKERS[ticker], ticker, -qty, price, proceeds, 'sell', when))
+            asset_rows.append((ticker, -qty, price, 'sell', when))
             cash_balance += proceeds
             holdings[ticker] -= qty
 
-    cursor = conn.cursor()
-    cursor.executemany(
-        "INSERT INTO CashTransactions (cashTransactionType, amount, cashTransactionDate, userId) "
-        "VALUES (%s, %s, %s, %s)",
-        [(t, amt, dt, user_id) for t, amt, dt in cash_rows],
-    )
-    cursor.executemany(
-        "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, "
-        "assetTransactionDate, userId) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
-        [(*row, user_id) for row in asset_rows],
-    )
-    conn.commit()
-    cursor.close()
-    conn.close()
+    session.add_all([
+        CashTransaction(
+            cashTransactionType=kind, amount=amount,
+            cashTransactionDate=when, userId=user_id,
+        )
+        for kind, amount, when in cash_rows
+    ])
+    session.add_all([
+        AssetTransaction(
+            ticker=ticker, qty=qty, price=price,
+            assetTransactionType=kind, assetTransactionDate=when, userId=user_id,
+        )
+        for ticker, qty, price, kind, when in asset_rows
+    ])
+    session.commit()
+    session.close()
 
-    print(f"Seeded user {first_name} {last_name} (userId={user_id})")
+    print(f"Seeded user {first_name} {last_name} (userId={user_id}, login: {username} / {password})")
     print(f"  {len(cash_rows)} cash transactions, {len(asset_rows)} asset transactions")
     print(f"  final cash balance: ${cash_balance:,.2f}")
     print("  final holdings:")
@@ -205,8 +205,10 @@ def run(first_name, last_name, days):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--username', default='demo')
+    parser.add_argument('--password', default='demopassword')
     parser.add_argument('--first', default='Demo')
     parser.add_argument('--last', default='User')
     parser.add_argument('--days', type=int, default=730)
     args = parser.parse_args()
-    run(args.first, args.last, args.days)
+    run(args.username, args.password, args.first, args.last, args.days)

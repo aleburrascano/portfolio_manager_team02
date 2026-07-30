@@ -12,18 +12,13 @@ import {
   type User,
 } from '../api'
 import { useBalance } from '../balance-context'
+import { useLiveQuotes } from '../realtime'
+import { useIdempotencyKey } from '../idempotency'
 import { validateQuantityInput } from '../validation'
 import AssetLogo from './AssetLogo'
 import './AssetDetail.css'
 
 type Side = 'buy' | 'sell'
-
-// Crypto trades around the clock and moves faster, so it's worth polling
-// more often than stocks.
-const POLL_INTERVAL_MS: Record<AssetType, number> = {
-  stock: 5000,
-  crypto: 3000,
-}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -41,6 +36,7 @@ function AssetDetail({
   onBack: () => void
 }) {
   const { balance, refreshBalance } = useBalance()
+  const idempotency = useIdempotencyKey()
   const [detail, setDetail] = useState<AssetDetailType | null>(null)
   const [detailError, setDetailError] = useState('')
   const [history, setHistory] = useState<PricePoint[]>([])
@@ -53,6 +49,9 @@ function AssetDetail({
   useEffect(() => {
     let cancelled = false
 
+    // One-off: the live price arrives over the socket from here on, and the
+    // year of history behind the chart doesn't change second to second.
+    // Holdings only move when this user trades, which refetches them below.
     async function loadInitial() {
       setDetail(null)
       setDetailError('')
@@ -78,34 +77,20 @@ function AssetDetail({
       }
     }
 
-    async function pollPrice() {
-      // Only the price/holdings tick live; the year of history behind the
-      // chart doesn't change second to second, so there's no point refetching it.
-      try {
-        const d = await fetchAssetDetail(assetType, symbol)
-        if (!cancelled) setDetail(d)
-      } catch {
-        // keep showing the last good price rather than blanking the page
-      }
-      try {
-        const s = await fetchHoldings(user.userId, assetType, symbol)
-        if (!cancelled) setShares(s)
-      } catch {
-        // keep showing the last known holdings
-      }
-    }
-
     loadInitial()
-    const interval = setInterval(pollPrice, POLL_INTERVAL_MS[assetType])
 
     return () => {
       cancelled = true
-      clearInterval(interval)
     }
   }, [assetType, symbol, user.userId])
 
-  const price = detail?.currentPrice ?? 0
-  const isPositive = (detail?.change ?? 0) >= 0
+  const live = useLiveQuotes(assetType, [symbol])
+  // The pushed update carries only the fields that have a value, so it
+  // refreshes the price without wiping the fields it doesn't cover.
+  const quote = detail ? { ...detail, ...live[symbol] } : null
+
+  const price = quote?.currentPrice ?? 0
+  const isPositive = (quote?.change ?? 0) >= 0
   const parsedQuantity = Number(quantity)
   const maxQuantity =
     side === 'buy'
@@ -137,11 +122,13 @@ function AssetDetail({
 
     setSubmitting(true)
     try {
+      const key = idempotency.keyFor(`${side}:${assetType}:${symbol}:${parsedQuantity}`)
       if (side === 'buy') {
-        await buyAsset(user.userId, assetType, symbol, parsedQuantity)
+        await buyAsset(user.userId, assetType, symbol, parsedQuantity, key)
       } else {
-        await sellAsset(user.userId, assetType, symbol, parsedQuantity)
+        await sellAsset(user.userId, assetType, symbol, parsedQuantity, key)
       }
+      idempotency.reset()
       setShares(await fetchHoldings(user.userId, assetType, symbol))
       await refreshBalance()
       setQuantity('1')
@@ -161,15 +148,15 @@ function AssetDetail({
 
       {detailError ? (
         <p className="asset-list-status">{detailError}</p>
-      ) : !detail ? (
+      ) : !quote ? (
         <p className="asset-list-status">Loading…</p>
       ) : (
         <>
           <div className="asset-detail-title">
-            <AssetLogo symbol={detail.symbol} assetType={assetType} />
+            <AssetLogo symbol={quote.symbol} assetType={assetType} />
             <div>
-              <h1>{detail.name}</h1>
-              <span className="asset-symbol">{detail.symbol}</span>
+              <h1>{quote.name}</h1>
+              <span className="asset-symbol">{quote.symbol}</span>
             </div>
           </div>
 
@@ -179,8 +166,8 @@ function AssetDetail({
                 <div className="trade-price">
                   ${price.toFixed(2)}{' '}
                   <span className={isPositive ? 'positive' : 'negative'}>
-                    {isPositive ? '▲' : '▼'} {Math.abs(detail.changePercent ?? 0).toFixed(2)}%
-                    {' '}(${Math.abs(detail.change ?? 0).toFixed(2)})
+                    {isPositive ? '▲' : '▼'} {Math.abs(quote.changePercent ?? 0).toFixed(2)}%
+                    {' '}(${Math.abs(quote.change ?? 0).toFixed(2)})
                   </span>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
@@ -231,27 +218,27 @@ function AssetDetail({
               <div className="stats-grid">
                 <div>
                   <span className="stats-label">Daily High</span>
-                  <span>{detail.dayHigh !== undefined ? `$${detail.dayHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayHigh != null ? `$${quote.dayHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Daily Low</span>
-                  <span>{detail.dayLow !== undefined ? `$${detail.dayLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayLow != null ? `$${quote.dayLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week High</span>
-                  <span>{detail.yearHigh !== undefined ? `$${detail.yearHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearHigh != null ? `$${quote.yearHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week Low</span>
-                  <span>{detail.yearLow !== undefined ? `$${detail.yearLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearLow != null ? `$${quote.yearLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Open</span>
-                  <span>{detail.open !== undefined ? `$${detail.open.toFixed(2)}` : '—'}</span>
+                  <span>{quote.open != null ? `$${quote.open.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Volume</span>
-                  <span>{detail.volume !== undefined ? detail.volume.toLocaleString() : '—'}</span>
+                  <span>{quote.volume != null ? quote.volume.toLocaleString() : '—'}</span>
                 </div>
               </div>
             </div>
