@@ -2,62 +2,71 @@
 Read a user's combined cash and asset transaction history.
 """
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, literal, select, union_all
 
 from db.connection import get_session
-from db.models import AssetTransaction, CashTransaction
+from db.models import MONEY, Asset, AssetTransaction, CashTransaction
+
+# The cash effect of a trade: negative when buying (qty is positive),
+# positive when selling (qty is negative). Derived rather than stored, so
+# it can never disagree with the quantity and price it comes from.
+CASH_EFFECT = -AssetTransaction.qty * AssetTransaction.price
 
 
-def get_user_transactions(user_id: int) -> List[Dict[str, Any]]:
+def get_user_transactions(
+    user_id: int, limit: Optional[int] = None, offset: int = 0
+) -> List[Dict[str, Any]]:
     """
-    Fetch a user's full transaction history (cash and asset), newest first.
+    Fetch a user's transaction history (cash and asset), newest first.
+
+    The two tables are combined with UNION ALL rather than being merged in
+    Python, so the sort and any limit happen in the database against an
+    index instead of pulling the user's whole history into memory.
 
     Args:
         user_id (int): The ID of the user.
+        limit (int | None): Maximum rows to return, or None for all of them.
+        offset (int): Rows to skip, for paging through the history.
 
     Returns:
-        list[dict]: Combined transaction rows, each with a `signedAmount`
-        field (positive = cash in, negative = cash out).
+        list[dict]: Transaction rows, each with a `signedAmount` field
+        (positive = cash in, negative = cash out).
     """
-    session = get_session()
+    # A UNION takes each column's type from its first branch, so the two
+    # transaction-type enums are cast to plain text - otherwise 'buy' comes
+    # back through the cash enum and fails to load.
+    cash = select(
+        CashTransaction.cashTransactionId.label('transactionId'),
+        literal('cash', String).label('type'),
+        cast(CashTransaction.cashTransactionType, String).label('transactionType'),
+        literal(None, String).label('ticker'),
+        literal(None, MONEY).label('qty'),
+        literal(None, MONEY).label('price'),
+        CashTransaction.amount.label('signedAmount'),
+        CashTransaction.cashTransactionDate.label('transactionDate'),
+    ).where(CashTransaction.userId == user_id)
 
-    cash_rows = [
-        {
-            'transactionId': row.cashTransactionId,
-            'transactionType': row.cashTransactionType,
-            'amount': row.amount,
-            'transactionDate': row.cashTransactionDate,
-            'type': 'cash',
-            'signedAmount': row.amount,
-        }
-        for row in session.scalars(
-            select(CashTransaction).where(CashTransaction.userId == user_id)
-        )
-    ]
+    assets = select(
+        AssetTransaction.assetTransactionId,
+        cast(Asset.assetType, String),
+        cast(AssetTransaction.assetTransactionType, String),
+        AssetTransaction.ticker,
+        AssetTransaction.qty,
+        AssetTransaction.price,
+        CASH_EFFECT,
+        AssetTransaction.assetTransactionDate,
+    ).join(Asset, Asset.ticker == AssetTransaction.ticker).where(
+        AssetTransaction.userId == user_id
+    )
 
-    asset_rows = [
-        {
-            'transactionId': row.assetTransactionId,
-            'transactionType': row.assetTransactionType,
-            'assetType': row.assetType,
-            'ticker': row.ticker,
-            'qty': row.qty,
-            'price': row.price,
-            'val': row.val,
-            'transactionDate': row.assetTransactionDate,
-            'type': row.assetType,
-            'signedAmount': row.val,
-        }
-        for row in session.scalars(
-            select(AssetTransaction).where(AssetTransaction.userId == user_id)
-        )
-    ]
+    combined = union_all(cash, assets).subquery()
+    statement = select(combined).order_by(combined.c.transactionDate.desc())
+    if limit is not None:
+        statement = statement.limit(limit).offset(offset)
 
-    transactions = cash_rows + asset_rows
-    transactions.sort(key=lambda row: row['transactionDate'], reverse=True)
-    return transactions
+    return [dict(row) for row in get_session().execute(statement).mappings()]
 
 
 def get_user_balance(user_id: int) -> Decimal:
@@ -77,7 +86,7 @@ def get_user_balance(user_id: int) -> Decimal:
         .where(CashTransaction.userId == user_id)
     )
     assets = session.scalar(
-        select(func.coalesce(func.sum(AssetTransaction.val), 0))
+        select(func.coalesce(func.sum(CASH_EFFECT), 0))
         .where(AssetTransaction.userId == user_id)
     )
     return Decimal(str(cash)) + Decimal(str(assets))

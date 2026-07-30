@@ -11,7 +11,7 @@ from typing import Optional
 from urllib.parse import quote_plus
 
 from flask import Flask, g
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, event, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -45,8 +45,29 @@ def get_engine() -> Engine:
     global _engine, _new_session
     if _engine is None:
         _engine = create_engine(database_url(), pool_pre_ping=True, future=True)
+        _pin_session_timezone(_engine)
         _new_session = sessionmaker(bind=_engine, future=True)
     return _engine
+
+
+def _pin_session_timezone(engine: Engine) -> None:
+    """
+    Make the database's own `now()` produce UTC.
+
+    MySQL's `now()` follows the server's timezone, which is whatever the
+    host or container happens to be set to - so a default column and a
+    Python-written timestamp could land in the same column on two different
+    clocks. Pinning the session leaves nothing to configuration. SQLite's
+    CURRENT_TIMESTAMP is already UTC, so it needs nothing.
+    """
+    if engine.dialect.name != 'mysql':
+        return
+
+    @event.listens_for(engine, 'connect')
+    def set_utc(dbapi_connection, _record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("SET time_zone = '+00:00'")
+        cursor.close()
 
 
 def get_session() -> Session:

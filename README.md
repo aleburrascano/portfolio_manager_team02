@@ -75,6 +75,23 @@ Optionally load ~2 years of demo transactions for a user:
 python -m db.seed --first Demo --last User
 ```
 
+#### Schema conventions
+
+- **Nothing derived is stored.** A trade's cash effect is `-qty * price`,
+  computed where it's needed. It used to be a `val` column and had already
+  drifted from the quantity and price it came from.
+- **`Assets` owns `assetType`**, not each transaction — it's a property of
+  the ticker, so a new kind of asset is an `INSERT`, not an `ALTER` on an
+  `ENUM`.
+- **Every timestamp is UTC.** The MySQL session timezone is pinned on
+  connect so the database's `now()` agrees with what Python writes.
+- **Usernames are stored lowercased.** MySQL's default collation is
+  case-insensitive and SQLite's comparison is not, so without normalising
+  the same signup would succeed on one and fail on the other.
+- **Transactions are append-only**, which is why they carry no `updatedAt`.
+- `CHECK` constraints keep each type column agreeing with the sign beside
+  it, so `'deposit'` can't hold a negative amount.
+
 #### Changing the schema
 
 Edit `db/models.py`, then autogenerate the migration and read what it wrote
@@ -126,7 +143,7 @@ so future breaking changes can live alongside it at `/api/v2`).
 | POST   | `/api/v1/auth/logout`                    | End the current session                       |
 | GET    | `/api/v1/auth/me`                        | Get the user owning the current session       |
 | GET    | `/api/v1/users/:userId/balance`          | Get a user's wallet balance                   |
-| GET    | `/api/v1/users/:userId/transactions`     | Get a user's chronological transaction history |
+| GET    | `/api/v1/users/:userId/transactions`     | Transaction history, newest first (`?limit=&offset=`) |
 | GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |
 | GET    | `/api/v1/assets/:assetType/popular`      | Get popular assets of that type               |
 
@@ -153,7 +170,8 @@ stored; a repeat carrying the same key gets that response back without
 re-executing. Reusing a key for a *different* request is a 409 rather than
 a wrong replay, and a rejected request releases its key so the caller can
 correct it and retry with the same one. Omitting the header keeps the old
-behaviour.
+behaviour. Records are swept after 24 hours, and a claim left without a
+response for 5 minutes is treated as abandoned so its key frees up.
 
 Every `/users/:userId/...` route is session-scoped: logging in sets a signed
 httpOnly cookie, and a request without one gets a 401 while a request for a

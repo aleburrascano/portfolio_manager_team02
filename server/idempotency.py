@@ -12,10 +12,11 @@ The header is optional - a request without one behaves exactly as before.
 """
 import hashlib
 import json
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 from flask import request
-from sqlalchemy import delete, update
+from sqlalchemy import delete, or_, update
 from sqlalchemy.exc import IntegrityError
 
 from db.connection import get_session
@@ -25,11 +26,40 @@ from errors import error_response
 HEADER = 'Idempotency-Key'
 MAX_KEY_LENGTH = 64
 
+# How long a completed record is replayable for. Retries happen within
+# seconds; a day is generous and keeps the table from growing forever.
+RETENTION = timedelta(hours=24)
+# A claim with no response after this long belongs to a request that died
+# rather than one still running, so the key becomes available again.
+STALE_CLAIM = timedelta(minutes=5)
+
 
 def _fingerprint() -> str:
     """Identify the request a key was claimed for, to catch key reuse."""
     payload = f'{request.method} {request.path} '.encode() + (request.get_data() or b'')
     return hashlib.sha256(payload).hexdigest()
+
+
+def _purge_expired(session, user_id: int) -> None:
+    """
+    Drop this user's records that are past retention, or claims abandoned by
+    a request that never finished.
+
+    Swept here rather than on a schedule so it needs no cron to stay
+    bounded; it's a range scan over an indexed column, per user.
+    """
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    session.execute(
+        delete(IdempotentRequest).where(
+            IdempotentRequest.userId == user_id,
+            or_(
+                IdempotentRequest.createdAt < now - RETENTION,
+                (IdempotentRequest.responseBody.is_(None))
+                & (IdempotentRequest.createdAt < now - STALE_CLAIM),
+            ),
+        )
+    )
+    session.commit()
 
 
 def _replay(session, user_id: int, key: str, fingerprint: str):
@@ -47,7 +77,8 @@ def _replay(session, user_id: int, key: str, fingerprint: str):
     if record.responseBody is None:
         return error_response(f'A request with that {HEADER} is still in progress', 409)
 
-    return json.loads(record.responseBody), record.statusCode
+    # Only successful responses are ever stored, so a stored body is a 200.
+    return json.loads(record.responseBody), 200
 
 
 def idempotent(view):
@@ -73,6 +104,7 @@ def idempotent(view):
 
         # Claiming the key is its own committed transaction, so a concurrent
         # duplicate collides here rather than part-way through the work.
+        _purge_expired(session, user_id)
         session.add(IdempotentRequest(userId=user_id, idempotencyKey=key, fingerprint=fingerprint))
         try:
             session.commit()
@@ -96,7 +128,7 @@ def idempotent(view):
             return body, status
 
         session.execute(update(IdempotentRequest).where(*owns).values(
-            statusCode=status, responseBody=json.dumps(body)
+            responseBody=json.dumps(body)
         ))
         session.commit()
         return body, status
