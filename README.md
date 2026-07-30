@@ -53,15 +53,16 @@ The API is available at `http://localhost:5000`.
 
 ### Endpoints
 
-All routes are served under an `/api` prefix (kept separate from Vite's build
-output, which also lives under `/assets` in production).
+All routes are served under an `/api/v1` prefix (kept separate from Vite's
+build output, which also lives under `/assets` in production, and versioned
+so future breaking changes can live alongside it at `/api/v2`).
 
-| Method | Route                              | Description                                  |
-| ------ | ----------------------------------- | --------------------------------------------- |
-| GET    | `/api/users/:userId/balance`        | Get a user's wallet balance                   |
-| GET    | `/api/users/:userId/transactions`   | Get a user's chronological transaction history |
-| GET    | `/api/assets/:assetType/search?q=`  | Search assets by ticker or name (assetType: stock, crypto) |
-| GET    | `/api/assets/:assetType/popular`    | Get popular assets of that type               |
+| Method | Route                                  | Description                                  |
+| ------ | ---------------------------------------- | --------------------------------------------- |
+| GET    | `/api/v1/users/:userId/balance`          | Get a user's wallet balance                   |
+| GET    | `/api/v1/users/:userId/transactions`     | Get a user's chronological transaction history |
+| GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |
+| GET    | `/api/v1/assets/:assetType/popular`      | Get popular assets of that type               |
 
 Set `CORS_ORIGINS` (comma-separated) in `.env` to allow the client's origin;
 defaults to `http://localhost:5173`.
