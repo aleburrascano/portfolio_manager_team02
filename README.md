@@ -8,7 +8,7 @@ live market data, and buy/sell stocks against their balance.
 
 ## Stack
 
-- **Server**: Flask + MySQL (`mysql-connector-python`), live market data via `yfinance`.
+- **Server**: Flask + SQLAlchemy (MySQL in production, SQLite for local dev), live market data via `yfinance`.
 - **Client**: React + TypeScript, built with Vite.
 
 ## Project structure
@@ -28,19 +28,32 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-Create a MySQL database and load the schema:
+### Database
+
+The server talks to the database through SQLAlchemy, so the backend is
+switchable via a single `DATABASE_URL` in `.env`.
+
+For local development, SQLite needs no setup — the tables are created on
+first run:
+
+```
+DATABASE_URL=sqlite:///dev.db
+```
+
+For MySQL, create the database and load the schema first:
 
 ```bash
 mysql -u root -p < db/schema/schema.sql
 ```
 
-Copy `.env.example` to `.env` and fill in your MySQL credentials:
+then either set `DATABASE_URL=mysql+mysqlconnector://root:password@localhost/portfolio_manager`,
+or leave it blank and fill in the `DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`
+variables it falls back to.
 
-```
-DB_HOST=localhost
-DB_USER=root
-DB_PASSWORD=
-DB_NAME=portfolio_manager
+Optionally load ~2 years of demo transactions for a user:
+
+```bash
+python -m db.seed --first Demo --last User
 ```
 
 Run the server:

@@ -16,11 +16,9 @@ def get_user_route(user_id: int) -> Tuple[dict, int]:
 
     Returns:
         dict: {'userId': int, 'firstName': str, 'lastName': str, '_links': dict},
-        or a 404/500 error.
+        or a 404 error.
     """
-    user, db_error = get_user(user_id)
-    if db_error:
-        return error_response('Database connection failed', 500)
+    user = get_user(user_id)
     if user is None:
         return error_response('User not found', 404)
 
@@ -36,7 +34,7 @@ def login_route() -> Tuple[dict, int]:
 
     Returns:
         dict: {'userId': int, 'firstName': str, 'lastName': str, '_links': dict},
-        or a 400/500 error.
+        or a 400 error.
     """
     body = request.get_json(silent=True) or {}
     first_name = (body.get('firstName') or '').strip()
@@ -45,7 +43,4 @@ def login_route() -> Tuple[dict, int]:
         return error_response('firstName and lastName are required', 400)
 
     user = login(first_name, last_name)
-    if user is None:
-        return error_response('Database connection failed', 500)
-
     return {**user, '_links': user_links(user['userId'])}, 200

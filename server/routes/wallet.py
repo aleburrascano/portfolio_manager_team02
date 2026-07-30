@@ -17,16 +17,11 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
     Get a user's current wallet balance.
 
     Returns:
-        dict: {'userId': int, 'balance': float, '_links': dict}, or a 500
-        error if the database connection failed.
+        dict: {'userId': int, 'balance': float, '_links': dict}
     """
-    balance = get_user_balance(user_id)
-    if balance is None:
-        return error_response('Database connection failed', 500)
-
     return {
         'userId': user_id,
-        'balance': round(float(balance), 2),
+        'balance': round(float(get_user_balance(user_id)), 2),
         '_links': balance_links(user_id),
     }, 200
 

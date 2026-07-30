@@ -1,10 +1,19 @@
 """
 Demo auth: identify a user by first/last name only, creating them if new.
 """
-from typing import Optional, Dict, Any
-from db.connection import get_db
+from typing import Any, Dict, Optional
 
-def login(first_name: str, last_name: str) -> Optional[Dict[str, Any]]:
+from sqlalchemy import select
+
+from db.connection import get_session
+from db.models import User
+
+
+def _serialize(user: User) -> Dict[str, Any]:
+    return {'userId': user.userId, 'firstName': user.firstName, 'lastName': user.lastName}
+
+
+def login(first_name: str, last_name: str) -> Dict[str, Any]:
     """
     Find the user matching first_name/last_name, or create one if none exists.
 
@@ -13,32 +22,22 @@ def login(first_name: str, last_name: str) -> Optional[Dict[str, Any]]:
         last_name (str): The user's last name.
 
     Returns:
-        dict | None: {'userId', 'firstName', 'lastName'}, or None if the
-        database connection failed.
+        dict: {'userId', 'firstName', 'lastName'}.
     """
-    db = get_db()
-    if db is None:
-        return None
-
-    cursor = db.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT userId, firstName, lastName FROM Users WHERE firstName = %s AND lastName = %s",
-        (first_name, last_name)
+    session = get_session()
+    user = session.scalar(
+        select(User).where(User.firstName == first_name, User.lastName == last_name)
     )
-    user = cursor.fetchone()
 
     if user is None:
-        cursor.execute(
-            "INSERT INTO Users (firstName, lastName) VALUES (%s, %s)",
-            (first_name, last_name)
-        )
-        db.commit()
-        user = {'userId': cursor.lastrowid, 'firstName': first_name, 'lastName': last_name}
+        user = User(firstName=first_name, lastName=last_name)
+        session.add(user)
+        session.commit()
 
-    cursor.close()
-    return user
+    return _serialize(user)
 
-def get_user(user_id: int) -> tuple[Optional[Dict[str, Any]], bool]:
+
+def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     """
     Look up a user by ID.
 
@@ -46,20 +45,7 @@ def get_user(user_id: int) -> tuple[Optional[Dict[str, Any]], bool]:
         user_id (int): The ID of the user.
 
     Returns:
-        tuple[dict | None, bool]: (user, db_error). `user` is the row dict, or
-        None if no such user exists. `db_error` is True if the lookup failed
-        because the database connection itself failed (distinct from a
-        legitimate "no such user").
+        dict | None: The user, or None if no such user exists.
     """
-    db = get_db()
-    if db is None:
-        return None, True
-
-    cursor = db.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT userId, firstName, lastName FROM Users WHERE userId = %s",
-        (user_id,)
-    )
-    user = cursor.fetchone()
-    cursor.close()
-    return user, False
+    user = get_session().get(User, user_id)
+    return _serialize(user) if user else None
