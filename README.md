@@ -72,6 +72,8 @@ so future breaking changes can live alongside it at `/api/v2`).
 
 | Method | Route                                  | Description                                  |
 | ------ | ---------------------------------------- | --------------------------------------------- |
+| POST   | `/api/v1/auth/register`                  | Create an account (username, password, name)  |
+| POST   | `/api/v1/auth/login`                     | Log in with a username and password           |
 | GET    | `/api/v1/users/:userId/balance`          | Get a user's wallet balance                   |
 | GET    | `/api/v1/users/:userId/transactions`     | Get a user's chronological transaction history |
 | GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |

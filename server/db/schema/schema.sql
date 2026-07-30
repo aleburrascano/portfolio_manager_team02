@@ -3,8 +3,10 @@ USE portfolio_manager;
 
 CREATE TABLE Users (
     userId INTEGER AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(32) NOT NULL UNIQUE,
     firstName VARCHAR(32) NOT NULL,
-    lastName VARCHAR(32) NOT NULL
+    lastName VARCHAR(32) NOT NULL,
+    passwordHash VARCHAR(255) NOT NULL
 );
 
 CREATE TABLE CashTransactions (

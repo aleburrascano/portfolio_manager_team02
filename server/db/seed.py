@@ -6,7 +6,8 @@ portfolio value curve looks realistic; transaction dates/amounts are
 generated with Faker.
 
 Usage (from the server/ directory):
-    python -m db.seed [--first Demo] [--last User] [--days 730]
+    python -m db.seed [--username demo] [--password demopassword]
+                      [--first Demo] [--last User] [--days 730]
 
 Re-running clears and regenerates that user's transactions, so it's safe to
 run repeatedly while iterating on the demo.
@@ -22,6 +23,7 @@ from dotenv import load_dotenv
 from faker import Faker
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
+from werkzeug.security import generate_password_hash
 
 from db.connection import get_engine, init_db
 from db.models import AssetTransaction, CashTransaction, User
@@ -40,12 +42,15 @@ CASH_RESERVE = Decimal('2000')  # keep a cash cushion so buys don't drain the wa
 EVENT_WEIGHTS = {'buy': 0.45, 'deposit': 0.30, 'sell': 0.15, 'withdraw': 0.10}
 
 
-def find_or_create_user(session, first_name, last_name):
-    user = session.scalar(
-        select(User).where(User.firstName == first_name, User.lastName == last_name)
-    )
+def find_or_create_user(session, username, password, first_name, last_name):
+    user = session.scalar(select(User).where(User.username == username))
     if user is None:
-        user = User(firstName=first_name, lastName=last_name)
+        user = User(
+            username=username,
+            firstName=first_name,
+            lastName=last_name,
+            passwordHash=generate_password_hash(password),
+        )
         session.add(user)
         session.commit()
     return user.userId
@@ -90,13 +95,13 @@ def build_events(fake, start, end):
     return events
 
 
-def run(first_name, last_name, days):
+def run(username, password, first_name, last_name, days):
     fake = Faker()
     load_dotenv()
     init_db()
     session = Session(get_engine())
 
-    user_id = find_or_create_user(session, first_name, last_name)
+    user_id = find_or_create_user(session, username, password, first_name, last_name)
     clear_user_transactions(session, user_id)
 
     now = fake.date_time_between(start_date='now', end_date='now')
@@ -180,7 +185,7 @@ def run(first_name, last_name, days):
     session.commit()
     session.close()
 
-    print(f"Seeded user {first_name} {last_name} (userId={user_id})")
+    print(f"Seeded user {first_name} {last_name} (userId={user_id}, login: {username} / {password})")
     print(f"  {len(cash_rows)} cash transactions, {len(asset_rows)} asset transactions")
     print(f"  final cash balance: ${cash_balance:,.2f}")
     print("  final holdings:")
@@ -191,8 +196,10 @@ def run(first_name, last_name, days):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--username', default='demo')
+    parser.add_argument('--password', default='demopassword')
     parser.add_argument('--first', default='Demo')
     parser.add_argument('--last', default='User')
     parser.add_argument('--days', type=int, default=730)
     args = parser.parse_args()
-    run(args.first, args.last, args.days)
+    run(args.username, args.password, args.first, args.last, args.days)

@@ -1,39 +1,68 @@
 """
-Demo auth: identify a user by first/last name only, creating them if new.
+Password-based auth: users register with a unique username and log in
+against a stored password hash. Passwords themselves are never stored.
 """
 from typing import Any, Dict, Optional
 
 from sqlalchemy import select
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from db.connection import get_session
 from db.models import User
 
 
 def _serialize(user: User) -> Dict[str, Any]:
-    return {'userId': user.userId, 'firstName': user.firstName, 'lastName': user.lastName}
+    """The public view of a user - never includes the password hash."""
+    return {
+        'userId': user.userId,
+        'username': user.username,
+        'firstName': user.firstName,
+        'lastName': user.lastName,
+    }
 
 
-def login(first_name: str, last_name: str) -> Dict[str, Any]:
+def register(username: str, password: str, first_name: str, last_name: str) -> Optional[Dict[str, Any]]:
     """
-    Find the user matching first_name/last_name, or create one if none exists.
+    Create a new user with a hashed password.
 
     Args:
+        username (str): The desired username.
+        password (str): The plaintext password, hashed before it is stored.
         first_name (str): The user's first name.
         last_name (str): The user's last name.
 
     Returns:
-        dict: {'userId', 'firstName', 'lastName'}.
+        dict | None: The new user, or None if the username is already taken.
     """
     session = get_session()
-    user = session.scalar(
-        select(User).where(User.firstName == first_name, User.lastName == last_name)
+    if session.scalar(select(User).where(User.username == username)) is not None:
+        return None
+
+    user = User(
+        username=username,
+        firstName=first_name,
+        lastName=last_name,
+        passwordHash=generate_password_hash(password),
     )
+    session.add(user)
+    session.commit()
+    return _serialize(user)
 
-    if user is None:
-        user = User(firstName=first_name, lastName=last_name)
-        session.add(user)
-        session.commit()
 
+def authenticate(username: str, password: str) -> Optional[Dict[str, Any]]:
+    """
+    Check a username/password pair.
+
+    Args:
+        username (str): The username to log in as.
+        password (str): The plaintext password to verify.
+
+    Returns:
+        dict | None: The user if the credentials match, None otherwise.
+    """
+    user = get_session().scalar(select(User).where(User.username == username))
+    if user is None or not check_password_hash(user.passwordHash, password):
+        return None
     return _serialize(user)
 
 

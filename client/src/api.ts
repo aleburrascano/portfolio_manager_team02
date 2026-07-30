@@ -9,18 +9,36 @@ function errorMessage(data: ApiErrorBody, fallback: string): string {
 
 export type User = {
   userId: number
+  username: string
   firstName: string
   lastName: string
 }
 
-export async function login(firstName: string, lastName: string): Promise<User> {
+export async function login(username: string, password: string): Promise<User> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ firstName, lastName }),
+    body: JSON.stringify({ username, password }),
   })
-  if (!res.ok) throw new Error('Login failed')
-  return res.json()
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(errorMessage(data, 'Login failed'))
+  return data
+}
+
+export async function register(
+  username: string,
+  password: string,
+  firstName: string,
+  lastName: string,
+): Promise<User> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password, firstName, lastName }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(errorMessage(data, 'Registration failed'))
+  return data
 }
 
 export type AssetType = 'stock' | 'crypto'

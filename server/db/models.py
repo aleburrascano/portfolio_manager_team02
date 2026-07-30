@@ -23,8 +23,13 @@ class User(Base):
     __tablename__ = 'Users'
 
     userId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # The login identity. First/last name are display-only, and deliberately
+    # not unique - two people are allowed to share a name.
+    username: Mapped[str] = mapped_column(String(32), unique=True)
     firstName: Mapped[str] = mapped_column(String(32))
     lastName: Mapped[str] = mapped_column(String(32))
+    # Werkzeug PBKDF2 digest, never the password itself.
+    passwordHash: Mapped[str] = mapped_column(String(255))
 
 
 class CashTransaction(Base):
