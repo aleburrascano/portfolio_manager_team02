@@ -15,7 +15,7 @@ run repeatedly while iterating on the demo.
 import argparse
 import random
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from dotenv import load_dotenv
@@ -26,7 +26,7 @@ from werkzeug.security import generate_password_hash
 
 import services.market_data as market_data
 from db.connection import get_engine, init_db
-from db.models import AssetTransaction, CashTransaction, User
+from db.models import Asset, AssetTransaction, CashTransaction, User
 
 STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA']
 CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD']
@@ -54,6 +54,14 @@ def find_or_create_user(session, username, password, first_name, last_name):
         session.add(user)
         session.commit()
     return user.userId
+
+
+def register_assets(session):
+    """Assets have to exist before transactions can reference them."""
+    for ticker, asset_type in TICKERS.items():
+        if session.get(Asset, ticker) is None:
+            session.add(Asset(ticker=ticker, assetType=asset_type))
+    session.commit()
 
 
 def clear_user_transactions(session, user_id):
@@ -101,9 +109,11 @@ def run(username, password, first_name, last_name, days):
     session = Session(get_engine())
 
     user_id = find_or_create_user(session, username, password, first_name, last_name)
+    register_assets(session)
     clear_user_transactions(session, user_id)
 
-    now = fake.date_time_between(start_date='now', end_date='now')
+    # UTC, to match the clock the database writes its own defaults on.
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = now - timedelta(days=days)
     histories = fetch_price_histories(TICKERS.keys(), days)
     available_tickers = list(histories.keys())
@@ -150,7 +160,7 @@ def run(username, password, first_name, last_name, days):
             if qty <= 0:
                 continue
             cost = (qty * price).quantize(Decimal('0.00000001'))
-            asset_rows.append((TICKERS[ticker], ticker, qty, price, -cost, 'buy', when))
+            asset_rows.append((ticker, qty, price, 'buy', when))
             cash_balance -= cost
             holdings[ticker] += qty
 
@@ -163,7 +173,7 @@ def run(username, password, first_name, last_name, days):
             if qty <= 0:
                 continue
             proceeds = (qty * price).quantize(Decimal('0.00000001'))
-            asset_rows.append((TICKERS[ticker], ticker, -qty, price, proceeds, 'sell', when))
+            asset_rows.append((ticker, -qty, price, 'sell', when))
             cash_balance += proceeds
             holdings[ticker] -= qty
 
@@ -176,10 +186,10 @@ def run(username, password, first_name, last_name, days):
     ])
     session.add_all([
         AssetTransaction(
-            assetType=asset_type, ticker=ticker, qty=qty, price=price, val=val,
+            ticker=ticker, qty=qty, price=price,
             assetTransactionType=kind, assetTransactionDate=when, userId=user_id,
         )
-        for asset_type, ticker, qty, price, val, kind, when in asset_rows
+        for ticker, qty, price, kind, when in asset_rows
     ])
     session.commit()
     session.close()

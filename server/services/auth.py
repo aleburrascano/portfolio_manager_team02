@@ -1,6 +1,11 @@
 """
 Password-based auth: users register with a unique username and log in
 against a stored password hash. Passwords themselves are never stored.
+
+Usernames are normalised to lowercase on the way in. Left alone, "Ada" and
+"ada" would be the same account on MySQL (whose default collation is
+case-insensitive) and two different ones on SQLite (which compares bytes) -
+so the same registration would succeed in dev and fail in production.
 """
 from typing import Any, Dict, Optional
 
@@ -9,6 +14,11 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from db.connection import get_session
 from db.models import User
+
+
+def normalize_username(username: str) -> str:
+    """The canonical form of a username: trimmed and lowercased."""
+    return username.strip().lower()
 
 
 def _serialize(user: User) -> Dict[str, Any]:
@@ -34,6 +44,7 @@ def register(username: str, password: str, first_name: str, last_name: str) -> O
     Returns:
         dict | None: The new user, or None if the username is already taken.
     """
+    username = normalize_username(username)
     session = get_session()
     if session.scalar(select(User).where(User.username == username)) is not None:
         return None
@@ -60,7 +71,7 @@ def authenticate(username: str, password: str) -> Optional[Dict[str, Any]]:
     Returns:
         dict | None: The user if the credentials match, None otherwise.
     """
-    user = get_session().scalar(select(User).where(User.username == username))
+    user = get_session().scalar(select(User).where(User.username == normalize_username(username)))
     if user is None or not check_password_hash(user.passwordHash, password):
         return None
     return _serialize(user)

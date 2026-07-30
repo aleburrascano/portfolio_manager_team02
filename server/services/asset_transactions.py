@@ -9,8 +9,20 @@ from sqlalchemy import func, select
 import db.connection as db_conn
 import services.market_data as market_data
 import services.user_transactions as ut
-from db.models import AssetTransaction
+from db.models import Asset, AssetTransaction
 from services.exceptions import InsufficientFunds, InsufficientHoldings, UnknownUser
+
+
+def _register_asset(session, ticker: str, asset_type: str) -> None:
+    """
+    Make sure the asset exists before a transaction references it.
+
+    The Assets row is what says a ticker is a stock or a crypto, so it has
+    to be there before the foreign key from the trade can point at it.
+    """
+    if session.get(Asset, ticker) is None:
+        session.add(Asset(ticker=ticker, assetType=asset_type))
+        session.flush()
 
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
@@ -65,12 +77,11 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
         if ut.get_user_balance(user_id) < cost:
             raise InsufficientFunds('Not enough cash for this purchase.')
 
+        _register_asset(session, ticker, asset_type)
         session.add(AssetTransaction(
-            assetType=asset_type,
             ticker=ticker,
             qty=quantity,
             price=price,
-            val=-cost,
             assetTransactionType='buy',
             userId=user_id,
         ))
@@ -103,19 +114,17 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) ->
             raise UnknownUser('No such user.')
 
         price = market_data.trade_price(ticker)
-        proceeds = quantity * price
 
         # Re-checked under the user row lock, so no concurrent request can
         # sell the same shares twice.
         if _get_holding_qty_decimal(user_id, ticker) < quantity:
             raise InsufficientHoldings('Not enough shares to sell.')
 
+        _register_asset(session, ticker, asset_type)
         session.add(AssetTransaction(
-            assetType=asset_type,
             ticker=ticker,
             qty=-quantity,
             price=price,
-            val=proceeds,
             assetTransactionType='sell',
             userId=user_id,
         ))
@@ -137,9 +146,10 @@ def get_portfolio_values(user_id: int) -> dict:
     session = db_conn.get_session()
 
     holdings = session.execute(
-        select(AssetTransaction.assetType, AssetTransaction.ticker, func.sum(AssetTransaction.qty))
+        select(Asset.assetType, AssetTransaction.ticker, func.sum(AssetTransaction.qty))
+        .join(Asset, Asset.ticker == AssetTransaction.ticker)
         .where(AssetTransaction.userId == user_id)
-        .group_by(AssetTransaction.assetType, AssetTransaction.ticker)
+        .group_by(Asset.assetType, AssetTransaction.ticker)
     ).all()
 
     totals = {'stock': 0.0, 'crypto': 0.0}

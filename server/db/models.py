@@ -1,15 +1,25 @@
 """
-SQLAlchemy models mirroring db/schema/schema.sql.
+The database schema. Alembic migrations are generated from this file, so
+it is the one place the shape of the data is defined.
 
-Column names stay camelCase to match the existing schema (and the JSON the
+Column names stay camelCase to match the original schema (and the JSON the
 client already reads), rather than renaming the database to suit Python
 conventions.
+
+Two conventions worth knowing:
+
+- Every timestamp is UTC. db.connection pins the session timezone so the
+  database's own `now()` agrees with what Python writes.
+- Transaction rows are append-only. Nothing updates or deletes them, which
+  is why none of them carry an `updatedAt`.
 """
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Money and quantities are DECIMAL(18,8) so balance/holdings math is exact.
@@ -24,13 +34,16 @@ class User(Base):
     __tablename__ = 'Users'
 
     userId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # The login identity. First/last name are display-only, and deliberately
-    # not unique - two people are allowed to share a name.
+    # The login identity, stored lowercased by services.auth so uniqueness
+    # means the same thing on MySQL (case-insensitive collation) as it does
+    # on SQLite (byte-exact). First/last name are display-only and
+    # deliberately not unique - two people are allowed to share a name.
     username: Mapped[str] = mapped_column(String(32), unique=True)
     firstName: Mapped[str] = mapped_column(String(32))
     lastName: Mapped[str] = mapped_column(String(32))
     # Werkzeug PBKDF2 digest, never the password itself.
     passwordHash: Mapped[str] = mapped_column(String(255))
+    createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class IdempotentRequest(Base):
@@ -43,6 +56,9 @@ class IdempotentRequest(Base):
     """
 
     __tablename__ = 'IdempotentRequests'
+    # Indexed so the retention sweep in idempotency.py is a range scan
+    # rather than a table scan.
+    __table_args__ = (Index('ixIdempotentCreated', 'createdAt'),)
 
     userId: Mapped[int] = mapped_column(
         ForeignKey('Users.userId', ondelete='CASCADE'), primary_key=True
@@ -52,13 +68,40 @@ class IdempotentRequest(Base):
     # different request is caught instead of silently replaying the old one.
     fingerprint: Mapped[str] = mapped_column(String(64))
     # Null until the request succeeds; a null response means "in progress".
-    statusCode: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Only successful responses are stored, so there's no status to record
+    # alongside it - a stored body always means 200.
     responseBody: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class Asset(Base):
+    """
+    The tradable assets that have been transacted, and what kind each is.
+
+    assetType lives here rather than on every transaction row because it's a
+    property of the ticker, not of the trade - which also means adding a new
+    kind of asset is an INSERT rather than an ALTER on an ENUM.
+    """
+
+    __tablename__ = 'Assets'
+
+    ticker: Mapped[str] = mapped_column(String(12), primary_key=True)
+    # Validated against the provider registry in services.asset_providers.
+    assetType: Mapped[str] = mapped_column(String(16))
+
+
 class CashTransaction(Base):
     __tablename__ = 'CashTransactions'
+    __table_args__ = (
+        # The type and the sign of the amount say the same thing; this stops
+        # them from ever disagreeing.
+        CheckConstraint(
+            "(cashTransactionType = 'deposit' AND amount > 0)"
+            " OR (cashTransactionType = 'withdraw' AND amount < 0)",
+            name='cashAmountMatchesType',
+        ),
+        Index('ixCashUserDate', 'userId', 'cashTransactionDate'),
+    )
 
     cashTransactionId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     cashTransactionType: Mapped[str] = mapped_column(
@@ -72,14 +115,32 @@ class CashTransaction(Base):
 
 
 class AssetTransaction(Base):
+    """
+    One buy or sell. The cash effect is -qty * price and is computed where
+    it's needed rather than stored, so it can't drift from the quantity and
+    price it comes from.
+    """
+
     __tablename__ = 'AssetTransactions'
+    __table_args__ = (
+        CheckConstraint(
+            "(assetTransactionType = 'buy' AND qty > 0)"
+            " OR (assetTransactionType = 'sell' AND qty < 0)",
+            name='assetQtyMatchesType',
+        ),
+        CheckConstraint('price > 0', name='assetPricePositive'),
+        Index('ixAssetUserDate', 'userId', 'assetTransactionDate'),
+        # Serves the holdings lookup, which filters on both columns.
+        Index('ixAssetUserTicker', 'userId', 'ticker'),
+        # ticker leading, which is what InnoDB needs to back the foreign key
+        # - the composite above has it second, so it doesn't qualify.
+        Index('ixAssetTicker', 'ticker'),
+    )
 
     assetTransactionId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    assetType: Mapped[str] = mapped_column(Enum('stock', 'crypto', name='assetType'))
-    ticker: Mapped[str] = mapped_column(String(12))
+    ticker: Mapped[str] = mapped_column(ForeignKey('Assets.ticker'))
     qty: Mapped[Decimal] = mapped_column(MONEY)
     price: Mapped[Decimal] = mapped_column(MONEY)
-    val: Mapped[Decimal] = mapped_column(MONEY)
     assetTransactionType: Mapped[str] = mapped_column(
         Enum('buy', 'sell', name='assetTransactionType')
     )
