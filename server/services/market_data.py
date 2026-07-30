@@ -111,6 +111,28 @@ def screen_most_active(limit: int = 10) -> List[dict]:
     ]
 
 
+def quote_classification(ticker: str) -> Optional[dict]:
+    """
+    The fields that say what kind of asset a ticker is, in the same shape a
+    search result has - so a provider's match predicate works on either one.
+
+    Returns None when the feed says nothing about what the ticker is -
+    whether because the symbol is unknown or because the lookup failed. The
+    caller can't tell those apart and shouldn't pretend to.
+    """
+    try:
+        info = yf.Ticker(ticker).info or {}
+    except Exception:
+        return None
+
+    classification = {'quoteType': info.get('quoteType'), 'exchange': info.get('exchange')}
+    # An unknown symbol comes back as a dict with these fields empty rather
+    # than as an error, so an answer of "nothing" is still no answer.
+    if not any(classification.values()):
+        return None
+    return classification
+
+
 def asset_quote(ticker: str) -> Optional[dict]:
     """
     Full quote detail for one asset, or None if the ticker isn't known.

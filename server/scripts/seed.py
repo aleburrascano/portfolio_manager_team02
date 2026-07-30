@@ -6,7 +6,7 @@ portfolio value curve looks realistic; transaction dates/amounts are
 generated with Faker.
 
 Usage (from the server/ directory):
-    python -m db.seed [--username demo] [--password demopassword]
+    python -m scripts.seed [--username demo] [--password demopassword]
                       [--first Demo] [--last User] [--days 730]
 
 Re-running clears and regenerates that user's transactions, so it's safe to

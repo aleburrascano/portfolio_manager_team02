@@ -8,22 +8,25 @@ so an idle server does no work at all.
 
 Quotes are public, matching the REST asset routes - no session required.
 """
+import collections
 import threading
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Tuple
 
 from flask import request
 from flask_socketio import SocketIO, join_room, leave_room
 
-import services.market_data as market_data
+from services.asset_providers import PROVIDERS
 
 BROADCAST_INTERVAL_SECONDS = 5
 MAX_SYMBOLS_PER_CLIENT = 50
 
 socketio = SocketIO()
 
-# symbol -> the session ids watching it. Guarded by _lock because socket
-# handlers and the broadcaster thread both touch it.
-_watchers: Dict[str, Set[str]] = {}
+# (asset type, symbol) -> the session ids watching it. The type is carried
+# so the broadcaster can ask the right provider for a price; a symbol alone
+# wouldn't say who owns it. Guarded by _lock because socket handlers and the
+# broadcaster thread both touch it.
+_watchers: Dict[Tuple[str, str], Set[str]] = {}
 _lock = threading.Lock()
 _broadcaster_started = False
 
@@ -32,21 +35,44 @@ def _room(symbol: str) -> str:
     return f'quote:{symbol}'
 
 
-def _watched_symbols() -> List[str]:
+def _watched() -> List[Tuple[str, str]]:
     with _lock:
         return list(_watchers)
 
 
-def _forget(session_id: str, symbols: List[str]) -> None:
-    """Drop a session from the given symbols, discarding symbols left empty."""
+def _forget(session_id: str, watched: List[Tuple[str, str]]) -> None:
+    """Drop a session from the given subscriptions, discarding empty ones."""
     with _lock:
-        for symbol in symbols:
-            watchers = _watchers.get(symbol)
+        for key in watched:
+            watchers = _watchers.get(key)
             if watchers is None:
                 continue
             watchers.discard(session_id)
             if not watchers:
-                del _watchers[symbol]
+                del _watchers[key]
+
+
+def _quotes_for(watched: List[Tuple[str, str]]) -> Dict[str, dict]:
+    """
+    Ask each asset type's provider for its subscribed symbols, batched per
+    type. A provider that doesn't stream returns nothing, so bonds cost no
+    lookups however many clients are watching them.
+    """
+    by_type = collections.defaultdict(list)
+    for asset_type, symbol in watched:
+        by_type[asset_type].append(symbol)
+
+    quotes = {}
+    for asset_type, symbols in by_type.items():
+        provider = PROVIDERS.get(asset_type)
+        if provider is None:
+            continue
+        try:
+            quotes.update(provider.live_quotes(symbols))
+        except Exception:
+            # One type failing shouldn't stop the others.
+            continue
+    return quotes
 
 
 def _broadcast_loop() -> None:
@@ -55,15 +81,11 @@ def _broadcast_loop() -> None:
         # fetching again straight away would just repeat it.
         socketio.sleep(BROADCAST_INTERVAL_SECONDS)
 
-        symbols = _watched_symbols()
-        if not symbols:
+        watched = _watched()
+        if not watched:
             continue
-        try:
-            for symbol, quote in market_data.live_quotes(symbols).items():
-                socketio.emit('quote', quote, to=_room(symbol))
-        except Exception:
-            # A bad fetch shouldn't kill the loop - try again next tick.
-            pass
+        for symbol, quote in _quotes_for(watched).items():
+            socketio.emit('quote', quote, to=_room(symbol))
 
 
 def _ensure_broadcaster() -> None:
@@ -78,39 +100,52 @@ def _ensure_broadcaster() -> None:
 
 @socketio.on('subscribe')
 def handle_subscribe(payload: dict) -> None:
-    """Start receiving `quote` events for the given symbols."""
-    symbols = (payload or {}).get('symbols') or []
-    symbols = [s for s in symbols if isinstance(s, str) and s][:MAX_SYMBOLS_PER_CLIENT]
+    """
+    Start receiving `quote` events for the given symbols of one asset type.
+
+    Body:
+        dict: {'assetType': str, 'symbols': list[str]}
+    """
+    payload = payload or {}
+    asset_type = payload.get('assetType')
+    if asset_type not in PROVIDERS:
+        return
+
+    symbols = [s for s in payload.get('symbols') or [] if isinstance(s, str) and s]
+    symbols = symbols[:MAX_SYMBOLS_PER_CLIENT]
     if not symbols:
         return
 
     session_id = request.sid
+    watched = [(asset_type, symbol) for symbol in symbols]
     with _lock:
-        for symbol in symbols:
-            _watchers.setdefault(symbol, set()).add(session_id)
+        for key in watched:
+            _watchers.setdefault(key, set()).add(session_id)
     for symbol in symbols:
         join_room(_room(symbol))
 
     _ensure_broadcaster()
 
     # Answer immediately so a subscriber doesn't wait a whole interval.
-    for symbol, quote in market_data.live_quotes(symbols).items():
+    for symbol, quote in _quotes_for(watched).items():
         socketio.emit('quote', quote, to=session_id)
 
 
 @socketio.on('unsubscribe')
 def handle_unsubscribe(payload: dict) -> None:
     """Stop receiving `quote` events for the given symbols."""
-    symbols = [s for s in (payload or {}).get('symbols') or [] if isinstance(s, str)]
+    payload = payload or {}
+    asset_type = payload.get('assetType')
+    symbols = [s for s in payload.get('symbols') or [] if isinstance(s, str)]
     for symbol in symbols:
         leave_room(_room(symbol))
-    _forget(request.sid, symbols)
+    _forget(request.sid, [(asset_type, symbol) for symbol in symbols])
 
 
 @socketio.on('disconnect')
 def handle_disconnect(reason: str = None) -> None:
     """Drop everything a departing client was watching."""
-    _forget(request.sid, _watched_symbols())
+    _forget(request.sid, _watched())
 
 
 def init_app(app, cors_origins) -> None:

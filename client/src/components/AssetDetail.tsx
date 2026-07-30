@@ -84,8 +84,7 @@ function AssetDetail({
     }
   }, [assetType, symbol, user.userId])
 
-  // Bonds are repriced once a day rather than streamed.
-  const live = useLiveQuotes(assetType === 'bond' ? [] : [symbol])
+  const live = useLiveQuotes(assetType, [symbol])
   // The pushed update carries only the fields that have a value, so it
   // refreshes the price without wiping the fields it doesn't cover.
   const quote = detail ? { ...detail, ...live[symbol] } : null

@@ -15,26 +15,33 @@ from services.exceptions import (
 )
 
 
-def _register_asset(session, ticker: str, asset_type: str) -> None:
+def _register_asset(session, provider, ticker: str) -> None:
     """
-    Make sure the asset exists before a transaction references it.
+    Make sure the asset exists, and is the type it claims to be, before a
+    transaction references it.
 
-    The Assets row is what says a ticker is a stock, a crypto or a bond, so
-    it has to be there before the foreign key from the trade can point at it.
+    The Assets row is what says a ticker is a stock, a crypto or a bond, and
+    it's what the portfolio breakdown groups by - so getting it wrong
+    misfiles that asset for every trade that follows. It's therefore checked
+    twice: a new ticker is confirmed with the provider before being
+    recorded, and a known one keeps the type it was first filed under.
 
-    A ticker already on file keeps the type it was filed under: trading a
-    known asset through the wrong asset_type is refused rather than silently
-    booked, which would misfile it in the portfolio breakdown for good.
+    The provider lookup only happens the first time a ticker is ever traded,
+    so the cost isn't paid on the hot path.
 
     Raises:
-        InvalidInput: if the ticker is already registered as another type.
+        InvalidInput: if the ticker isn't this type of asset.
     """
     existing = session.get(Asset, ticker)
     if existing is None:
-        session.add(Asset(ticker=ticker, assetType=asset_type))
+        # Only an outright "no" is rejected here; an undecided answer is
+        # left for the price lookup, which reports it as an upstream failure.
+        if provider.owns_ticker(ticker) is False:
+            raise InvalidInput(f'{ticker} is not a {provider.asset_type}.')
+        session.add(Asset(ticker=ticker, assetType=provider.asset_type))
         session.flush()
-    elif existing.assetType != asset_type:
-        raise InvalidInput(f'{ticker} is a {existing.assetType}, not a {asset_type}.')
+    elif existing.assetType != provider.asset_type:
+        raise InvalidInput(f'{ticker} is a {existing.assetType}, not a {provider.asset_type}.')
 
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
@@ -89,7 +96,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        _register_asset(session, ticker, asset_type)
+        _register_asset(session, provider, ticker)
         price = provider.trade_price(ticker)
         cost = quantity * price
 
@@ -137,7 +144,7 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) ->
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        _register_asset(session, ticker, asset_type)
+        _register_asset(session, provider, ticker)
         price = provider.trade_price(ticker)
 
         # Re-checked under the user row lock, so no concurrent request can
