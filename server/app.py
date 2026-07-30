@@ -1,6 +1,6 @@
 """
-Flask application entry point: loads config, wires up the database, and
-registers all route blueprints.
+Flask application entry point: loads config, wires up the database and the
+Socket.IO server, and registers all route blueprints.
 """
 import os
 from flask import Flask
@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from authorization import init_app as init_sessions
 from db.connection import init_app as init_db
 from errors import register_error_handlers
+from realtime import init_app as init_realtime, socketio
 from routes.wallet import wallet_bp
 from routes.assets import assets_bp
 from routes.history import history_bp
@@ -23,6 +24,7 @@ register_error_handlers(app)
 
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
 CORS(app, origins=cors_origins, supports_credentials=True)
+init_realtime(app, cors_origins)
 
 API_PREFIX = '/api/v1'
 app.register_blueprint(wallet_bp, url_prefix=API_PREFIX)
@@ -36,4 +38,6 @@ def index() -> dict:
     return {'status': 'ok'}
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # socketio.run rather than app.run, so the WebSocket endpoint is served
+    # alongside the REST routes on the same port.
+    socketio.run(app, debug=True)

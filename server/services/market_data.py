@@ -55,6 +55,30 @@ def quote_summaries(names: Dict[str, str]) -> List[dict]:
     return summaries
 
 
+def live_quotes(symbols: List[str]) -> Dict[str, dict]:
+    """
+    Current price fields for many symbols in one batch, keyed by symbol,
+    for pushing to subscribed clients.
+
+    Fields with no value are left out rather than sent as null, so a client
+    can merge an update over what it already has without a missing field
+    wiping out a good one. Symbols that can't be quoted are simply absent.
+    """
+    if not symbols:
+        return {}
+
+    tickers = yf.Tickers(' '.join(symbols))
+    quotes = {}
+    for symbol in symbols:
+        try:
+            fast_info = tickers.tickers[symbol].fast_info
+            fields = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
+        except Exception:
+            continue
+        quotes[symbol] = {'symbol': symbol, **{k: v for k, v in fields.items() if v is not None}}
+    return quotes
+
+
 def search_assets(query: str, matches: QuoteMatcher, limit: int = 10) -> List[dict]:
     """
     Search for assets by ticker or name, keeping only the quotes the
