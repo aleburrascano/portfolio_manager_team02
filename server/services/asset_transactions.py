@@ -3,9 +3,13 @@ Buy and sell assets (stocks or crypto) for a user, priced from live
 yfinance quotes.
 """
 from decimal import Decimal
+
 import yfinance as yf
-import services.user_transactions as ut
+from sqlalchemy import func, select
+
 import db.connection as db_conn
+import services.user_transactions as ut
+from db.models import AssetTransaction
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
     """
@@ -16,23 +20,16 @@ def get_holding_qty(user_id: int, ticker: str) -> float:
         ticker (str): The asset ticker symbol.
 
     Returns:
-        float: The number of shares owned (0 if none or on connection failure).
+        float: The number of shares owned (0 if none).
     """
     return float(_get_holding_qty_decimal(user_id, ticker))
 
 def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
-    db = db_conn.get_db()
-    if db is None:
-        return Decimal('0')
-
-    cursor = db.cursor()
-    cursor.execute(
-        "SELECT SUM(qty) FROM AssetTransactions WHERE userId = %s AND ticker = %s",
-        (user_id, ticker)
+    total_shares = db_conn.get_session().scalar(
+        select(func.coalesce(func.sum(AssetTransaction.qty), 0))
+        .where(AssetTransaction.userId == user_id, AssetTransaction.ticker == ticker)
     )
-    total_shares = cursor.fetchone()[0]
-    cursor.close()
-    return Decimal(total_shares) if total_shares is not None else Decimal('0')
+    return Decimal(str(total_shares))
 
 def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> bool:
     """
@@ -48,12 +45,11 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
     Returns:
         bool: True if the purchase was successful, False otherwise.
     """
-    db = db_conn.get_db()
-    if db is None: return False
+    session = db_conn.get_session()
 
     try:
-        if not db_conn.lock_user(db, user_id):
-            db.rollback()
+        if not db_conn.lock_user(session, user_id):
+            session.rollback()
             return False
 
         # Get the current price of the asset
@@ -64,22 +60,24 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
         # Validate that the user has sufficient funds to make the purchase,
         # re-checked under the user row lock so no other request can race it
         cost = qty * current_price
-        wallet = ut.get_user_balance(user_id)
-        if wallet is None or wallet < cost:
+        if ut.get_user_balance(user_id) < cost:
             print(f"Insufficient funds for {asset_type} purchase.")
-            db.rollback()
+            session.rollback()
             return False
 
-        # Insert the purchase into the database
-        cursor = db.cursor()
-        sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        val = (asset_type, ticker, qty, current_price, -cost, "buy", user_id)
-        cursor.execute(sql, val)
-        db.commit()
-        cursor.close()
+        session.add(AssetTransaction(
+            assetType=asset_type,
+            ticker=ticker,
+            qty=qty,
+            price=current_price,
+            val=-cost,
+            assetTransactionType='buy',
+            userId=user_id,
+        ))
+        session.commit()
         return True
     except Exception as e:
-        db.rollback()
+        session.rollback()
         print(f"Error performing {asset_type} purchase: {e}")
         return False
 
@@ -98,37 +96,39 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> b
     Returns:
         bool: True if the sale was successful, False otherwise.
     """
-    db = db_conn.get_db()
-    if db is None: return False
+    session = db_conn.get_session()
 
     try:
-        if not db_conn.lock_user(db, user_id):
-            db.rollback()
+        if not db_conn.lock_user(session, user_id):
+            session.rollback()
             return False
 
         # Get the current price of the asset
         asset = yf.Ticker(ticker)
         current_price = Decimal(str(asset.history(period="1d")['Close'].iloc[0]))
         qty = Decimal(str(abs(quantity)))
-        cost = qty * current_price
+        proceeds = qty * current_price
 
         # Validate that the user owns enough shares/units to sell, re-checked
         # under the user row lock so no other request can race it
         if _get_holding_qty_decimal(user_id, ticker) < qty:
             print(f"Insufficient holdings for {asset_type} sale.")
-            db.rollback()
+            session.rollback()
             return False
 
-        # Insert the sale into the database
-        cursor = db.cursor()
-        sql = "INSERT INTO AssetTransactions (assetType, ticker, qty, price, val, assetTransactionType, userId) VALUES (%s, %s, %s, %s, %s, %s, %s)"
-        val = (asset_type, ticker, -qty, current_price, cost, "sell", user_id)
-        cursor.execute(sql, val)
-        db.commit()
-        cursor.close()
+        session.add(AssetTransaction(
+            assetType=asset_type,
+            ticker=ticker,
+            qty=-qty,
+            price=current_price,
+            val=proceeds,
+            assetTransactionType='sell',
+            userId=user_id,
+        ))
+        session.commit()
         return True
     except Exception as e:
-        db.rollback()
+        session.rollback()
         print(f"Error performing {asset_type} sale: {e}")
         return False
 
@@ -143,28 +143,20 @@ def get_portfolio_values(user_id: int) -> dict:
     user's net wallet balance (cash + asset transaction effects). Asset
     values are computed from current prices multiplied by net holdings.
     """
-    db = db_conn.get_db()
-    if db is None:
-        return {'cash': 0.0, 'stock': 0.0, 'crypto': 0.0}
+    session = db_conn.get_session()
+    cash = ut.get_user_balance(user_id)
 
-    cash = ut.get_user_balance(user_id) or 0.0
-
-    cursor = db.cursor(dictionary=True)
-    cursor.execute(
-        "SELECT assetType, ticker, SUM(qty) as qty FROM AssetTransactions WHERE userId = %s GROUP BY assetType, ticker",
-        (user_id,)
-    )
-    rows = cursor.fetchall()
-    cursor.close()
+    rows = session.execute(
+        select(AssetTransaction.assetType, AssetTransaction.ticker, func.sum(AssetTransaction.qty))
+        .where(AssetTransaction.userId == user_id)
+        .group_by(AssetTransaction.assetType, AssetTransaction.ticker)
+    ).all()
 
     totals = {'stock': 0.0, 'crypto': 0.0}
 
-    for row in rows:
-        qty = row.get('qty') or 0
-        if qty == 0:
+    for asset_type, ticker, qty in rows:
+        if not qty:
             continue
-        ticker = row.get('ticker')
-        asset_type = row.get('assetType')
 
         price = 0.0
         try:
@@ -178,6 +170,6 @@ def get_portfolio_values(user_id: int) -> dict:
         except Exception:
             price = 0.0
 
-        totals[asset_type] += float(qty) * float(price)
+        totals[asset_type] += float(qty) * price
 
-    return {'cash': float(cash), 'stock': float(totals['stock']), 'crypto': float(totals['crypto'])}
+    return {'cash': float(cash), 'stock': totals['stock'], 'crypto': totals['crypto']}

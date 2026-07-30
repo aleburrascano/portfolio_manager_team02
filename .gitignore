@@ -1,5 +1,8 @@
 .env
 
+# Local SQLite databases
+*.db
+
 # Python
 venv/
 env/
