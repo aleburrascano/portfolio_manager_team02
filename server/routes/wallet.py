@@ -8,8 +8,8 @@ import services.cash_transactions as ct
 import services.asset_transactions as at
 from authorization import require_user
 from idempotency import idempotent
-from errors import error_response
 from links import balance_links, portfolio_links
+from validation import parse_amount
 
 wallet_bp = Blueprint('wallet', __name__)
 
@@ -52,10 +52,7 @@ def deposit_cash(user_id: int) -> Tuple[dict, int]:
     Returns:
         dict: A success message, or a 400 error.
     """
-    amount = (request.get_json(silent=True) or {}).get('amount')
-    if amount is None:
-        return error_response('amount is required', 400)
-
+    amount = parse_amount((request.get_json(silent=True) or {}).get('amount'))
     ct.deposit_cash(user_id, amount)
     return {'message': 'Cash deposit successful!', '_links': balance_links(user_id)}, 200
 
@@ -72,9 +69,6 @@ def withdraw_cash(user_id: int) -> Tuple[dict, int]:
     Returns:
         dict: A success message, or a 400 error.
     """
-    amount = (request.get_json(silent=True) or {}).get('amount')
-    if amount is None:
-        return error_response('amount is required', 400)
-
+    amount = parse_amount((request.get_json(silent=True) or {}).get('amount'))
     ct.withdraw_cash(user_id, amount)
     return {'message': 'Cash withdrawal successful!', '_links': balance_links(user_id)}, 200

@@ -9,19 +9,19 @@ from db.models import CashTransaction
 from services.exceptions import InsufficientFunds, UnknownUser
 
 
-def deposit_cash(user_id: int, amount: float) -> None:
+def deposit_cash(user_id: int, amount: Decimal) -> None:
     """
     Deposit cash into the user's account.
 
     Args:
         user_id (int): The ID of the user.
-        amount (float): The amount of cash to deposit.
+        amount (Decimal): The amount of cash to deposit. Validated positive.
     """
     session = db_conn.get_session()
     try:
         session.add(CashTransaction(
             cashTransactionType='deposit',
-            amount=abs(Decimal(str(amount))),
+            amount=amount,
             userId=user_id,
         ))
         session.commit()
@@ -30,13 +30,13 @@ def deposit_cash(user_id: int, amount: float) -> None:
         raise
 
 
-def withdraw_cash(user_id: int, amount: float) -> None:
+def withdraw_cash(user_id: int, amount: Decimal) -> None:
     """
     Withdraw cash from the user's account, provided the balance covers it.
 
     Args:
         user_id (int): The ID of the user.
-        amount (float): The amount of cash to withdraw.
+        amount (Decimal): The amount of cash to withdraw. Validated positive.
 
     Raises:
         UnknownUser: if no such user exists.
@@ -50,13 +50,12 @@ def withdraw_cash(user_id: int, amount: float) -> None:
 
         # Re-checked under the user row lock, so no concurrent request can
         # withdraw the same balance twice.
-        withdrawal = abs(Decimal(str(amount)))
-        if ut.get_user_balance(user_id) < withdrawal:
+        if ut.get_user_balance(user_id) < amount:
             raise InsufficientFunds('Not enough cash for this withdrawal.')
 
         session.add(CashTransaction(
             cashTransactionType='withdraw',
-            amount=-withdrawal,
+            amount=-amount,
             userId=user_id,
         ))
         session.commit()
