@@ -1,15 +1,15 @@
 """
-Buy and sell assets (stocks or crypto) for a user, priced from live
-yfinance quotes.
+Buy and sell assets (stocks, crypto, or bonds) for a user, priced through
+each asset type's AssetProvider.
 """
 from decimal import Decimal
-import yfinance as yf
 import services.user_transactions as ut
 import db.connection as db_conn
+from routes.asset_providers import PROVIDERS
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
     """
-    Get how many shares of an asset (stock or crypto) the user currently owns.
+    Get how many shares/units of an asset the user currently owns.
 
     Args:
         user_id (int): The ID of the user.
@@ -36,12 +36,12 @@ def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
 
 def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> bool:
     """
-    Purchases an asset (stock or crypto) for the user. Make sure that the
-    user has sufficient funds to make the purchase before proceeding.
+    Purchases an asset (stock, crypto, or bond) for the user. Make sure that
+    the user has sufficient funds to make the purchase before proceeding.
 
     Args:
         user_id (int): The ID of the user.
-        asset_type (str): 'stock' or 'crypto'.
+        asset_type (str): 'stock', 'crypto', or 'bond'.
         ticker (str): The asset ticker symbol.
         quantity (float): The number of shares/units to purchase.
 
@@ -51,14 +51,22 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
     db = db_conn.get_db()
     if db is None: return False
 
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
+        return False
+
     try:
+        tradeable, reason = provider.can_trade(ticker)
+        if not tradeable:
+            print(f"Cannot purchase {ticker}: {reason}")
+            return False
+
         if not db_conn.lock_user(db, user_id):
             db.rollback()
             return False
 
         # Get the current price of the asset
-        asset = yf.Ticker(ticker)
-        current_price = Decimal(str(asset.history(period="1d")['Close'].iloc[0]))
+        current_price = provider.get_current_price(ticker)
         qty = Decimal(str(abs(quantity)))
 
         # Validate that the user has sufficient funds to make the purchase,
@@ -86,12 +94,12 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
 
 def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> bool:
     """
-    Sells an asset (stock or crypto) for the user. Make sure that the user
-    owns enough shares/units to sell before proceeding.
+    Sells an asset (stock, crypto, or bond) for the user. Make sure that the
+    user owns enough shares/units to sell before proceeding.
 
     Args:
         user_id (int): The ID of the user.
-        asset_type (str): 'stock' or 'crypto'.
+        asset_type (str): 'stock', 'crypto', or 'bond'.
         ticker (str): The asset ticker symbol.
         quantity (float): The number of shares/units to sell.
 
@@ -101,14 +109,17 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> b
     db = db_conn.get_db()
     if db is None: return False
 
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
+        return False
+
     try:
         if not db_conn.lock_user(db, user_id):
             db.rollback()
             return False
 
         # Get the current price of the asset
-        asset = yf.Ticker(ticker)
-        current_price = Decimal(str(asset.history(period="1d")['Close'].iloc[0]))
+        current_price = provider.get_current_price(ticker)
         qty = Decimal(str(abs(quantity)))
         cost = qty * current_price
 
@@ -138,14 +149,14 @@ def get_portfolio_values(user_id: int) -> dict:
     """
     Compute the portfolio breakdown for a user.
 
-    Returns a dict with keys 'cash', 'stock', and 'crypto' representing
-    the current total value for each category. Cash is taken from the
-    user's net wallet balance (cash + asset transaction effects). Asset
-    values are computed from current prices multiplied by net holdings.
+    Returns a dict with keys 'cash', 'stock', 'crypto', and 'bond'
+    representing the current total value for each category. Cash is taken
+    from the user's net wallet balance (cash + asset transaction effects).
+    Asset values are computed from current prices multiplied by net holdings.
     """
     db = db_conn.get_db()
     if db is None:
-        return {'cash': 0.0, 'stock': 0.0, 'crypto': 0.0}
+        return {'cash': 0.0, 'stock': 0.0, 'crypto': 0.0, 'bond': 0.0}
 
     cash = ut.get_user_balance(user_id) or 0.0
 
@@ -157,7 +168,7 @@ def get_portfolio_values(user_id: int) -> dict:
     rows = cursor.fetchall()
     cursor.close()
 
-    totals = {'stock': 0.0, 'crypto': 0.0}
+    totals = {'stock': 0.0, 'crypto': 0.0, 'bond': 0.0}
 
     for row in rows:
         qty = row.get('qty') or 0
@@ -168,16 +179,12 @@ def get_portfolio_values(user_id: int) -> dict:
 
         price = 0.0
         try:
-            asset = yf.Ticker(ticker)
-            fast_info = getattr(asset, 'fast_info', None) or {}
-            last_price = fast_info.get('lastPrice')
-            if last_price is not None:
-                price = float(last_price)
-            else:
-                price = float(asset.history(period="1d")['Close'].iloc[0])
+            provider = PROVIDERS.get(asset_type)
+            if provider is not None:
+                price = float(provider.get_current_price(ticker))
         except Exception:
             price = 0.0
 
         totals[asset_type] += float(qty) * float(price)
 
-    return {'cash': float(cash), 'stock': float(totals['stock']), 'crypto': float(totals['crypto'])}
+    return {'cash': float(cash), 'stock': float(totals['stock']), 'crypto': float(totals['crypto']), 'bond': float(totals['bond'])}

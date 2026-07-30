@@ -1,12 +1,11 @@
 """
-Routes for searching, quoting, and buying/selling assets (stocks and
-crypto), dispatched by an `asset_type` URL segment onto an AssetProvider.
+Routes for searching, quoting, and buying/selling assets (stocks, crypto,
+and bonds), dispatched by an `asset_type` URL segment onto an AssetProvider.
 """
 from typing import Tuple
 from flask import Blueprint, request
-import yfinance as yf
 import services.asset_transactions as st
-from routes.asset_providers import PROVIDERS, _quote_fields
+from routes.asset_providers import PROVIDERS
 from errors import error_body, error_response
 from links import asset_detail_links, asset_summary_links, holdings_links
 
@@ -33,25 +32,9 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
         return error_response('Search query required', 400)
 
     try:
-        search = yf.Search(query, max_results=10)
-        names = {}
-        for quote in search.quotes:
-            symbol = quote.get('symbol')
-            if symbol and provider.matches_quote(quote):
-                names[symbol] = quote.get('longname', quote.get('shortname', 'N/A'))
-
-        results = []
-        if names:
-            tickers = yf.Tickers(' '.join(names.keys()))
-            for symbol, name in names.items():
-                asset = {'symbol': symbol, 'name': name}
-                try:
-                    asset.update(_quote_fields(tickers.tickers[symbol].fast_info))
-                except Exception:
-                    pass
-                asset['_links'] = asset_summary_links(asset_type, symbol)
-                results.append(asset)
-
+        results = provider.search(query)
+        for asset in results:
+            asset['_links'] = asset_summary_links(asset_type, asset['symbol'])
         return {'results': results}, 200
     except Exception as e:
         return {**error_body(str(e)), 'results': []}, 200
@@ -88,29 +71,16 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
         'dayLow', 'dayHigh', 'open', 'yearLow', 'yearHigh', 'volume'}, or a
         404 if the asset type or ticker isn't found.
     """
-    if asset_type not in PROVIDERS:
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
         return error_response('Unknown asset type', 404)
 
     try:
-        asset = yf.Ticker(ticker)
-        fast_info = asset.fast_info
-        last_price = fast_info.get('lastPrice')
-        if last_price is None:
+        quote = provider.get_quote(ticker)
+        if quote is None:
             return error_response('Asset not found', 404)
 
-        previous_close = fast_info.get('previousClose')
-        change = last_price - previous_close if previous_close else None
-
-        return {
-            'symbol': ticker.upper(),
-            'name': asset.info.get('longName', asset.info.get('shortName', ticker.upper())),
-            **_quote_fields(fast_info),
-            'open': fast_info.get('open'),
-            'yearLow': fast_info.get('yearLow'),
-            'yearHigh': fast_info.get('yearHigh'),
-            'volume': fast_info.get('lastVolume'),
-            '_links': asset_detail_links(asset_type, ticker),
-        }, 200
+        return {**quote, '_links': asset_detail_links(asset_type, ticker)}, 200
     except Exception:
         return error_response('Asset not found', 404)
 
@@ -122,17 +92,12 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
     Returns:
         dict: {'history': list[{'date': str, 'close': float}]}
     """
-    if asset_type not in PROVIDERS:
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
         return error_response('Unknown asset type', 404)
 
     try:
-        asset = yf.Ticker(ticker)
-        prices = asset.history(period='1y')
-        history = [
-            {'date': index.strftime('%Y-%m-%d'), 'close': float(row['Close'])}
-            for index, row in prices.iterrows()
-        ]
-        return {'history': history}, 200
+        return {'history': provider.get_history(ticker)}, 200
     except Exception as e:
         return {**error_body(str(e)), 'history': []}, 200
 

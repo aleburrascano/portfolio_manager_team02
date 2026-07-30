@@ -33,10 +33,10 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
 @wallet_bp.route('/users/<int:user_id>/portfolio', methods=['GET'])
 def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
     """
-    Get a user's portfolio breakdown across cash, stocks, and crypto.
+    Get a user's portfolio breakdown across cash, stocks, crypto, and bonds.
 
     Returns:
-        dict: {'cash': float, 'stock': float, 'crypto': float, '_links': dict}
+        dict: {'cash': float, 'stock': float, 'crypto': float, 'bond': float, '_links': dict}
     """
     try:
         data = at.get_portfolio_values(user_id)

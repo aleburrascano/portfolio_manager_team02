@@ -8,11 +8,19 @@ import './TradeAssets.css'
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
   { type: 'crypto', label: 'Crypto' },
+  { type: 'bond', label: 'Bonds' },
 ]
 
 const POPULAR_POLL_INTERVAL_MS: Record<AssetType, number> = {
   stock: 10000,
   crypto: 5000,
+  bond: 60000,
+}
+
+const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  stock: 'Stocks',
+  crypto: 'Crypto',
+  bond: 'Bonds',
 }
 
 function TradeAssets({ user }: { user: User }) {
@@ -132,7 +140,7 @@ function TradeAssets({ user }: { user: User }) {
             title={
               isSearching
                 ? 'Search Results'
-                : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
+                : `Most Active ${ASSET_TYPE_LABELS[assetType]}`
             }
             assetType={assetType}
             assets={isSearching ? searchResults : popularAssets}

@@ -27,6 +27,7 @@ function Dashboard() {
           { name: 'Cash', value: res.cash },
           { name: 'Stocks', value: res.stock },
           { name: 'Crypto', value: res.crypto },
+          { name: 'Bonds', value: res.bond },
         ]
         setData(chartData)
       } catch (e: any) {

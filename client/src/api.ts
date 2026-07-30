@@ -23,17 +23,17 @@ export async function login(firstName: string, lastName: string): Promise<User> 
   return res.json()
 }
 
-export type AssetType = 'stock' | 'crypto'
+export type AssetType = 'stock' | 'crypto' | 'bond'
 
 export type Asset = {
   symbol: string
   name: string
   currentPrice?: number
-  volume?: number
-  change?: number
-  changePercent?: number
-  dayLow?: number
-  dayHigh?: number
+  volume?: number | null
+  change?: number | null
+  changePercent?: number | null
+  dayLow?: number | null
+  dayHigh?: number | null
 }
 
 export async function fetchUser(userId: number): Promise<User> {
@@ -42,11 +42,11 @@ export async function fetchUser(userId: number): Promise<User> {
   return res.json()
 }
 
-export async function fetchPortfolioBreakdown(userId: number): Promise<{ cash: number; stock: number; crypto: number }> {
+export async function fetchPortfolioBreakdown(userId: number): Promise<{ cash: number; stock: number; crypto: number; bond: number }> {
   const res = await fetch(`${API_BASE}/users/${userId}/portfolio`)
   if (!res.ok) throw new Error('Failed to fetch portfolio breakdown')
   const data = await res.json()
-  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0 }
+  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0, bond: data.bond || 0 }
 }
 
 export async function fetchBalance(userId: number): Promise<number> {
@@ -71,10 +71,9 @@ export async function searchAssets(assetType: AssetType, query: string): Promise
 }
 
 export type AssetDetail = Asset & {
-  open?: number
-  yearLow?: number
-  yearHigh?: number
-  volume?: number
+  open?: number | null
+  yearLow?: number | null
+  yearHigh?: number | null
 }
 
 export async function fetchAssetDetail(assetType: AssetType, symbol: string): Promise<AssetDetail> {
