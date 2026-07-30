@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { login, type User } from '../api'
+import { validateName } from '../validation'
 import './Login.css'
 
 function Login({ onLogin }: { onLogin: (user: User) => void }) {
@@ -9,6 +10,14 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+
+    const firstNameError = validateName(firstName, 'First name')
+    const lastNameError = validateName(lastName, 'Last name')
+    if (firstNameError || lastNameError) {
+      setError(firstNameError || lastNameError || '')
+      return
+    }
+
     setError('')
     try {
       onLogin(await login(firstName.trim(), lastName.trim()))
