@@ -130,6 +130,15 @@ so future breaking changes can live alongside it at `/api/v2`).
 Responses include a `_links` map of related endpoint URLs (HATEOAS), and
 errors are always shaped as `{'error': {'message': str, 'code': str}}`.
 
+The four routes that move money — `deposit`, `withdraw`, `buy`, `sell` —
+accept an optional `Idempotency-Key` header so a retry can't do the work
+twice. The first request to claim a key does the work and its response is
+stored; a repeat carrying the same key gets that response back without
+re-executing. Reusing a key for a *different* request is a 409 rather than
+a wrong replay, and a rejected request releases its key so the caller can
+correct it and retry with the same one. Omitting the header keeps the old
+behaviour.
+
 Every `/users/:userId/...` route is session-scoped: logging in sets a signed
 httpOnly cookie, and a request without one gets a 401 while a request for a
 different user's `:userId` gets a 403. Set `SECRET_KEY` in `.env` to sign

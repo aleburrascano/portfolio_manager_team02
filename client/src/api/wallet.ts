@@ -41,6 +41,11 @@ export async function submitCashTransaction(
   userId: number,
   type: TransactionType,
   amount: number,
+  idempotencyKey?: string,
 ): Promise<{ message: string }> {
-  return apiFetch(`/users/${userId}/${type}`, `Unable to ${type} funds!`, post({ amount }))
+  return apiFetch(
+    `/users/${userId}/${type}`,
+    `Unable to ${type} funds!`,
+    post({ amount }, idempotencyKey),
+  )
 }

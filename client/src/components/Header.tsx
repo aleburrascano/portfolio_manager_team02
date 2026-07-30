@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { submitCashTransaction, type TransactionType, type User } from '../api'
 import { useBalance } from '../balance-context'
+import { useIdempotencyKey } from '../idempotency'
 import { validateAmountInput } from '../validation'
 import './Modal.css'
 import './Header.css'
@@ -11,6 +12,7 @@ function formatCurrency(value: number) {
 
 function Header({ user }: { user: User }) {
   const { balance, refreshBalance } = useBalance()
+  const idempotency = useIdempotencyKey()
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
   const [amount, setAmount] = useState('')
@@ -43,7 +45,13 @@ function Header({ user }: { user: User }) {
     setStatusMessage('')
 
     try {
-      await submitCashTransaction(user.userId, transactionType, parsedAmount)
+      await submitCashTransaction(
+        user.userId,
+        transactionType,
+        parsedAmount,
+        idempotency.keyFor(`${transactionType}:${parsedAmount}`),
+      )
+      idempotency.reset()
       await refreshBalance()
       setStatusMessage(`${transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'} submitted successfully.`)
       setAmount('')

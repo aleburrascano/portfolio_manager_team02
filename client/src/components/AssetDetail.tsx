@@ -12,6 +12,7 @@ import {
   type User,
 } from '../api'
 import { useBalance } from '../balance-context'
+import { useIdempotencyKey } from '../idempotency'
 import { validateQuantityInput } from '../validation'
 import AssetLogo from './AssetLogo'
 import './AssetDetail.css'
@@ -41,6 +42,7 @@ function AssetDetail({
   onBack: () => void
 }) {
   const { balance, refreshBalance } = useBalance()
+  const idempotency = useIdempotencyKey()
   const [detail, setDetail] = useState<AssetDetailType | null>(null)
   const [detailError, setDetailError] = useState('')
   const [history, setHistory] = useState<PricePoint[]>([])
@@ -137,11 +139,13 @@ function AssetDetail({
 
     setSubmitting(true)
     try {
+      const key = idempotency.keyFor(`${side}:${assetType}:${symbol}:${parsedQuantity}`)
       if (side === 'buy') {
-        await buyAsset(user.userId, assetType, symbol, parsedQuantity)
+        await buyAsset(user.userId, assetType, symbol, parsedQuantity, key)
       } else {
-        await sellAsset(user.userId, assetType, symbol, parsedQuantity)
+        await sellAsset(user.userId, assetType, symbol, parsedQuantity, key)
       }
+      idempotency.reset()
       setShares(await fetchHoldings(user.userId, assetType, symbol))
       await refreshBalance()
       setQuantity('1')
