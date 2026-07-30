@@ -63,6 +63,9 @@ output, which also lives under `/assets` in production).
 | GET    | `/api/assets/:assetType/search?q=`  | Search assets by ticker or name (assetType: stock, crypto) |
 | GET    | `/api/assets/:assetType/popular`    | Get popular assets of that type               |
 
+Set `CORS_ORIGINS` (comma-separated) in `.env` to allow the client's origin;
+defaults to `http://localhost:5173`.
+
 ## Client setup
 
 ```bash
