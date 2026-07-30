@@ -19,10 +19,11 @@ import './AssetDetail.css'
 type Side = 'buy' | 'sell'
 
 // Crypto trades around the clock and moves faster, so it's worth polling
-// more often than stocks.
+// more often than stocks. Bonds are synthetically priced daily.
 const POLL_INTERVAL_MS: Record<AssetType, number> = {
   stock: 5000,
   crypto: 3000,
+  bond: 60000,
 }
 
 function formatDate(value: string) {
@@ -231,27 +232,27 @@ function AssetDetail({
               <div className="stats-grid">
                 <div>
                   <span className="stats-label">Daily High</span>
-                  <span>{detail.dayHigh !== undefined ? `$${detail.dayHigh.toFixed(2)}` : '—'}</span>
+                  <span>{detail.dayHigh != null ? `$${detail.dayHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Daily Low</span>
-                  <span>{detail.dayLow !== undefined ? `$${detail.dayLow.toFixed(2)}` : '—'}</span>
+                  <span>{detail.dayLow != null ? `$${detail.dayLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week High</span>
-                  <span>{detail.yearHigh !== undefined ? `$${detail.yearHigh.toFixed(2)}` : '—'}</span>
+                  <span>{detail.yearHigh != null ? `$${detail.yearHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week Low</span>
-                  <span>{detail.yearLow !== undefined ? `$${detail.yearLow.toFixed(2)}` : '—'}</span>
+                  <span>{detail.yearLow != null ? `$${detail.yearLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Open</span>
-                  <span>{detail.open !== undefined ? `$${detail.open.toFixed(2)}` : '—'}</span>
+                  <span>{detail.open != null ? `$${detail.open.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Volume</span>
-                  <span>{detail.volume !== undefined ? detail.volume.toLocaleString() : '—'}</span>
+                  <span>{detail.volume != null ? detail.volume.toLocaleString() : '—'}</span>
                 </div>
               </div>
             </div>
