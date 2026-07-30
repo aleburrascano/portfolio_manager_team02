@@ -14,6 +14,10 @@ class ServiceError(Exception):
     status = 400
 
 
+class InvalidInput(ServiceError):
+    """A request field is missing, malformed, or out of range."""
+
+
 class InsufficientFunds(ServiceError):
     """The wallet doesn't cover the withdrawal or purchase."""
 

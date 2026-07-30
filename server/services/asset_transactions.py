@@ -35,7 +35,7 @@ def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
     return Decimal(str(total_shares))
 
 
-def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> None:
+def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) -> None:
     """
     Purchase an asset (stock or crypto) for the user, at the current market
     price, provided their wallet covers it.
@@ -44,7 +44,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
         user_id (int): The ID of the user.
         asset_type (str): 'stock' or 'crypto'.
         ticker (str): The asset ticker symbol.
-        quantity (float): The number of shares/units to purchase.
+        quantity (Decimal): The number of shares/units to purchase. Validated positive.
 
     Raises:
         UnknownUser: if no such user exists.
@@ -58,8 +58,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
             raise UnknownUser('No such user.')
 
         price = market_data.trade_price(ticker)
-        qty = Decimal(str(abs(quantity)))
-        cost = qty * price
+        cost = quantity * price
 
         # Re-checked under the user row lock, so no concurrent request can
         # spend the same balance twice.
@@ -69,7 +68,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
         session.add(AssetTransaction(
             assetType=asset_type,
             ticker=ticker,
-            qty=qty,
+            qty=quantity,
             price=price,
             val=-cost,
             assetTransactionType='buy',
@@ -81,7 +80,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: float) 
         raise
 
 
-def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> None:
+def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) -> None:
     """
     Sell an asset (stock or crypto) for the user, at the current market
     price, provided they hold enough of it.
@@ -90,7 +89,7 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> N
         user_id (int): The ID of the user.
         asset_type (str): 'stock' or 'crypto'.
         ticker (str): The asset ticker symbol.
-        quantity (float): The number of shares/units to sell.
+        quantity (Decimal): The number of shares/units to sell. Validated positive.
 
     Raises:
         UnknownUser: if no such user exists.
@@ -104,18 +103,17 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: float) -> N
             raise UnknownUser('No such user.')
 
         price = market_data.trade_price(ticker)
-        qty = Decimal(str(abs(quantity)))
-        proceeds = qty * price
+        proceeds = quantity * price
 
         # Re-checked under the user row lock, so no concurrent request can
         # sell the same shares twice.
-        if _get_holding_qty_decimal(user_id, ticker) < qty:
+        if _get_holding_qty_decimal(user_id, ticker) < quantity:
             raise InsufficientHoldings('Not enough shares to sell.')
 
         session.add(AssetTransaction(
             assetType=asset_type,
             ticker=ticker,
-            qty=-qty,
+            qty=-quantity,
             price=price,
             val=proceeds,
             assetTransactionType='sell',

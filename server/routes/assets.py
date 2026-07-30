@@ -6,18 +6,21 @@ These handlers only speak HTTP: market data comes from
 services.market_data, and a failed trade raises out of
 services.asset_transactions into the shared error handler.
 """
+from decimal import Decimal
 from functools import wraps
-from typing import Optional, Tuple
+from typing import Tuple
 
 from flask import Blueprint, request
 
 import services.asset_transactions as st
 import services.market_data as market_data
 from services.asset_providers import PROVIDERS
+from services.exceptions import InvalidInput
 from authorization import require_user
 from idempotency import idempotent
 from errors import error_response
 from links import asset_detail_links, asset_summary_links, holdings_links
+from validation import parse_quantity
 
 assets_bp = Blueprint('assets', __name__)
 
@@ -33,10 +36,18 @@ def known_asset_type(view):
     return wrapped
 
 
-def _trade_request() -> Tuple[Optional[str], Optional[float]]:
-    """Pull (ticker, quantity) out of a buy/sell request body."""
+def _trade_request() -> Tuple[str, Decimal]:
+    """
+    Pull a validated (ticker, quantity) out of a buy/sell request body.
+
+    Raises:
+        InvalidInput: if either field is missing or malformed.
+    """
     body = request.get_json(silent=True) or {}
-    return body.get('ticker'), body.get('quantity')
+    ticker = body.get('ticker')
+    if not isinstance(ticker, str) or not ticker.strip():
+        raise InvalidInput('ticker is required.')
+    return ticker.strip(), parse_quantity(body.get('quantity'))
 
 
 @assets_bp.route('/assets/<asset_type>/search', methods=['GET'])
@@ -140,9 +151,6 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
         dict: A success message, or a 400/404/502 error.
     """
     ticker, quantity = _trade_request()
-    if not ticker or not quantity:
-        return error_response('ticker and quantity are required', 400)
-
     st.purchase_asset(user_id, asset_type, ticker, quantity)
     return {'message': 'Purchase successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200
 
@@ -162,8 +170,5 @@ def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
         dict: A success message, or a 400/404/502 error.
     """
     ticker, quantity = _trade_request()
-    if not ticker or not quantity:
-        return error_response('ticker and quantity are required', 400)
-
     st.sell_asset(user_id, asset_type, ticker, quantity)
     return {'message': 'Sale successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200
