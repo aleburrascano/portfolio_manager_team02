@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { submitCashTransaction, type TransactionType, type User } from '../api'
 import { useBalance } from '../balance-context'
+import { validateAmountInput } from '../validation'
 import './Header.css'
 
 function formatCurrency(value: number) {
@@ -25,11 +26,12 @@ function Header({ user }: { user: User }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    const parsedAmount = Number(amount)
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setStatusMessage('Please enter a positive amount.')
+    const amountError = validateAmountInput(amount)
+    if (amountError) {
+      setStatusMessage(amountError)
       return
     }
+    const parsedAmount = Number(amount)
 
     if (transactionType === 'withdraw' && balance !== null && parsedAmount > balance) {
       setStatusMessage(`Withdrawal amount exceeds current balance of ${formatCurrency(balance)}.`)
