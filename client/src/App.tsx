@@ -31,9 +31,15 @@ function App() {
   }, [])
 
   async function handleLogout() {
-    await logout()
-    setUser(null)
-    setPage('dashboard')
+    // Cleared either way: if the request fails there's nothing useful the
+    // user can do about it, and leaving them on the dashboard would make
+    // the button look broken.
+    try {
+      await logout()
+    } finally {
+      setUser(null)
+      setPage('dashboard')
+    }
   }
 
   if (restoring) {
