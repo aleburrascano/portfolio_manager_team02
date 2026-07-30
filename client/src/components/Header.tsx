@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { submitCashTransaction, type TransactionType, type User } from '../api'
 import { useBalance } from '../balance-context'
 import { validateAmountInput } from '../validation'
+import './Modal.css'
 import './Header.css'
 
 function formatCurrency(value: number) {

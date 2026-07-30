@@ -1,0 +1,48 @@
+/* Chrome shared by every modal: the backdrop, the card, its action row,
+   and the buttons in it. Imported by each modal component so none of them
+   depends on another one's stylesheet having been loaded. */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 16, 24, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 1000;
+}
+
+.modal-card {
+  width: min(420px, 100%);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.secondary-btn,
+.submit-btn,
+.danger-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.danger-btn {
+  background: var(--negative-bg);
+  color: var(--negative);
+  transition: opacity 0.15s;
+}
+
+.danger-btn:hover {
+  opacity: 0.75;
+}
