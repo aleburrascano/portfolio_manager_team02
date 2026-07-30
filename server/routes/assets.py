@@ -1,10 +1,11 @@
 """
-Routes for searching, quoting, and buying/selling assets (stocks and
-crypto), dispatched by an `asset_type` URL segment onto an AssetProvider.
+Routes for searching, quoting, and buying/selling assets (stocks, crypto,
+and bonds), dispatched by an `asset_type` URL segment onto an AssetProvider.
 
-These handlers only speak HTTP: market data comes from
-services.market_data, and a failed trade raises out of
-services.asset_transactions into the shared error handler.
+These handlers only speak HTTP. Everything type-specific is behind the
+provider, so nothing here branches on what kind of asset it's handling, and
+a failed trade raises out of services.asset_transactions into the shared
+error handler.
 """
 from decimal import Decimal
 from functools import wraps
@@ -13,7 +14,6 @@ from typing import Tuple
 from flask import Blueprint, request
 
 import services.asset_transactions as st
-import services.market_data as market_data
 from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
 from authorization import require_user
@@ -67,7 +67,7 @@ def search_assets(asset_type: str) -> Tuple[dict, int]:
     if not query:
         return error_response('Search query required', 400)
 
-    results = market_data.search_assets(query, PROVIDERS[asset_type].matches_quote)
+    results = PROVIDERS[asset_type].search(query)
     for asset in results:
         asset['_links'] = asset_summary_links(asset_type, asset['symbol'])
     return {'results': results}, 200
@@ -99,9 +99,10 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
     Returns:
         dict: {'symbol', 'name', 'currentPrice', 'change', 'changePercent',
         'dayLow', 'dayHigh', 'open', 'yearLow', 'yearHigh', 'volume'}, or a
-        404 if the asset type or ticker isn't found.
+        404 if the asset type or ticker isn't found. Fields that don't apply
+        to an asset type - a bond has no volume or intraday range - are null.
     """
-    quote = market_data.asset_quote(ticker)
+    quote = PROVIDERS[asset_type].get_quote(ticker)
     if quote is None:
         return error_response('Asset not found', 404)
 
@@ -117,7 +118,7 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
     Returns:
         dict: {'history': list[{'date': str, 'close': float}]}
     """
-    return {'history': market_data.price_history(ticker)}, 200
+    return {'history': PROVIDERS[asset_type].get_history(ticker)}, 200
 
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/<ticker>/holdings', methods=['GET'])

@@ -1,23 +1,24 @@
 import { apiFetch, post } from './client'
 
-export type AssetType = 'stock' | 'crypto'
+export type AssetType = 'stock' | 'crypto' | 'bond'
 
 export type Asset = {
   symbol: string
   name: string
   currentPrice?: number
-  volume?: number
-  change?: number
-  changePercent?: number
-  dayLow?: number
-  dayHigh?: number
+  // Null, not absent, for fields an asset type doesn't have - a bond has
+  // no volume or intraday range.
+  volume?: number | null
+  change?: number | null
+  changePercent?: number | null
+  dayLow?: number | null
+  dayHigh?: number | null
 }
 
 export type AssetDetail = Asset & {
-  open?: number
-  yearLow?: number
-  yearHigh?: number
-  volume?: number
+  open?: number | null
+  yearLow?: number | null
+  yearHigh?: number | null
 }
 
 export type PricePoint = { date: string; close: number }

@@ -84,7 +84,8 @@ function AssetDetail({
     }
   }, [assetType, symbol, user.userId])
 
-  const live = useLiveQuotes([symbol])
+  // Bonds are repriced once a day rather than streamed.
+  const live = useLiveQuotes(assetType === 'bond' ? [] : [symbol])
   // The pushed update carries only the fields that have a value, so it
   // refreshes the price without wiping the fields it doesn't cover.
   const quote = detail ? { ...detail, ...live[symbol] } : null
@@ -218,27 +219,27 @@ function AssetDetail({
               <div className="stats-grid">
                 <div>
                   <span className="stats-label">Daily High</span>
-                  <span>{quote.dayHigh !== undefined ? `$${quote.dayHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayHigh != null ? `$${quote.dayHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Daily Low</span>
-                  <span>{quote.dayLow !== undefined ? `$${quote.dayLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayLow != null ? `$${quote.dayLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week High</span>
-                  <span>{quote.yearHigh !== undefined ? `$${quote.yearHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearHigh != null ? `$${quote.yearHigh.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week Low</span>
-                  <span>{quote.yearLow !== undefined ? `$${quote.yearLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearLow != null ? `$${quote.yearLow.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Open</span>
-                  <span>{quote.open !== undefined ? `$${quote.open.toFixed(2)}` : '—'}</span>
+                  <span>{quote.open != null ? `$${quote.open.toFixed(2)}` : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Volume</span>
-                  <span>{quote.volume !== undefined ? quote.volume.toLocaleString() : '—'}</span>
+                  <span>{quote.volume != null ? quote.volume.toLocaleString() : '—'}</span>
                 </div>
               </div>
             </div>

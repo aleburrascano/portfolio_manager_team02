@@ -13,7 +13,7 @@ interface PortfolioCompositionProps {
   title?: string
 }
 
-const DEFAULT_COLORS = ['#3f66af', '#67c4e0', '#697ada']
+const DEFAULT_COLORS = ['#3f66af', '#67c4e0', '#697ada', '#80d8a0']
 
 function formatTooltipValue(value: TooltipValueType | undefined) {
   if (value == null) {

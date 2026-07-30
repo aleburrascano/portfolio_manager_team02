@@ -32,10 +32,10 @@ def get_wallet_balance(user_id: int) -> Tuple[dict, int]:
 @require_user
 def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
     """
-    Get a user's portfolio breakdown across cash, stocks, and crypto.
+    Get a user's portfolio breakdown across cash, stocks, crypto, and bonds.
 
     Returns:
-        dict: {'cash': float, 'stock': float, 'crypto': float, '_links': dict}
+        dict: {'cash': float, 'stock': float, 'crypto': float, 'bond': float, '_links': dict}
     """
     return {**at.get_portfolio_values(user_id), '_links': portfolio_links(user_id)}, 200
 

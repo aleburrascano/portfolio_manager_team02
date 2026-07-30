@@ -9,7 +9,13 @@ import './TradeAssets.css'
 const ASSET_TYPES: { type: AssetType; label: string }[] = [
   { type: 'stock', label: 'Stocks' },
   { type: 'crypto', label: 'Crypto' },
+  { type: 'bond', label: 'Bonds' },
 ]
+
+// Derived from the tab list so a new asset type only has to be added once.
+const ASSET_TYPE_LABELS = Object.fromEntries(
+  ASSET_TYPES.map(({ type, label }) => [type, label]),
+) as Record<AssetType, string>
 
 function TradeAssets({ user }: { user: User }) {
   const [assetType, setAssetType] = useState<AssetType>('stock')
@@ -80,7 +86,9 @@ function TradeAssets({ user }: { user: User }) {
   // Only the rows actually on screen are subscribed to, so switching tabs
   // or searching moves the server's work with the user.
   const listed = isSearching ? search.assets : popularAssets
-  const live = useLiveQuotes(listed.map((asset) => asset.symbol))
+  // Bonds are repriced once a day rather than streamed, so there's nothing
+  // for a subscription to deliver.
+  const live = useLiveQuotes(assetType === 'bond' ? [] : listed.map((asset) => asset.symbol))
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
 
   function switchAssetType(next: AssetType) {
@@ -119,7 +127,7 @@ function TradeAssets({ user }: { user: User }) {
             title={
               isSearching
                 ? 'Search Results'
-                : `Most Active ${assetType === 'stock' ? 'Stocks' : 'Crypto'}`
+                : `Most Active ${ASSET_TYPE_LABELS[assetType]}`
             }
             assetType={assetType}
             assets={assets}
