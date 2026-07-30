@@ -12,6 +12,7 @@ import {
   type User,
 } from '../api'
 import { useBalance } from '../balance-context'
+import { validateQuantityInput } from '../validation'
 import AssetLogo from './AssetLogo'
 import './AssetDetail.css'
 
@@ -124,8 +125,9 @@ function AssetDetail({
     e.preventDefault()
     setStatus('')
 
-    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0) {
-      setStatus('Enter a valid quantity.')
+    const quantityError = validateQuantityInput(quantity)
+    if (quantityError) {
+      setStatus(quantityError)
       return
     }
     if (parsedQuantity > maxQuantity) {
