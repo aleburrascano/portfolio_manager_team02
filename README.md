@@ -74,6 +74,8 @@ so future breaking changes can live alongside it at `/api/v2`).
 | ------ | ---------------------------------------- | --------------------------------------------- |
 | POST   | `/api/v1/auth/register`                  | Create an account (username, password, name)  |
 | POST   | `/api/v1/auth/login`                     | Log in with a username and password           |
+| POST   | `/api/v1/auth/logout`                    | End the current session                       |
+| GET    | `/api/v1/auth/me`                        | Get the user owning the current session       |
 | GET    | `/api/v1/users/:userId/balance`          | Get a user's wallet balance                   |
 | GET    | `/api/v1/users/:userId/transactions`     | Get a user's chronological transaction history |
 | GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |
@@ -81,6 +83,13 @@ so future breaking changes can live alongside it at `/api/v2`).
 
 Responses include a `_links` map of related endpoint URLs (HATEOAS), and
 errors are always shaped as `{'error': {'message': str, 'code': str}}`.
+
+Every `/users/:userId/...` route is session-scoped: logging in sets a signed
+httpOnly cookie, and a request without one gets a 401 while a request for a
+different user's `:userId` gets a 403. Set `SECRET_KEY` in `.env` to sign
+those cookies — without it the app falls back to a per-process random key,
+so sessions won't survive a restart. The asset quote/search routes stay
+public.
 
 Set `CORS_ORIGINS` (comma-separated) in `.env` to allow the client's origin;
 defaults to `http://localhost:5173`.

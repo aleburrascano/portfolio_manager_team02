@@ -7,6 +7,23 @@ function errorMessage(data: ApiErrorBody, fallback: string): string {
   return data.error?.message || fallback
 }
 
+// The session lives in an httpOnly cookie the server sets on login, so every
+// call has to send credentials - there is no token for the client to hold.
+async function apiFetch<T>(path: string, fallbackError: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...init })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(errorMessage(data, fallbackError))
+  return data as T
+}
+
+function post(body?: unknown): RequestInit {
+  return {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  }
+}
+
 export type User = {
   userId: number
   username: string
@@ -15,14 +32,7 @@ export type User = {
 }
 
 export async function login(username: string, password: string): Promise<User> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, 'Login failed'))
-  return data
+  return apiFetch('/auth/login', 'Login failed', post({ username, password }))
 }
 
 export async function register(
@@ -31,14 +41,20 @@ export async function register(
   firstName: string,
   lastName: string,
 ): Promise<User> {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, firstName, lastName }),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, 'Registration failed'))
-  return data
+  return apiFetch('/auth/register', 'Registration failed', post({ username, password, firstName, lastName }))
+}
+
+/** The user owning the current session, or null if there isn't one. */
+export async function fetchCurrentUser(): Promise<User | null> {
+  try {
+    return await apiFetch<User>('/auth/me', 'Failed to fetch session')
+  } catch {
+    return null
+  }
+}
+
+export async function logout(): Promise<void> {
+  await apiFetch('/auth/logout', 'Logout failed', post())
 }
 
 export type AssetType = 'stock' | 'crypto'
@@ -54,37 +70,32 @@ export type Asset = {
   dayHigh?: number
 }
 
-export async function fetchUser(userId: number): Promise<User> {
-  const res = await fetch(`${API_BASE}/users/${userId}`)
-  if (!res.ok) throw new Error(res.status === 404 ? 'User not found' : 'Failed to fetch user')
-  return res.json()
-}
-
 export async function fetchPortfolioBreakdown(userId: number): Promise<{ cash: number; stock: number; crypto: number }> {
-  const res = await fetch(`${API_BASE}/users/${userId}/portfolio`)
-  if (!res.ok) throw new Error('Failed to fetch portfolio breakdown')
-  const data = await res.json()
+  const data = await apiFetch<{ cash?: number; stock?: number; crypto?: number }>(
+    `/users/${userId}/portfolio`,
+    'Failed to fetch portfolio breakdown',
+  )
   return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0 }
 }
 
 export async function fetchBalance(userId: number): Promise<number> {
-  const res = await fetch(`${API_BASE}/users/${userId}/balance`)
-  if (!res.ok) throw new Error('Failed to fetch balance')
-  const data = await res.json()
+  const data = await apiFetch<{ balance: number }>(`/users/${userId}/balance`, 'Failed to fetch balance')
   return data.balance
 }
 
 export async function fetchPopularAssets(assetType: AssetType): Promise<Asset[]> {
-  const res = await fetch(`${API_BASE}/assets/${assetType}/popular`)
-  if (!res.ok) throw new Error('Failed to fetch popular assets')
-  const data = await res.json()
+  const data = await apiFetch<{ results: Asset[] }>(
+    `/assets/${assetType}/popular`,
+    'Failed to fetch popular assets',
+  )
   return data.results
 }
 
 export async function searchAssets(assetType: AssetType, query: string): Promise<Asset[]> {
-  const res = await fetch(`${API_BASE}/assets/${assetType}/search?q=${encodeURIComponent(query)}`)
-  if (!res.ok) throw new Error('Failed to search assets')
-  const data = await res.json()
+  const data = await apiFetch<{ results: Asset[] }>(
+    `/assets/${assetType}/search?q=${encodeURIComponent(query)}`,
+    'Failed to search assets',
+  )
   return data.results
 }
 
@@ -96,25 +107,24 @@ export type AssetDetail = Asset & {
 }
 
 export async function fetchAssetDetail(assetType: AssetType, symbol: string): Promise<AssetDetail> {
-  const res = await fetch(`${API_BASE}/assets/${assetType}/${encodeURIComponent(symbol)}`)
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, 'Failed to fetch asset'))
-  return data
+  return apiFetch(`/assets/${assetType}/${encodeURIComponent(symbol)}`, 'Failed to fetch asset')
 }
 
 export type PricePoint = { date: string; close: number }
 
 export async function fetchAssetHistory(assetType: AssetType, symbol: string): Promise<PricePoint[]> {
-  const res = await fetch(`${API_BASE}/assets/${assetType}/${encodeURIComponent(symbol)}/history`)
-  if (!res.ok) throw new Error('Failed to fetch asset history')
-  const data = await res.json()
+  const data = await apiFetch<{ history: PricePoint[] }>(
+    `/assets/${assetType}/${encodeURIComponent(symbol)}/history`,
+    'Failed to fetch asset history',
+  )
   return data.history
 }
 
 export async function fetchHoldings(userId: number, assetType: AssetType, symbol: string): Promise<number> {
-  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/${encodeURIComponent(symbol)}/holdings`)
-  if (!res.ok) throw new Error('Failed to fetch holdings')
-  const data = await res.json()
+  const data = await apiFetch<{ shares: number }>(
+    `/users/${userId}/assets/${assetType}/${encodeURIComponent(symbol)}/holdings`,
+    'Failed to fetch holdings',
+  )
   return data.shares
 }
 
@@ -124,13 +134,11 @@ export async function buyAsset(
   symbol: string,
   quantity: number,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/buy`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker: symbol, quantity }),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, 'Purchase failed'))
+  await apiFetch(
+    `/users/${userId}/assets/${assetType}/buy`,
+    'Purchase failed',
+    post({ ticker: symbol, quantity }),
+  )
 }
 
 export async function sellAsset(
@@ -139,13 +147,11 @@ export async function sellAsset(
   symbol: string,
   quantity: number,
 ): Promise<void> {
-  const res = await fetch(`${API_BASE}/users/${userId}/assets/${assetType}/sell`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ticker: symbol, quantity }),
-  })
-  const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, 'Sale failed'))
+  await apiFetch(
+    `/users/${userId}/assets/${assetType}/sell`,
+    'Sale failed',
+    post({ ticker: symbol, quantity }),
+  )
 }
 
 export type Transaction = {
@@ -160,9 +166,10 @@ export type Transaction = {
 }
 
 export async function fetchTransactions(userId: number): Promise<Transaction[]> {
-  const res = await fetch(`${API_BASE}/users/${userId}/transactions`)
-  if (!res.ok) throw new Error('Failed to fetch transaction history')
-  const data = await res.json()
+  const data = await apiFetch<{ transactions: Transaction[] }>(
+    `/users/${userId}/transactions`,
+    'Failed to fetch transaction history',
+  )
   return data.transactions
 }
 
@@ -172,17 +179,5 @@ export async function submitCashTransaction(
   type: TransactionType,
   amount: number,
 ): Promise<{ message: string }> {
-  const res = await fetch(`${API_BASE}/users/${userId}/${type}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount }),
-  })
-
-  const data = await res.json().catch(() => ({}))
-
-  if (!res.ok) {
-    throw new Error(errorMessage(data, `Unable to ${type} funds!`))
-  }
-
-  return data
+  return apiFetch(`/users/${userId}/${type}`, `Unable to ${type} funds!`, post({ amount }))
 }

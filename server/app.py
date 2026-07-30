@@ -6,6 +6,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
+from authorization import init_app as init_sessions
 from db.connection import init_app as init_db
 from errors import register_error_handlers
 from routes.wallet import wallet_bp
@@ -17,6 +18,7 @@ load_dotenv()
 
 app = Flask(__name__)
 init_db(app)
+init_sessions(app)
 register_error_handlers(app)
 
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
