@@ -13,12 +13,12 @@ Two conventions worth knowing:
 - Transaction rows are append-only. Nothing updates or deletes them, which
   is why none of them carry an `updatedAt`.
 """
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
-    CheckConstraint, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, func,
+    CheckConstraint, Date, DateTime, Enum, ForeignKey, Index, Integer, Numeric, String, Text, func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -88,6 +88,31 @@ class Asset(Base):
     ticker: Mapped[str] = mapped_column(String(12), primary_key=True)
     # Validated against the provider registry in services.asset_providers.
     assetType: Mapped[str] = mapped_column(String(16))
+
+
+class Bond(Base):
+    """
+    The synthetic bond catalog: the terms each bond is priced from.
+
+    Bonds aren't quoted by any market feed, so unlike a stock or a crypto
+    their price is derived from these terms and the date - see
+    services.bond_pricing. The ticker is also an Assets row, so a bond can
+    be transacted like any other asset.
+    """
+
+    __tablename__ = 'Bonds'
+
+    ticker: Mapped[str] = mapped_column(ForeignKey('Assets.ticker'), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))
+    faceValue: Mapped[Decimal] = mapped_column(MONEY)
+    # Rates are fractions, not percentages: 0.0422 is 4.22%.
+    couponRate: Mapped[Decimal] = mapped_column(Numeric(6, 4))
+    marketYield: Mapped[Decimal] = mapped_column(Numeric(6, 4))
+    couponFrequency: Mapped[str] = mapped_column(
+        Enum('annual', 'semiannual', name='couponFrequency'), server_default='semiannual'
+    )
+    issueDate: Mapped[date] = mapped_column(Date)
+    maturityDate: Mapped[date] = mapped_column(Date)
 
 
 class CashTransaction(Base):

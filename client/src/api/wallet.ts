@@ -1,7 +1,7 @@
 import { apiFetch, post } from './client'
 import type { AssetType } from './assets'
 
-export type PortfolioBreakdown = { cash: number; stock: number; crypto: number }
+export type PortfolioBreakdown = { cash: number; stock: number; crypto: number; bond: number }
 
 export type Transaction = {
   transactionId: number
@@ -26,7 +26,7 @@ export async function fetchPortfolioBreakdown(userId: number): Promise<Portfolio
     `/users/${userId}/portfolio`,
     'Failed to fetch portfolio breakdown',
   )
-  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0 }
+  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0, bond: data.bond || 0 }
 }
 
 export async function fetchTransactions(userId: number): Promise<Transaction[]> {

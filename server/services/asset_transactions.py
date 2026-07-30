@@ -1,24 +1,26 @@
 """
-Buy and sell assets (stocks or crypto) for a user, priced from live
-market data.
+Buy and sell assets (stocks, crypto, or bonds) for a user, priced through
+each asset type's AssetProvider.
 """
 from decimal import Decimal
 
 from sqlalchemy import func, select
 
 import db.connection as db_conn
-import services.market_data as market_data
 import services.user_transactions as ut
 from db.models import Asset, AssetTransaction
-from services.exceptions import InsufficientFunds, InsufficientHoldings, UnknownUser
+from services.asset_providers import PROVIDERS
+from services.exceptions import (
+    InsufficientFunds, InsufficientHoldings, InvalidInput, UnknownUser,
+)
 
 
 def _register_asset(session, ticker: str, asset_type: str) -> None:
     """
     Make sure the asset exists before a transaction references it.
 
-    The Assets row is what says a ticker is a stock or a crypto, so it has
-    to be there before the foreign key from the trade can point at it.
+    The Assets row is what says a ticker is a stock, a crypto or a bond, so
+    it has to be there before the foreign key from the trade can point at it.
     """
     if session.get(Asset, ticker) is None:
         session.add(Asset(ticker=ticker, assetType=asset_type))
@@ -27,7 +29,7 @@ def _register_asset(session, ticker: str, asset_type: str) -> None:
 
 def get_holding_qty(user_id: int, ticker: str) -> float:
     """
-    Get how many shares of an asset (stock or crypto) the user currently owns.
+    Get how many shares/units of an asset the user currently owns.
 
     Args:
         user_id (int): The ID of the user.
@@ -49,27 +51,35 @@ def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
 
 def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) -> None:
     """
-    Purchase an asset (stock or crypto) for the user, at the current market
-    price, provided their wallet covers it.
+    Purchase an asset for the user, at the current market price, provided
+    their wallet covers it and the asset is still tradable.
 
     Args:
         user_id (int): The ID of the user.
-        asset_type (str): 'stock' or 'crypto'.
+        asset_type (str): 'stock', 'crypto', or 'bond'.
         ticker (str): The asset ticker symbol.
         quantity (Decimal): The number of shares/units to purchase. Validated positive.
 
     Raises:
         UnknownUser: if no such user exists.
+        InvalidInput: if the asset can't be bought (an unknown or matured bond).
         MarketDataUnavailable: if the asset can't be priced.
         InsufficientFunds: if the wallet doesn't cover the purchase.
     """
+    provider = PROVIDERS[asset_type]
     session = db_conn.get_session()
 
     try:
+        # Asked before anything is locked or priced, so a bond that has
+        # matured is refused with its own reason rather than a stale price.
+        tradable, reason = provider.can_trade(ticker)
+        if not tradable:
+            raise InvalidInput(reason or 'This asset cannot be bought.')
+
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        price = market_data.trade_price(ticker)
+        price = provider.trade_price(ticker)
         cost = quantity * price
 
         # Re-checked under the user row lock, so no concurrent request can
@@ -93,12 +103,15 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
 
 def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) -> None:
     """
-    Sell an asset (stock or crypto) for the user, at the current market
-    price, provided they hold enough of it.
+    Sell an asset for the user, at the current market price, provided they
+    hold enough of it.
+
+    Selling is deliberately not gated on can_trade: a holding should stay
+    disposable even once the asset stops being available to buy.
 
     Args:
         user_id (int): The ID of the user.
-        asset_type (str): 'stock' or 'crypto'.
+        asset_type (str): 'stock', 'crypto', or 'bond'.
         ticker (str): The asset ticker symbol.
         quantity (Decimal): The number of shares/units to sell. Validated positive.
 
@@ -107,13 +120,14 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) ->
         MarketDataUnavailable: if the asset can't be priced.
         InsufficientHoldings: if the user doesn't hold that many units.
     """
+    provider = PROVIDERS[asset_type]
     session = db_conn.get_session()
 
     try:
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        price = market_data.trade_price(ticker)
+        price = provider.trade_price(ticker)
 
         # Re-checked under the user row lock, so no concurrent request can
         # sell the same shares twice.
@@ -138,10 +152,11 @@ def get_portfolio_values(user_id: int) -> dict:
     """
     Compute the portfolio breakdown for a user.
 
-    Returns a dict with keys 'cash', 'stock', and 'crypto' representing
-    the current total value for each category. Cash is taken from the
-    user's net wallet balance (cash + asset transaction effects). Asset
-    values are current prices multiplied by net holdings.
+    Returns a dict with a key per asset type plus 'cash', each holding the
+    current total value for that category. The buckets come from the
+    provider registry, so a new asset type shows up here on its own. Cash is
+    the user's net wallet balance; asset values are current prices times net
+    holdings.
     """
     session = db_conn.get_session()
 
@@ -152,9 +167,9 @@ def get_portfolio_values(user_id: int) -> dict:
         .group_by(Asset.assetType, AssetTransaction.ticker)
     ).all()
 
-    totals = {'stock': 0.0, 'crypto': 0.0}
+    totals = {asset_type: 0.0 for asset_type in PROVIDERS}
     for asset_type, ticker, qty in holdings:
-        if qty:
-            totals[asset_type] += float(qty) * market_data.valuation_price(ticker)
+        if qty and asset_type in totals:
+            totals[asset_type] += float(qty) * PROVIDERS[asset_type].valuation_price(ticker)
 
     return {'cash': float(ut.get_user_balance(user_id)), **totals}
