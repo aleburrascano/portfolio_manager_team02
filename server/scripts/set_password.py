@@ -6,8 +6,8 @@ them with an empty hash, which never matches, so they can't be logged into
 until a password is set here. Also handy for resetting a forgotten one.
 
 Usage (from the server/ directory):
-    python -m db.set_password <username> <password>
-    python -m db.set_password --list
+    python -m scripts.set_password <username> <password>
+    python -m scripts.set_password --list
 """
 import argparse
 import sys

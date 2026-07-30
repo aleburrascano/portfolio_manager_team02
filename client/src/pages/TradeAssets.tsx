@@ -86,9 +86,7 @@ function TradeAssets({ user }: { user: User }) {
   // Only the rows actually on screen are subscribed to, so switching tabs
   // or searching moves the server's work with the user.
   const listed = isSearching ? search.assets : popularAssets
-  // Bonds are repriced once a day rather than streamed, so there's nothing
-  // for a subscription to deliver.
-  const live = useLiveQuotes(assetType === 'bond' ? [] : listed.map((asset) => asset.symbol))
+  const live = useLiveQuotes(assetType, listed.map((asset) => asset.symbol))
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
 
   function switchAssetType(next: AssetType) {

@@ -24,8 +24,9 @@ server/
   links.py          HATEOAS _links builders
   routes/           blueprints - HTTP only, no business logic
   services/         business logic, market data, domain exceptions
-  db/               SQLAlchemy models, engine/session, seed + admin scripts
+  db/               SQLAlchemy models, engine and request-scoped session
   migrations/       Alembic revisions - the one source of schema history
+  scripts/          standalone tooling: seed data, password reset
 client/
   src/api/          one module per resource, behind a shared fetch helper
   src/pages/        one per sidebar destination
@@ -72,7 +73,7 @@ alembic upgrade head
 Optionally load ~2 years of demo transactions for a user:
 
 ```bash
-python -m db.seed --first Demo --last User
+python -m scripts.seed --first Demo --last User
 ```
 
 #### Schema conventions
@@ -118,8 +119,8 @@ hash, which never matches, so those accounts can't be logged into until a
 password is set:
 
 ```bash
-python -m db.set_password --list
-python -m db.set_password <username> <password>
+python -m scripts.set_password --list
+python -m scripts.set_password <username> <password>
 ```
 
 Run the server:

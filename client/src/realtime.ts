@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { io, type Socket } from 'socket.io-client'
+import type { AssetType } from './api'
 
 /**
  * A pushed price update. Only the fields that changed hands are present,
@@ -29,9 +30,11 @@ function getSocket(): Socket {
  * each, keyed by symbol.
  *
  * The server pushes updates for subscribed symbols only, so the returned
- * map fills in as quotes arrive rather than being complete up front.
+ * map fills in as quotes arrive rather than being complete up front. Asset
+ * types that aren't streamed - bonds are repriced daily - simply never
+ * receive anything, so callers don't have to know which is which.
  */
-export function useLiveQuotes(symbols: string[]): Record<string, QuoteUpdate> {
+export function useLiveQuotes(assetType: AssetType, symbols: string[]): Record<string, QuoteUpdate> {
   const [quotes, setQuotes] = useState<Record<string, QuoteUpdate>>({})
 
   // Depend on the contents, not the array identity - callers build a fresh
@@ -42,6 +45,7 @@ export function useLiveQuotes(symbols: string[]): Record<string, QuoteUpdate> {
     if (!subscription) return
 
     const watched = subscription.split(',')
+    const request = { assetType, symbols: watched }
     const connection = getSocket()
 
     function handleQuote(update: QuoteUpdate) {
@@ -49,13 +53,13 @@ export function useLiveQuotes(symbols: string[]): Record<string, QuoteUpdate> {
     }
 
     connection.on('quote', handleQuote)
-    connection.emit('subscribe', { symbols: watched })
+    connection.emit('subscribe', request)
 
     return () => {
-      connection.emit('unsubscribe', { symbols: watched })
+      connection.emit('unsubscribe', request)
       connection.off('quote', handleQuote)
     }
-  }, [subscription])
+  }, [assetType, subscription])
 
   return quotes
 }

@@ -3,7 +3,7 @@
 Rows that predate password auth are backfilled with a username derived from
 the name plus the userId (unique by construction) and an empty hash. An
 empty hash never matches a candidate password, so those accounts stay
-locked until a password is set for them - see db/set_password.py.
+locked until a password is set for them - see scripts/set_password.py.
 
 Revision ID: 0002
 Revises: 0001
