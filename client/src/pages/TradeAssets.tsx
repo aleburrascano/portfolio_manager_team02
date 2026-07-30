@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import SearchBar from './components/SearchBar'
-import AssetList from './components/AssetList'
-import AssetDetail from './components/AssetDetail'
-import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from './api'
+import SearchBar from '../components/SearchBar'
+import AssetList from '../components/AssetList'
+import AssetDetail from '../components/AssetDetail'
+import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
 import './TradeAssets.css'
 
 const ASSET_TYPES: { type: AssetType; label: string }[] = [

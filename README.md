@@ -14,10 +14,27 @@ live market data, and buy/sell stocks against their balance.
 ## Project structure
 
 ```
-server/   Flask API (routes/, services/, db/)
-client/   React + Vite frontend
-assets/   DB schema and wireframe references
+server/
+  app.py            Flask entry point: config, blueprints
+  authorization.py  session identity + the require_user route guard
+  errors.py         the single JSON error envelope, and the handlers feeding it
+  links.py          HATEOAS _links builders
+  routes/           blueprints - HTTP only, no business logic
+  services/         business logic, market data, domain exceptions
+  db/               SQLAlchemy models, engine/session, schema + seed
+client/
+  src/api/          one module per resource, behind a shared fetch helper
+  src/pages/        one per sidebar destination
+  src/components/   reusable pieces
+assets/             DB schema and wireframe references
 ```
+
+Layering runs one way: `routes/ → services/ → db/`. Routes never touch the
+database or `yfinance` directly, and services never import Flask. A service
+raises from `services/exceptions.py` to reject a request (each exception
+carries the HTTP status it surfaces as), so routes carry no `try`/`except`.
+All market data access lives in `services/market_data.py`, so swapping or
+stubbing the price feed is a one-file change.
 
 ## Server setup
 

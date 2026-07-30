@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import './Dashboard.css'
-import { fetchPortfolioBreakdown, type User } from './api'
-import PortfolioComposition from './components/PortfolioComposition'
+import { fetchPortfolioBreakdown, type User } from '../api'
+import PortfolioComposition from '../components/PortfolioComposition'
 
 function Dashboard({ user }: { user: User }) {
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
@@ -19,8 +19,8 @@ function Dashboard({ user }: { user: User }) {
           { name: 'Crypto', value: res.crypto },
         ]
         setData(chartData)
-      } catch (e: any) {
-        setError(e?.message || 'Failed to load portfolio')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Failed to load portfolio')
       } finally {
         setLoading(false)
       }
