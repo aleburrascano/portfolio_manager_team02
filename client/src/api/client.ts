@@ -41,3 +41,12 @@ export function post(body?: unknown, idempotencyKey?: string): RequestInit {
     body: JSON.stringify(body ?? {}),
   }
 }
+
+/** Build the RequestInit for a JSON PATCH. */
+export function patch(body?: unknown): RequestInit {
+  return {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body ?? {}),
+  }
+}

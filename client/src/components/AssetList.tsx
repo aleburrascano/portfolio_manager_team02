@@ -1,4 +1,5 @@
 import type { Asset, AssetType } from '../api'
+import { formatCurrency, formatNumber } from '../format'
 import AssetLogo from './AssetLogo'
 import './AssetList.css'
 
@@ -38,19 +39,19 @@ function AssetList({ title, assets, assetType, loading, onSelect }: AssetListPro
                 <div className="asset-stats">
                   {asset.currentPrice != null && (
                     <span className="asset-price">
-                      ${asset.currentPrice.toFixed(2)}
+                      {formatCurrency(asset.currentPrice)}
                     </span>
                   )}
                   {asset.changePercent != null && (
                     <span
                       className={`asset-change ${isPositive ? 'positive' : 'negative'}`}
                     >
-                      {isPositive ? '▲' : '▼'} {Math.abs(asset.changePercent).toFixed(2)}%
+                      {isPositive ? '▲' : '▼'} {formatNumber(Math.abs(asset.changePercent), 2)}%
                     </span>
                   )}
                   {asset.dayLow != null && asset.dayHigh != null && (
                     <span className="asset-range">
-                      ${asset.dayLow.toFixed(2)} - ${asset.dayHigh.toFixed(2)}
+                      {formatCurrency(asset.dayLow)} - {formatCurrency(asset.dayHigh)}
                     </span>
                   )}
                 </div>

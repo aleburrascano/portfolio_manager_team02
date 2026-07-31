@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { PieChart, Pie, Tooltip, Legend, ResponsiveContainer, type TooltipValueType } from 'recharts'
+import { formatCurrency } from '../format'
 import './PortfolioComposition.css'
 
 export type PortfolioCompositionDatum = {
@@ -21,7 +22,7 @@ function formatTooltipValue(value: TooltipValueType | undefined) {
   }
 
   if (typeof value === 'number') {
-    return `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    return formatCurrency(value)
   }
 
   return String(value)

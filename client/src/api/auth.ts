@@ -1,10 +1,18 @@
-import { apiFetch, post } from './client'
+import { apiFetch, patch, post } from './client'
 
 export type User = {
   userId: number
   username: string
   firstName: string
   lastName: string
+}
+
+export type UpdateUserInput = {
+  username?: string
+  firstName?: string
+  lastName?: string
+  currentPassword?: string
+  newPassword?: string
 }
 
 export async function login(username: string, password: string): Promise<User> {
@@ -31,4 +39,8 @@ export async function fetchCurrentUser(): Promise<User | null> {
 
 export async function logout(): Promise<void> {
   await apiFetch('/auth/logout', 'Logout failed', post())
+}
+
+export async function updateUser(userId: number, input: UpdateUserInput): Promise<User> {
+  return apiFetch(`/users/${userId}`, 'Failed to update account', patch(input))
 }

@@ -2,8 +2,10 @@ import { useEffect, useState } from 'react'
 import './Dashboard.css'
 import { fetchPortfolioBreakdown, type User } from '../api'
 import PortfolioComposition from '../components/PortfolioComposition'
+import { useBalance } from '../balance-context'
 
 function Dashboard({ user }: { user: User }) {
+  const { balance } = useBalance()
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +29,7 @@ function Dashboard({ user }: { user: User }) {
       }
     }
     void load()
-  }, [user.userId])
+  }, [user.userId, balance])
 
   if (loading) {
     return (

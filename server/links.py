@@ -9,6 +9,7 @@ from flask import url_for
 def user_links(user_id: int) -> dict:
     return {
         'self': url_for('auth.get_user_route', user_id=user_id),
+        'update': url_for('auth.update_user_route', user_id=user_id),
         'balance': url_for('wallet.get_wallet_balance', user_id=user_id),
         'portfolio': url_for('wallet.get_portfolio_breakdown', user_id=user_id),
         'transactions': url_for('history.get_transaction_history', user_id=user_id),
