@@ -79,9 +79,47 @@ def get_user_balance(user_id: int) -> Decimal:
     Returns:
         Decimal: The net balance (0 if the user has no transactions).
     """
-    session = get_session()
+    transactions = get_user_transactions(user_id)
+    if transactions is None:
+        return None
+    return sum(row['signedAmount'] for row in transactions)
 
-    cash = session.scalar(
+def get_user_asset_transactions(user_id: int) -> Optional[List[Dict[str, Any]]]:
+    """
+    Fetch only a user's asset transactions.
+
+    Returns:
+        list[dict] | None: Asset transactions for the user.
+    """
+
+    conn = get_db()
+
+    if not conn:
+        return None
+
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(ASSET_TRANSACTIONS_QUERY, (user_id,))
+    asset_rows = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    for row in asset_rows:
+        row["type"] = row["assetType"]
+        row["signedAmount"] = row["val"]
+
+    asset_rows.sort(
+        key=lambda row: row["transactionDate"],
+        reverse=True
+    )
+
+    return asset_rows
+
+
+  ''' session = get_session()
+
+  cash = session.scalar(
         select(func.coalesce(func.sum(CashTransaction.amount), 0))
         .where(CashTransaction.userId == user_id)
     )
@@ -90,3 +128,4 @@ def get_user_balance(user_id: int) -> Decimal:
         .where(AssetTransaction.userId == user_id)
     )
     return Decimal(str(cash)) + Decimal(str(assets))
+    '''
