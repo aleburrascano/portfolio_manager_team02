@@ -1,19 +1,21 @@
 .search-bar {
   width: 100%;
   padding: 11px 16px;
-  font: inherit;
-  font-size: 14px;
-  border: 1px solid var(--border);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-h);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
 .search-bar::placeholder {
   color: var(--text-muted);
 }
 
+/* Layered under the focus ring rather than replacing it: `outline: none`
+   here used to beat the global :focus-visible rule on specificity. */
 .search-bar:focus {
-  outline: none;
-  border-color: var(--accent);
+  border-color: var(--accent-ink);
 }
