@@ -1,14 +1,12 @@
 .sidebar {
-  width: 220px;
+  width: 216px;
   flex-shrink: 0;
-  position: sticky;
-  top: 0;
-  height: 100svh;
   display: flex;
   flex-direction: column;
   background: var(--surface);
   border-right: 1px solid var(--border);
-  padding: 24px 12px;
+  padding: 18px 10px 20px;
+  overflow-y: auto;
 }
 
 .sidebar-nav {
@@ -17,24 +15,28 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.sidebar-nav button,
-.sidebar-logout {
+.sidebar-nav button {
   width: 100%;
   display: flex;
   align-items: center;
   gap: 12px;
   border: none;
+  border-left: 2px solid transparent;
   background: none;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
+  border-radius: 0;
+  padding: 10px 10px 10px 8px;
+  font-family: var(--sans);
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-muted);
   cursor: pointer;
   text-align: left;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
 }
 
 .sidebar-nav button:hover {
@@ -42,9 +44,12 @@
   color: var(--text-h);
 }
 
+/* The rule marks which page you are on. It is the only place in the app a
+   coloured edge means anything, which is why it is allowed to be here. */
 .sidebar-nav button.active {
+  border-left-color: var(--accent);
   background: var(--accent-bg);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .sidebar-icon {
@@ -59,13 +64,49 @@
   height: 100%;
 }
 
-/* auto margin pins it to the bottom of the sidebar column, clear of the
-   navigation items, so it can't be hit while reaching for them. */
-.sidebar-logout {
-  margin-top: auto;
-}
+/* On a phone the rail becomes a bottom bar. A 60px icon rail costs 16% of
+   a 375px viewport on every screen, and it puts navigation at the top left
+   - the furthest point from a thumb. Along the bottom the targets are where
+   the hand already is, the labels fit, and the content gets the full width,
+   which is what stops tables needing to scroll sideways. */
+@media (max-width: 640px) {
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    overflow: visible;
+    /* Clear of the home indicator on hardware that has one. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 
-.sidebar-logout:hover {
-  background: var(--negative-bg);
-  color: var(--negative);
+  .sidebar-nav {
+    flex: 1;
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .sidebar-nav li {
+    flex: 1;
+  }
+
+  .sidebar-nav button {
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    /* Comfortably past the 44px minimum touch target. */
+    min-height: 54px;
+    padding: 8px 4px;
+    border-left: none;
+    border-top: 2px solid transparent;
+    font-size: var(--fs-sm);
+    text-align: center;
+  }
+
+  .sidebar-nav button.active {
+    border-left-color: transparent;
+    border-top-color: var(--accent);
+  }
 }

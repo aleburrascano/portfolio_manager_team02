@@ -160,6 +160,79 @@ def asset_quote(ticker: str) -> Optional[dict]:
     }
 
 
+# yfinance's recommendation columns, weakest to strongest, with the label
+# each maps to in the UI.
+RECOMMENDATION_BUCKETS = [
+    ('strongBuy', 'Strong buy'),
+    ('buy', 'Buy'),
+    ('hold', 'Hold'),
+    ('sell', 'Sell'),
+    ('strongSell', 'Strong sell'),
+]
+
+
+def _consensus_distribution(asset) -> List[dict]:
+    """
+    How many analysts land in each bucket, most recent period only.
+
+    Returns an empty list when the feed has no recommendations, which is
+    normal for smaller listings and for anything that isn't an equity.
+    """
+    try:
+        table = asset.recommendations
+    except Exception:
+        return []
+    if table is None or getattr(table, 'empty', True):
+        return []
+
+    latest = table.iloc[0]
+    distribution = []
+    for column, label in RECOMMENDATION_BUCKETS:
+        if column not in latest:
+            continue
+        try:
+            count = int(latest[column])
+        except (TypeError, ValueError):
+            continue
+        distribution.append({'label': label, 'count': count})
+    return distribution if any(row['count'] for row in distribution) else []
+
+
+def analyst_ratings(ticker: str) -> Optional[dict]:
+    """
+    Wall Street's view of a ticker: the consensus call, the price targets,
+    and how the analysts split.
+
+    Returns None when the feed has nothing to say - plenty of tickers have
+    no coverage at all, and an empty panel is better than a fabricated one.
+    """
+    try:
+        asset = yf.Ticker(ticker)
+        info = asset.info or {}
+    except Exception:
+        return None
+
+    distribution = _consensus_distribution(asset)
+    analyst_count = info.get('numberOfAnalystOpinions')
+    target = info.get('targetMeanPrice')
+
+    if not distribution and not analyst_count and target is None:
+        return None
+
+    return {
+        # e.g. 'buy', 'strong_buy', 'hold' - the feed's own summary word.
+        'consensus': info.get('recommendationKey'),
+        # 1.0 (strong buy) to 5.0 (strong sell).
+        'score': info.get('recommendationMean'),
+        'analystCount': analyst_count,
+        'targetLow': info.get('targetLowPrice'),
+        'targetMean': target,
+        'targetHigh': info.get('targetHighPrice'),
+        'currentPrice': info.get('currentPrice') or info.get('regularMarketPrice'),
+        'distribution': distribution,
+    }
+
+
 def price_history(ticker: str, period: str = '1y') -> List[dict]:
     """Daily closing prices over the given period, oldest first, for charting."""
     prices = yf.Ticker(ticker).history(period=period)

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { login, register, type User } from '../api'
 import { validateName, validatePassword, validateUsername } from '../validation'
+import treetopIcon from '../assets/treetop-icon.svg'
 import './Login.css'
 
 type Mode = 'login' | 'register'
@@ -55,6 +56,10 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
   return (
     <div className="login-page">
       <form className="login-form" onSubmit={handleSubmit}>
+        <div className="login-brand">
+          <img src={treetopIcon} alt="" width="32" height="32" />
+          <span>TreeTop Trading</span>
+        </div>
         <h1>{mode === 'login' ? 'Welcome back' : 'Create an account'}</h1>
         <input
           type="text"
@@ -92,7 +97,9 @@ function Login({ onLogin }: { onLogin: (user: User) => void }) {
             />
           </>
         )}
-        {error && <p className="login-error">{error}</p>}
+        <p className="login-error" role="alert">
+          {error}
+        </p>
         <button type="submit">{mode === 'login' ? 'Log In' : 'Sign Up'}</button>
         <button
           type="button"

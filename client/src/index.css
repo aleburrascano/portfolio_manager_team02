@@ -1,39 +1,78 @@
 :root {
-  --bg: #f7f8fa;
-  --surface: #ffffff;
-  --border: #e6e8ec;
-  --text: #5b6470;
-  --text-h: #14181f;
-  --text-muted: #8a919c;
-  --accent: #2563eb;
-  --accent-bg: rgba(37, 99, 235, 0.08);
-  --positive: #16a34a;
-  --positive-bg: rgba(22, 163, 74, 0.1);
-  --negative: #dc2626;
-  --negative-bg: rgba(220, 38, 38, 0.1);
-  --shadow:
-    rgba(20, 24, 31, 0.06) 0 1px 2px, rgba(20, 24, 31, 0.06) 0 8px 24px -8px;
+  /* Ledger paper: a trading-desk statement, not a soft SaaS dashboard.
+     Named palette - Paper, Ink, Moss, Brass, Ledger Green, Oxblood. */
+  --bg: #eeecdf;
+  --paper-band: #dde6d2;
+  --surface: #faf9f0;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Two border weights with different jobs. --border is a decorative
+     hairline for card edges and rules; --border-strong is the 3:1 boundary
+     WCAG 1.4.11 requires of anything a user is meant to type into. */
+  --border: #c7cbb2;
+  --border-strong: #868d72;
 
-  font: 16px/145% var(--sans);
-  letter-spacing: 0.01em;
+  --text: #4c5744;
+  --text-h: #1c2818;
+  /* 4.8:1 or better on every surface it is painted on, including the
+     zebra band and the accent row hover. Secondary, never faint. */
+  --text-muted: #5a6551;
+
+  /* Brass has two roles and they need two values: --accent fills and
+     borders, --accent-ink is the only one allowed to carry text or to sit
+     behind --surface-colored text (6.6:1 either way). */
+  --accent: #92702e;
+  --accent-ink: #6f5620;
+  --accent-bg: #ecdfbf;
+
+  --positive: #2c6b45;
+  --positive-bg: #dbe8d6;
+  --negative: #9c3b2a;
+  --negative-bg: #f3ddd3;
+
+  --radius-sm: 3px;
+  --radius: 4px;
+
+  /* One ladder, ~1.15 between steps, in rem so browser font-size settings
+     still do something. Everything in the app picks a rung from this. */
+  --fs-micro: 0.6875rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1.0625rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.4375rem;
+  --fs-2xl: 1.75rem;
+  --fs-display: 2.375rem;
+
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --heading: 'Roboto Slab', Georgia, serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  /* Motion conveys state and nothing else, so it is short and it is one
+     curve. Exponential ease-out: fast to start, settles without bouncing. */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+
+  --z-sticky: 100;
+  --z-modal-backdrop: 200;
+  --z-modal: 210;
+
+  /* Breakpoints are structural, not typographic - nothing here is fluid.
+     Media queries can't read custom properties, so these are documentation
+     for the literals used across the stylesheets:
+       1000px  dashboard rows stop being 2:1 and stack
+        760px  asset detail drops its sticky trade column
+        700px  the holdings table becomes stacked blocks
+        640px  the sidebar becomes a bottom bar; tables stack
+        480px  single-column forms, tighter padding
+     Anything narrower than 640 is treated as a phone. */
+
+  font-size: 100%;
   color-scheme: light;
-  color: var(--text);
-  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-#root {
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
 }
 
 * {
@@ -42,11 +81,195 @@
 
 body {
   margin: 0;
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  background: var(--bg);
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
 }
 
 h1,
-h2 {
+h2,
+h3 {
   font-family: var(--heading);
   font-weight: 600;
   color: var(--text-h);
+}
+
+h1 {
+  font-size: var(--fs-xl);
+}
+
+h2 {
+  font-size: var(--fs-lg);
+}
+
+h3 {
+  font-size: var(--fs-md);
+}
+
+/* Every figure in the app - prices, quantities, balances, dates in a table -
+   reads as ledger type: monospace with true tabular alignment. */
+.figure {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Icons are 1em so they scale with whatever label they sit beside, and
+   never set their own colour. */
+.icon {
+  width: 1.15em;
+  height: 1.15em;
+  flex-shrink: 0;
+}
+
+/* A statement has section headings, not kickers. Sentence case, real size,
+   ink-colored - the title of the block, set to be read. */
+.section-title {
+  font-family: var(--heading);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 0 0 12px;
+}
+
+/* The app's three buttons. Not modal chrome - dialogs, forms, empty states
+   and the boot error all draw from the same vocabulary, so "save" looks
+   like "save" wherever it appears. */
+.secondary-btn,
+.submit-btn,
+.danger-btn {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.secondary-btn {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.secondary-btn:hover:not(:disabled) {
+  border-color: var(--text-h);
+  color: var(--text-h);
+}
+
+/* --accent-ink rather than --accent: a light label on the lighter brass
+   only reaches 4.3:1, and this is the button that moves money. */
+.submit-btn {
+  background: var(--accent-ink);
+  color: var(--surface);
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: var(--text-h);
+}
+
+/* Not opacity - dimming the whole button takes the label with it, and the
+   label is what tells the user the click registered. */
+.submit-btn:disabled,
+.secondary-btn:disabled {
+  background: var(--paper-band);
+  border-color: var(--border-strong);
+  color: var(--text);
+  cursor: not-allowed;
+}
+
+.danger-btn {
+  background: var(--negative-bg);
+  border-color: var(--negative);
+  color: var(--negative);
+}
+
+.danger-btn:hover {
+  background: var(--negative);
+  color: var(--surface);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
+}
+
+/* Present to a screen reader, absent to everyone else. Used for the skip
+   link's resting state and for icon-only controls at narrow widths. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: var(--z-sticky);
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-200%);
+  transition: transform var(--dur) var(--ease);
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+}
+
+/* Loading placeholders take the shape of the content they stand in for, so
+   nothing shifts when the data lands. */
+.skeleton {
+  background: linear-gradient(90deg, var(--paper-band), var(--bg), var(--paper-band));
+  background-size: 200% 100%;
+  border-radius: var(--radius-sm);
+  animation: skeleton-sweep 1.4s var(--ease) infinite;
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .skeleton {
+    background: var(--paper-band);
+  }
 }

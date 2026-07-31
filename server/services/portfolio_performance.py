@@ -1,129 +1,277 @@
-import numpy as np
-import pandas as pd
-import yfinance as yf
-from services.user_transactions import get_user_asset_transactions
 """
-    Returns a DataFrame whose rows are trading dates and whose columns are
-    tickers. Each value is the number of shares owned at the end of that day.
+A user's portfolio value over time, and how it compares to the money they
+put in.
+
+Replays the trade and cash ledgers forward day by day, valuing whatever was
+held on each date at that day's closing price. Prices come from each asset
+type's provider, so bonds - which no feed quotes - are valued from the same
+catalog that prices them everywhere else.
+
+Deliberately no pandas, numpy or matplotlib here: the work is a running
+total over a few hundred dates, plain Python does it without adding three
+dependencies to a web request, and a plotting library has no business
+inside a request handler at all.
+"""
+from collections import defaultdict
+from datetime import date, timedelta
+from decimal import Decimal
+from typing import Any, Dict, List, Optional
+
+from services.asset_providers import PROVIDERS
+from services.user_transactions import get_cash_flows, get_user_asset_transactions
 
 
-    Parameters
-    ----------
-    transactions : DataFrame
-        Must contain:
-            transactionDate
-            ticker
-            transactionType ("BUY" or "SELL")
-            shares
+def _as_date(value: Any) -> date:
+    """Normalise a datetime, date or ISO string to a plain date."""
+    if isinstance(value, str):
+        return date.fromisoformat(value[:10])
+    return value.date() if hasattr(value, 'date') else value
 
 
-    trading_dates : DatetimeIndex
-        Usually the index from the downloaded yfinance price DataFrame.
-
-
-    Returns
-    -------
-    DataFrame
-        Daily holdings for every ticker.
+def _close_by_date(asset_type: str, ticker: str) -> Dict[date, float]:
     """
+    A {date: close} map for one ticker, or an empty map if it has no history.
+
+    Best-effort on purpose: one ticker whose history can't be fetched should
+    leave a gap in the chart, not fail the whole request.
+    """
+    provider = PROVIDERS.get(asset_type)
+    if provider is None:
+        return {}
+
+    try:
+        history = provider.get_history(ticker)
+    except Exception:
+        return {}
+
+    return {
+        _as_date(point['date']): float(point['close'])
+        for point in history
+        if point.get('close') is not None
+    }
 
 
+def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
+    """
+    Chart a user's portfolio value over the last `days` days.
+
+    Each point carries the whole picture for that date: the assets at market
+    value, the cash alongside them, the two combined, and the net deposits
+    they were bought with. Gain/loss is the difference between the last two,
+    which is the only comparison that means anything - a portfolio that grew
+    because the user paid more in has not performed.
+
+    Args:
+        user_id (int): The ID of the user.
+        days (int): How far back to chart.
+
+    Returns:
+        dict: {'series': list[dict], 'summary': dict, 'byAssetType': list[dict]}
+    """
+    trades = get_user_asset_transactions(user_id)
+    cash_flows = get_cash_flows(user_id)
+
+    if not trades and not cash_flows:
+        return {'series': [], 'summary': _empty_summary(), 'byAssetType': []}
+
+    today = date.today()
+    first_activity = min(_as_date(row['transactionDate']) for row in trades + cash_flows)
+    start = max(first_activity, today - timedelta(days=days))
+
+    # One history fetch per ticker the user has ever traded, not per day.
+    asset_type_of = {row['ticker']: row['assetType'] for row in trades}
+    closes = {
+        ticker: _close_by_date(asset_type, ticker)
+        for ticker, asset_type in asset_type_of.items()
+    }
+
+    # Bucketed by the date each one landed on, so the walk below applies
+    # every trade and every cash flow exactly once.
+    trades_on: Dict[date, List[dict]] = defaultdict(list)
+    for row in trades:
+        trades_on[_as_date(row['transactionDate'])].append(row)
+
+    cash_on: Dict[date, Decimal] = defaultdict(Decimal)
+    for row in cash_flows:
+        cash_on[_as_date(row['transactionDate'])] += Decimal(str(row['amount']))
+
+    shares: Dict[str, Decimal] = defaultdict(Decimal)
+    last_price: Dict[str, Optional[float]] = {ticker: None for ticker in asset_type_of}
+    cash = Decimal('0')
+    net_deposits = Decimal('0')
+    series: List[dict] = []
+
+    # The replay starts at the first activity, not at the window, otherwise
+    # the earliest point would show a portfolio appearing out of nowhere.
+    day = first_activity
+    while day <= today:
+        for trade in trades_on.get(day, ()):
+            # qty is already signed in this schema: + on a buy, - on a sell,
+            # so a running total needs no sign derived from the type.
+            quantity = Decimal(str(trade['qty']))
+            shares[trade['ticker']] += quantity
+            cash -= quantity * Decimal(str(trade['price']))
+
+        flow = cash_on.get(day)
+        if flow:
+            cash += flow
+            net_deposits += flow
+
+        # Markets shut at weekends and holidays, so a day with no close
+        # carries the previous one forward rather than valuing at zero.
+        for ticker, ticker_closes in closes.items():
+            price = ticker_closes.get(day)
+            if price is not None:
+                last_price[ticker] = price
+
+        if day >= start:
+            invested = sum(
+                float(quantity) * (last_price.get(ticker) or 0.0)
+                for ticker, quantity in shares.items()
+                if quantity
+            )
+            series.append({
+                'date': day.isoformat(),
+                'investedValue': round(invested, 2),
+                'cash': round(float(cash), 2),
+                'portfolioValue': round(invested + float(cash), 2),
+                'netDeposits': round(float(net_deposits), 2),
+            })
+
+        day += timedelta(days=1)
+
+    # Today is not a historical close. Valued at one, the final point lags
+    # the live price by the whole intraday move, and the chart's headline
+    # disagrees with the holdings table sitting beside it on the dashboard.
+    # Re-stamp it with the same valuation the rest of the app uses, so
+    # every "what am I worth" on the page is one number.
+    #
+    # Only tickers still held are priced, so a closed position costs no
+    # lookup however long ago it was sold.
+    held = {ticker: qty for ticker, qty in shares.items() if qty}
+    live_price = {
+        ticker: PROVIDERS[asset_type_of[ticker]].valuation_price(ticker)
+        for ticker in held
+    }
+    # valuation_price answers 0.0 for a ticker it can't price; the last
+    # close is a better answer than zero, so it stands in.
+    for ticker, price in live_price.items():
+        if not price:
+            live_price[ticker] = last_price.get(ticker) or 0.0
+
+    if series:
+        invested = sum(float(qty) * live_price[ticker] for ticker, qty in held.items())
+        latest = series[-1]
+        latest['investedValue'] = round(invested, 2)
+        latest['portfolioValue'] = round(invested + latest['cash'], 2)
+
+    return {
+        'series': series,
+        'summary': _summarise(series),
+        'byAssetType': _by_asset_type(shares, asset_type_of, live_price, trades),
+    }
 
 
-def daily_holdings(transactions, trading_dates):
-    transactions = transactions.copy()
-    transactions["transactionDate"] = pd.to_datetime(transactions["transactionDate"]).dt.normalize()
-    transactions["qty"] = transactions["qty"].astype(float)
-        # BUY = positive, SELL = negative
-    transactions["signedShares"] = np.where(
-        transactions["transactionType"] == "buy",
-        transactions["qty"],
-        -transactions["qty"]
-    )
-
-        # Daily changes in shares
-    daily_changes = (
-        transactions
-        .groupby(["transactionDate", "ticker"])["signedShares"]
-        .sum()
-        .unstack(fill_value=0)
-    )
-   # Add every trading day
-    daily_changes = daily_changes.reindex(
-        trading_dates,
-        fill_value=0
-    )
+def _empty_summary() -> dict:
+    return {
+        'startValue': 0.0,
+        'currentValue': 0.0,
+        'netDeposits': 0.0,
+        'gainLoss': 0.0,
+        'gainLossPercent': 0.0,
+    }
 
 
-    # Running total = shares owned
-    holdings = daily_changes.cumsum()
+def _summarise(series: List[dict]) -> dict:
+    """Headline numbers for the chart: where it ended up against what went in."""
+    if not series:
+        return _empty_summary()
+
+    latest = series[-1]
+    net_deposits = latest['netDeposits']
+    gain_loss = latest['portfolioValue'] - net_deposits
+
+    return {
+        'startValue': series[0]['portfolioValue'],
+        'currentValue': latest['portfolioValue'],
+        'netDeposits': net_deposits,
+        'gainLoss': round(gain_loss, 2),
+        # Against deposits, not against the first point: a percentage of
+        # zero deposits is undefined rather than infinite.
+        'gainLossPercent': round(gain_loss / net_deposits * 100, 2) if net_deposits else 0.0,
+    }
 
 
-    return holdings
+def _by_asset_type(
+    shares: Dict[str, Decimal],
+    asset_type_of: Dict[str, str],
+    price_of: Dict[str, Optional[float]],
+    trades: List[dict],
+) -> List[dict]:
+    """
+    Gain/loss per asset class, measured against what was paid for what is
+    still held, so positions already sold don't distort it.
 
- #extracting holdings
-def get_portfolio_performance(user_id):
-    asset_transactions = pd.DataFrame(get_user_asset_transactions(user_id))
-    tickers = asset_transactions["ticker"].unique()
-    asset_transactions["transactionDate"] = pd.to_datetime(asset_transactions["transactionDate"])
-    start_date = asset_transactions["transactionDate"].min()
-    end_date = pd.Timestamp.today().normalize()
-    price_data = {}
+    Priced at the same live valuation the final series point uses, so the
+    class breakdown adds up to the headline above it.
+    """
+    cost_basis = average_cost_basis(trades)
 
-    for ticker in tickers:
-        price_data[ticker] = (
-        yf.Ticker(ticker).history(start = start_date, end = end_date, auto_adjust=True)["Close"]
-        )
-    prices = pd.DataFrame(price_data)
-    if prices.index.tz is not None:
-        prices.index = prices.index.tz_localize(None)
-    holdings = daily_holdings(
-        asset_transactions, prices.index
-    )
-    holdings = holdings.reindex(prices.index, fill_value=0)
-    prices = prices.ffill()
-    asset_values = holdings*prices
-    portfolio_value = asset_values.sum(axis=1)
-    performance = pd.DataFrame({ "date": portfolio_value.index, "portfolioValue": portfolio_value.values })
-    performance["date"] = performance["date"].dt.strftime("%Y-%m-%d")
-    import matplotlib.pyplot as plt
-    plt.plot(performance["date"], performance["portfolioValue"])
-    plt.show()
-    return performance.to_dict(orient="records")
+    totals: Dict[str, Dict[str, float]] = defaultdict(lambda: {'value': 0.0, 'cost': 0.0})
+    for ticker, quantity in shares.items():
+        if not quantity:
+            continue
+        bucket = totals[asset_type_of[ticker]]
+        bucket['value'] += float(quantity) * (price_of.get(ticker) or 0.0)
+        bucket['cost'] += float(quantity) * float(cost_basis.get(ticker, Decimal('0')))
 
-
-''' if __name__ == "__main__":
-    import sys
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
-    user_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    records = get_portfolio_performance(user_id)
-    debug_df = pd.DataFrame(records)
-
-    plt.figure(figsize=(12, 5))
-    plt.plot(pd.to_datetime(debug_df["date"]), debug_df["portfolioValue"], linewidth=2)
-    plt.title("Portfolio Performance")
-    plt.xlabel("Date")
-    plt.ylabel("Portfolio Value")
-    plt.grid(True)
-    plt.tight_layout()
-
-    out_path = f"portfolio_{user_id}.png"
-    plt.savefig(out_path)
-    print(f"Saved chart to {out_path}")
+    return [
+        {
+            'assetType': asset_type,
+            'value': round(bucket['value'], 2),
+            'costBasis': round(bucket['cost'], 2),
+            'gainLoss': round(bucket['value'] - bucket['cost'], 2),
+            'gainLossPercent': (
+                round((bucket['value'] - bucket['cost']) / bucket['cost'] * 100, 2)
+                if bucket['cost'] else 0.0
+            ),
+        }
+        for asset_type, bucket in sorted(totals.items())
+    ]
 
 
+def average_cost_basis(trades: List[dict]) -> Dict[str, Decimal]:
+    """
+    The average price paid per unit still held, per ticker.
 
+    A sale reduces the position without moving the average, which is the
+    conventional treatment and keeps the basis stable as a position is
+    trimmed. A position closed out to zero resets, so buying back in starts
+    from the new price rather than inheriting an old one.
 
+    Args:
+        trades (list[dict]): Asset trades, oldest first, with signed `qty`.
 
+    Returns:
+        dict[str, Decimal]: Average unit cost, keyed by ticker.
+    """
+    quantities: Dict[str, Decimal] = defaultdict(Decimal)
+    averages: Dict[str, Decimal] = defaultdict(Decimal)
 
+    for trade in trades:
+        ticker = trade['ticker']
+        quantity = Decimal(str(trade['qty']))
+        price = Decimal(str(trade['price']))
+        held = quantities[ticker]
 
+        if quantity > 0:
+            total_cost = averages[ticker] * held + quantity * price
+            quantities[ticker] = held + quantity
+            averages[ticker] = total_cost / quantities[ticker]
+        else:
+            quantities[ticker] = held + quantity
+            if quantities[ticker] <= 0:
+                quantities[ticker] = Decimal('0')
+                averages[ticker] = Decimal('0')
 
-
-
-
-
-
- '''
+    return averages

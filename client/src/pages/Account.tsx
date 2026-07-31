@@ -3,14 +3,19 @@ import { updateUser, type User } from '../api'
 import { validateName, validatePassword, validateUsername } from '../validation'
 import './Account.css'
 
+type Status = { kind: 'success' | 'error'; text: string }
+
 function Account({ user, onUpdate }: { user: User; onUpdate: (user: User) => void }) {
   const [username, setUsername] = useState(user.username)
   const [firstName, setFirstName] = useState(user.firstName)
   const [lastName, setLastName] = useState(user.lastName)
+  // Three password fields are irrelevant to most visits, so they stay
+  // folded away behind a control until someone says that's why they came.
+  const [changingPassword, setChangingPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [statusMessage, setStatusMessage] = useState('')
+  const [status, setStatus] = useState<Status | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   function validate(): string | null {
@@ -21,7 +26,6 @@ function Account({ user, onUpdate }: { user: User; onUpdate: (user: User) => voi
     const lastNameError = validateName(lastName, 'Last name')
     if (lastNameError) return lastNameError
 
-    const changingPassword = currentPassword || newPassword || confirmPassword
     if (changingPassword) {
       if (!currentPassword) return 'Enter your current password.'
       const passwordError = validatePassword(newPassword)
@@ -31,32 +35,43 @@ function Account({ user, onUpdate }: { user: User; onUpdate: (user: User) => voi
     return null
   }
 
+  function cancelPasswordChange() {
+    setChangingPassword(false)
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
     const validationError = validate()
     if (validationError) {
-      setStatusMessage(validationError)
+      setStatus({ kind: 'error', text: validationError })
       return
     }
 
     setIsSubmitting(true)
-    setStatusMessage('')
+    setStatus(null)
 
     try {
       const updated = await updateUser(user.userId, {
         username: username.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
-        ...(newPassword && { currentPassword, newPassword }),
+        ...(changingPassword && newPassword && { currentPassword, newPassword }),
       })
       onUpdate(updated)
-      setStatusMessage('Account updated successfully.')
-      setCurrentPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
+      setStatus({
+        kind: 'success',
+        text: changingPassword ? 'Account and password updated.' : 'Account updated.',
+      })
+      cancelPasswordChange()
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : 'Failed to update account.')
+      setStatus({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Failed to update account.',
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -65,90 +80,113 @@ function Account({ user, onUpdate }: { user: User; onUpdate: (user: User) => voi
   return (
     <section id="account-content">
       <div className="account-card">
-        <h2>Account</h2>
+        <h1 className="account-title">Account</h1>
+
         <form onSubmit={handleSubmit}>
-          <label className="account-label" htmlFor="account-username">
-            Username
-          </label>
-          <input
-            id="account-username"
-            type="text"
-            autoComplete="username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
+          <fieldset className="account-group">
+            <legend className="account-legend">Your details</legend>
 
-          <label className="account-label" htmlFor="account-first-name">
-            First Name
-          </label>
-          <input
-            id="account-first-name"
-            type="text"
-            autoComplete="given-name"
-            value={firstName}
-            onChange={(e) => setFirstName(e.target.value)}
-            required
-          />
+            <div className="account-field">
+              <label htmlFor="account-username">Username</label>
+              <input
+                id="account-username"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
 
-          <label className="account-label" htmlFor="account-last-name">
-            Last Name
-          </label>
-          <input
-            id="account-last-name"
-            type="text"
-            autoComplete="family-name"
-            value={lastName}
-            onChange={(e) => setLastName(e.target.value)}
-            required
-          />
+            <div className="account-row">
+              <div className="account-field">
+                <label htmlFor="account-first-name">First name</label>
+                <input
+                  id="account-first-name"
+                  type="text"
+                  autoComplete="given-name"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                />
+              </div>
 
-          <h3 className="account-subheading">Change Password</h3>
-          <p className="account-hint">Leave these blank to keep your current password.</p>
+              <div className="account-field">
+                <label htmlFor="account-last-name">Last name</label>
+                <input
+                  id="account-last-name"
+                  type="text"
+                  autoComplete="family-name"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+          </fieldset>
 
-          <label className="account-label" htmlFor="account-current-password">
-            Current Password
-          </label>
-          <input
-            id="account-current-password"
-            type="password"
-            autoComplete="current-password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-          />
+          <fieldset className="account-group">
+            <legend className="account-legend">Password</legend>
 
-          <label className="account-label" htmlFor="account-new-password">
-            New Password
-          </label>
-          <input
-            id="account-new-password"
-            type="password"
-            autoComplete="new-password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          />
+            {changingPassword ? (
+              <>
+                <div className="account-field">
+                  <label htmlFor="account-current-password">Current password</label>
+                  <input
+                    id="account-current-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    autoFocus
+                  />
+                </div>
 
-          <label className="account-label" htmlFor="account-confirm-password">
-            Confirm New Password
-          </label>
-          <input
-            id="account-confirm-password"
-            type="password"
-            autoComplete="new-password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-          />
+                <div className="account-field">
+                  <label htmlFor="account-new-password">New password</label>
+                  <input
+                    id="account-new-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </div>
+
+                <div className="account-field">
+                  <label htmlFor="account-confirm-password">Confirm new password</label>
+                  <input
+                    id="account-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                  />
+                </div>
+
+                <button type="button" className="account-link-btn" onClick={cancelPasswordChange}>
+                  Keep my current password
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setChangingPassword(true)}
+              >
+                Change password
+              </button>
+            )}
+          </fieldset>
 
           <button type="submit" className="submit-btn" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving...' : 'Save Changes'}
+            {isSubmitting ? 'Saving…' : 'Save changes'}
           </button>
         </form>
 
-        {statusMessage && (
-          <p className={`account-status ${statusMessage.includes('success') ? 'success' : 'error'}`}>
-            {statusMessage}
-          </p>
-        )}
+        <p className={`account-status ${status?.kind ?? ''}`} role="status">
+          {status?.text}
+        </p>
       </div>
     </section>
   )

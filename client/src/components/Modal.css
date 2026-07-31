@@ -1,23 +1,30 @@
-/* Chrome shared by every modal: the backdrop, the card, its action row,
-   and the buttons in it. Imported by each modal component so none of them
-   depends on another one's stylesheet having been loaded. */
+/* Chrome shared by every modal: the backdrop, the card, its title, action
+   row, and the buttons in it. Imported by Modal.tsx, which every dialog in
+   the app renders through. */
 
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(12, 16, 24, 0.65);
+  background: rgba(20, 26, 16, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 1000;
+  z-index: var(--z-modal-backdrop);
 }
 
 .modal-card {
   width: min(420px, 100%);
   background: var(--surface);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 24px;
+  z-index: var(--z-modal);
+}
+
+.modal-title {
+  font-size: var(--fs-lg);
+  margin: 0 0 8px;
 }
 
 .modal-actions {
@@ -26,23 +33,37 @@
   gap: 10px;
 }
 
-.secondary-btn,
-.submit-btn,
-.danger-btn {
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 14px;
+/* The review block on anything that moves money: what is about to happen,
+   itemised, with the resulting balance as the last line. Set as a ledger
+   extract rather than prose so the numbers line up and can be checked.
+   Lives here because both the wallet dialog and the trade confirmation
+   render it, and both go through Modal. */
+.confirm-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-sm);
+}
+
+.confirm-summary dt {
+  color: var(--text-muted);
+}
+
+.confirm-summary dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text-h);
   font-weight: 600;
-  cursor: pointer;
 }
 
-.danger-btn {
-  background: var(--negative-bg);
-  color: var(--negative);
-  transition: opacity 0.15s;
-}
-
-.danger-btn:hover {
-  opacity: 0.75;
+/* The bottom line of the extract - what the user is left with - gets the
+   rule above it that a statement total would have. */
+.confirm-summary .confirm-summary-total {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
 }

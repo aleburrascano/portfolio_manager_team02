@@ -1,46 +1,122 @@
 #dashboard-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 20px 40px;
+  gap: 14px;
+  padding: 20px 24px 28px;
 }
 
-.dashboard-grid {
+/* Wide panel beside narrow one. The 2:1 split holds until the narrow
+   column would drop under ~300px, at which point both go full width - a
+   chart squeezed into a third of a tablet is worse than a stacked one. */
+.dashboard-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-}
-
-.dashboard-placeholder {
-  margin: 0;
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--text-muted);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+  gap: 14px;
+  align-items: start;
 }
 
 .dashboard-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: var(--shadow-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  min-width: 0;
 }
 
-.dashboard-card-header {
-  margin-bottom: 16px;
+.dashboard-empty-body {
+  margin: 0 0 16px;
+  max-width: 46ch;
+  color: var(--text);
+  text-wrap: pretty;
 }
 
-.dashboard-placeholder-card {
+.dashboard-empty .secondary-btn {
+  background: var(--surface);
+}
+
+.composition-skeleton {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 280px;
+  align-items: center;
+  gap: 18px;
 }
 
-.dashboard-placeholder-card p {
-  margin: 0;
-  color: var(--text-muted);
+.skeleton-donut {
+  width: 112px;
+  height: 112px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-legend {
+  height: 96px;
+  flex: 1;
+}
+
+/* On a screen with room for it, the dashboard is fitted to the viewport
+   rather than scrolled: the grid takes the height available and the two
+   list panels scroll inside their own boxes. That keeps every panel on
+   screen at once, which is the point of a dashboard.
+
+   Gated on height as well as width, because below ~780px the rows would
+   be too short to read and an honest scroll beats a crushed one. */
+@media (min-width: 1001px) and (min-height: 780px) {
+  #dashboard-content {
+    display: grid;
+    /* head · watchlist · performance+composition · holdings */
+    grid-template-rows: auto auto minmax(0, 1.25fr) minmax(0, 1fr);
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .dashboard-row,
+  .dashboard-card {
+    min-height: 0;
+  }
+
+  .dashboard-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* The chart takes what the row gives it instead of a fixed height. */
+  .performance-card .performance-body {
+    flex: 1;
+    min-height: 150px;
+    height: auto;
+  }
+
+  /* Long books scroll in the panel, not the page. */
+  .holdings-card .holdings-scroll {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  .holdings-card .holdings-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background: var(--surface);
+  }
+
+  .composition-card-scroll {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
+@media (max-width: 1000px) {
+  .dashboard-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  #dashboard-content {
+    padding: 14px 14px 28px;
+    gap: 12px;
+  }
+
+  .dashboard-card {
+    padding: 14px;
+  }
 }

@@ -1,34 +1,80 @@
 #trade-assets-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 20px 40px;
+  gap: 16px;
+  padding: 24px 24px 40px;
   text-align: left;
+}
+
+/* Tabs left, search right, on one line while there is room for both. */
+.trade-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.trade-controls .search-bar {
+  flex: 1;
+  min-width: 220px;
 }
 
 .asset-type-tabs {
   display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  border-radius: var(--radius-sm);
 }
 
 .asset-type-tabs button {
-  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   border: none;
-  background: var(--surface);
-  padding: 10px;
+  border-radius: 2px;
+  background: none;
+  padding: 8px 16px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
   color: var(--text-muted);
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.asset-type-tabs button:hover {
+  color: var(--text-h);
 }
 
 .asset-type-tabs button.active {
-  background: var(--accent-bg);
-  color: var(--accent);
+  background: var(--surface);
+  color: var(--accent-ink);
+  box-shadow: 0 1px 2px rgba(28, 40, 24, 0.12);
 }
 
-.asset-type-tabs button:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+@media (max-width: 640px) {
+  #trade-assets-content {
+    padding: 16px 14px 32px;
+  }
+
+  /* The tab group takes the full row and splits it three ways, so each
+     target stays comfortably over 44px on a phone. */
+  .asset-type-tabs {
+    width: 100%;
+  }
+
+  .asset-type-tabs button {
+    flex: 1;
+    padding: 10px 8px;
+  }
+
+  .trade-controls .search-bar {
+    min-width: 0;
+  }
 }

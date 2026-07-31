@@ -1,9 +1,12 @@
-import { useState, type ReactNode } from 'react'
-import ConfirmDialog from './ConfirmDialog'
+import type { ReactNode } from 'react'
 import './Sidebar.css'
 
 export type Page = 'dashboard' | 'trade-assets' | 'transaction-history' | 'account'
 
+// Three destinations, not five: account settings and logging out moved to
+// the account menu in the header, which is where people reach for them.
+// That leaves the rail (and the phone's bottom bar) with only the places
+// you actually navigate between.
 const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   {
     page: 'dashboard',
@@ -19,7 +22,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   },
   {
     page: 'trade-assets',
-    label: 'Trade Assets',
+    label: 'Trade',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5V9m4.5 7.5V4.5M12 16.5v-5m4.5 5V7" />
@@ -28,7 +31,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   },
   {
     page: 'transaction-history',
-    label: 'Transaction History',
+    label: 'History',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="10" cy="10" r="7.25" />
@@ -36,73 +39,30 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
       </svg>
     ),
   },
-  {
-    page: 'account',
-    label: 'Account',
-    icon: (
-      <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <rect x="2.5" y="4" width="15" height="12" rx="2" />
-        <circle cx="7.5" cy="9.5" r="1.75" />
-        <path strokeLinecap="round" d="M5.5 13.5c0.5-1.5 1.8-2.25 2-2.25s1.5 0.75 2 2.25" />
-        <path strokeLinecap="round" d="M12 8.5h3.5M12 11.5h3.5" />
-      </svg>
-    ),
-  },
 ]
 
-const LOGOUT_ICON = (
-  <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
-    <circle cx="10" cy="6.5" r="3.25" />
-    <path strokeLinecap="round" d="M3.5 17c0-3.59 2.91-6.5 6.5-6.5s6.5 2.91 6.5 6.5" />
-  </svg>
-)
-
-function Sidebar({
-  page,
-  onNavigate,
-  onLogout,
-}: {
-  page: Page
-  onNavigate: (page: Page) => void
-  onLogout: () => void
-}) {
-  const [confirmingLogout, setConfirmingLogout] = useState(false)
-
+function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (page: Page) => void }) {
   return (
-    <>
-      <nav className="sidebar">
-        <ul className="sidebar-nav">
-          {NAV_ITEMS.map((item) => (
-            <li key={item.page}>
-              <button
-                type="button"
-                className={page === item.page ? 'active' : ''}
-                onClick={() => onNavigate(item.page)}
-              >
-                <span className="sidebar-icon">{item.icon}</span>
-                {item.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        <button type="button" className="sidebar-logout" onClick={() => setConfirmingLogout(true)}>
-          <span className="sidebar-icon">{LOGOUT_ICON}</span>
-          Log Out
-        </button>
-      </nav>
-
-      {confirmingLogout && (
-        <ConfirmDialog
-          title="Log out?"
-          message="You'll need to sign in again to get back to your portfolio."
-          confirmLabel="Log Out"
-          destructive
-          onConfirm={onLogout}
-          onCancel={() => setConfirmingLogout(false)}
-        />
-      )}
-    </>
+    <nav className="sidebar" aria-label="Main">
+      <ul className="sidebar-nav">
+        {NAV_ITEMS.map((item) => (
+          <li key={item.page}>
+            <button
+              type="button"
+              className={page === item.page ? 'active' : ''}
+              aria-current={page === item.page ? 'page' : undefined}
+              title={item.label}
+              onClick={() => onNavigate(item.page)}
+            >
+              <span className="sidebar-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span className="sidebar-label">{item.label}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
   )
 }
 
