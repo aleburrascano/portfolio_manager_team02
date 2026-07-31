@@ -9,13 +9,31 @@
   border: none;
   background: none;
   color: var(--text-muted);
-  font-size: 14px;
+  font-family: var(--sans);
+  font-size: var(--fs-base);
   cursor: pointer;
-  padding: 0;
+  padding: 4px 0;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 .back-btn:hover {
   color: var(--text-h);
+}
+
+.asset-detail-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.skeleton-title {
+  height: 32px;
+  width: min(280px, 60%);
+}
+
+.skeleton-chart {
+  height: 320px;
+  border-radius: var(--radius);
 }
 
 .asset-detail-title {
@@ -25,7 +43,7 @@
 }
 
 .asset-detail-title h1 {
-  font-size: 22px;
+  font-size: var(--fs-xl);
   margin: 0;
 }
 
@@ -46,6 +64,7 @@
 .asset-detail-side {
   position: sticky;
   top: 16px;
+  z-index: var(--z-sticky);
 }
 
 @media (max-width: 760px) {
@@ -59,7 +78,8 @@
 }
 
 .chart-card,
-.trade-card {
+.trade-card,
+.stats-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -79,28 +99,52 @@
   border-bottom: 2px solid transparent;
   background: none;
   padding: 9px;
+  font-family: var(--sans);
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: var(--fs-sm);
   cursor: pointer;
   color: var(--text-muted);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.trade-tabs button:hover {
+  color: var(--text-h);
 }
 
 .trade-tabs button.active {
   border-bottom-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 
 .trade-price {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-size: 26px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--text-h);
   margin-bottom: 16px;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border-radius: var(--radius-sm);
+  transition: background-color 600ms var(--ease);
+}
+
+/* The flash is the arriving value announcing itself; it decays back to the
+   page over 600ms, which the reduced-motion rule collapses to nothing. */
+.trade-price.tick-up {
+  background: var(--positive-bg);
+  transition-duration: 0ms;
+}
+
+.trade-price.tick-down {
+  background: var(--negative-bg);
+  transition-duration: 0ms;
 }
 
 .trade-price span {
-  font-size: 14px;
+  font-size: var(--fs-base);
   font-weight: 600;
   margin-left: 4px;
 }
@@ -113,46 +157,85 @@
   color: var(--negative);
 }
 
-.trade-card form label {
-  display: block;
-  font-size: 13px;
-  color: var(--text-muted);
+.quote-feed {
+  margin: -8px 0 16px;
+}
+
+.trade-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 6px;
 }
 
+.trade-card form label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
 .trade-max {
-  float: right;
-  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
 
 .trade-card form input {
   width: 100%;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   background: var(--bg);
   color: var(--text-h);
-  margin-bottom: 12px;
-  font-size: 14px;
-  font-family: var(--mono);
-}
-
-.trade-total {
+  margin-bottom: 14px;
+  font-size: var(--fs-base);
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--text-h);
+}
+
+/* A ledger extract, not a single total: what the order costs, what is in
+   the wallet, and what is left. */
+.trade-summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 7px 12px;
   margin: 0 0 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.trade-summary dt {
+  color: var(--text-muted);
+}
+
+.trade-summary dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.trade-summary .trade-summary-after {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-h);
+}
+
+/* Says the order can't be afforded before the button is ever pressed. */
+.trade-summary dd.trade-summary-after.short {
+  color: var(--negative);
 }
 
 .trade-card .submit-btn {
   width: 100%;
   padding: 10px;
+  text-transform: capitalize;
 }
 
 .trade-status {
   margin: 12px 0 0;
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
 }
 
@@ -164,36 +247,39 @@
   color: var(--negative);
 }
 
-.stats-grid {
+.stats-card {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px 24px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px 32px;
 }
 
-.stats-grid > div {
-  display: flex;
-  justify-content: space-between;
-  font-size: 13.5px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+.stats-group {
+  min-width: 0;
 }
 
-.stats-grid > div:nth-last-child(-n + 2) {
-  border-bottom: none;
-  padding-bottom: 0;
+.stats-heading {
+  margin: 0 0 10px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
 }
 
-.stats-grid > div span:last-child {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
+.stats-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 16px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.stats-list dt {
+  color: var(--text);
+}
+
+.stats-list dd {
+  margin: 0;
+  text-align: right;
   color: var(--text-h);
   font-weight: 500;
-}
-
-.stats-label {
-  color: var(--text-muted);
 }

@@ -12,14 +12,19 @@ import {
   type User,
 } from '../api'
 import { useBalance } from '../balance-context'
-import { useLiveQuotes } from '../realtime'
+import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../realtime'
 import { useIdempotencyKey } from '../idempotency'
 import { validateQuantityInput } from '../validation'
 import { formatCurrency, formatNumber } from '../format'
 import AssetLogo from './AssetLogo'
+import AnalystRatings from './AnalystRatings'
+import ConfirmDialog from './ConfirmDialog'
+import LiveIndicator from './LiveIndicator'
+import WatchButton from './WatchButton'
 import './AssetDetail.css'
 
 type Side = 'buy' | 'sell'
+type Status = { kind: 'success' | 'error'; text: string }
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -44,8 +49,9 @@ function AssetDetail({
   const [shares, setShares] = useState(0)
   const [side, setSide] = useState<Side>('buy')
   const [quantity, setQuantity] = useState('1')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState<Status | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -85,13 +91,15 @@ function AssetDetail({
     }
   }, [assetType, symbol, user.userId])
 
-  const live = useLiveQuotes(assetType, [symbol])
+  const { quotes: live, lastUpdate } = useLiveFeed(assetType, [symbol])
   // The pushed update carries only the fields that have a value, so it
   // refreshes the price without wiping the fields it doesn't cover.
   const quote = detail ? { ...detail, ...live[symbol] } : null
 
   const price = quote?.currentPrice ?? 0
   const isPositive = (quote?.change ?? 0) >= 0
+  const connected = useQuoteConnection()
+  const tick = usePriceDirection(quote?.currentPrice)
   const parsedQuantity = Number(quantity)
   const maxQuantity =
     side === 'buy'
@@ -100,31 +108,46 @@ function AssetDetail({
         : 0
       : shares
   const total = Number.isFinite(parsedQuantity) ? parsedQuantity * price : 0
+  const isBuy = side === 'buy'
+  const cashAfter = balance !== null ? (isBuy ? balance - total : balance + total) : null
+  const sharesAfter = isBuy ? shares + parsedQuantity : shares - parsedQuantity
 
   function switchSide(next: Side) {
     setSide(next)
-    setStatus('')
+    setStatus(null)
     setQuantity('1')
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  /** Validates and opens the review. Nothing is sent from here. */
+  function handleReview(e: React.FormEvent) {
     e.preventDefault()
-    setStatus('')
+    setStatus(null)
 
     const quantityError = validateQuantityInput(quantity)
     if (quantityError) {
-      setStatus(quantityError)
+      setStatus({ kind: 'error', text: quantityError })
       return
     }
     if (parsedQuantity > maxQuantity) {
-      setStatus(side === 'buy' ? 'Not enough cash!' : 'Not enough shares!')
+      setStatus({
+        kind: 'error',
+        text: isBuy
+          ? `${formatCurrency(total)} is more than your ${formatCurrency(balance ?? 0)} cash balance. The most you can buy at this price is ${formatNumber(maxQuantity, 2)}.`
+          : `You hold ${formatNumber(shares, 2)} ${symbol}, so you can't sell ${formatNumber(parsedQuantity, 2)}.`,
+      })
       return
     }
 
+    setConfirming(true)
+  }
+
+  async function handleConfirm() {
+    setConfirming(false)
     setSubmitting(true)
+
     try {
       const key = idempotency.keyFor(`${side}:${assetType}:${symbol}:${parsedQuantity}`)
-      if (side === 'buy') {
+      if (isBuy) {
         await buyAsset(user.userId, assetType, symbol, parsedQuantity, key)
       } else {
         await sellAsset(user.userId, assetType, symbol, parsedQuantity, key)
@@ -133,9 +156,15 @@ function AssetDetail({
       setShares(await fetchHoldings(user.userId, assetType, symbol))
       await refreshBalance()
       setQuantity('1')
-      setStatus(side === 'buy' ? 'Purchase successful!' : 'Sale successful!')
+      setStatus({
+        kind: 'success',
+        text: `${isBuy ? 'Bought' : 'Sold'} ${formatNumber(parsedQuantity, 2)} ${symbol} for ${formatCurrency(total)}.`,
+      })
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Transaction failed.')
+      setStatus({
+        kind: 'error',
+        text: error instanceof Error ? error.message : 'Transaction failed.',
+      })
     } finally {
       setSubmitting(false)
     }
@@ -150,7 +179,11 @@ function AssetDetail({
       {detailError ? (
         <p className="asset-list-status">{detailError}</p>
       ) : !quote ? (
-        <p className="asset-list-status">Loading…</p>
+        <div className="asset-detail-loading" aria-busy="true">
+          <span className="visually-hidden">Loading {symbol}</span>
+          <span className="skeleton skeleton-title" />
+          <span className="skeleton skeleton-chart" />
+        </div>
       ) : (
         <>
           <div className="asset-detail-title">
@@ -159,18 +192,28 @@ function AssetDetail({
               <h1>{quote.name}</h1>
               <span className="asset-symbol">{quote.symbol}</span>
             </div>
+            <WatchButton user={user} assetType={assetType} symbol={symbol} />
           </div>
 
           <div className="asset-detail-grid">
             <div className="asset-detail-main">
               <div className="chart-card">
-                <div className="trade-price">
+                {/* tick-* flashes for ~700ms in the direction the price moved,
+                    so a quote that changes while you are reading it says so. */}
+                <div className={`trade-price${tick ? ` tick-${tick}` : ''}`}>
                   {formatCurrency(price)}{' '}
                   <span className={isPositive ? 'positive' : 'negative'}>
                     {isPositive ? '▲' : '▼'} {formatNumber(Math.abs(quote.changePercent ?? 0), 2)}%
                     {' '}({formatCurrency(Math.abs(quote.change ?? 0))})
                   </span>
                 </div>
+                {/* Bonds are repriced on a schedule rather than streamed,
+                    so claiming a live feed for one would be a lie. */}
+                {assetType !== 'bond' && (
+                  <div className="quote-feed">
+                    <LiveIndicator connected={connected} lastUpdate={lastUpdate} />
+                  </div>
+                )}
                 <ResponsiveContainer width="100%" height={280}>
                   <AreaChart data={history} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
                     <defs>
@@ -216,32 +259,36 @@ function AssetDetail({
                 </ResponsiveContainer>
               </div>
 
-              <div className="stats-grid">
-                <div>
-                  <span className="stats-label">Daily High</span>
-                  <span>{quote.dayHigh != null ? formatCurrency(quote.dayHigh) : '—'}</span>
-                </div>
-                <div>
-                  <span className="stats-label">Daily Low</span>
-                  <span>{quote.dayLow != null ? formatCurrency(quote.dayLow) : '—'}</span>
-                </div>
-                <div>
-                  <span className="stats-label">52 Week High</span>
-                  <span>{quote.yearHigh != null ? formatCurrency(quote.yearHigh) : '—'}</span>
-                </div>
-                <div>
-                  <span className="stats-label">52 Week Low</span>
-                  <span>{quote.yearLow != null ? formatCurrency(quote.yearLow) : '—'}</span>
-                </div>
-                <div>
-                  <span className="stats-label">Open</span>
-                  <span>{quote.open != null ? formatCurrency(quote.open) : '—'}</span>
-                </div>
-                <div>
-                  <span className="stats-label">Volume</span>
-                  <span>{quote.volume != null ? formatNumber(quote.volume) : '—'}</span>
-                </div>
+              {/* Six figures split into the two questions they answer -
+                  what happened today, and where today sits in the year -
+                  rather than one flat grid of unrelated numbers. */}
+              <div className="stats-card">
+                <section className="stats-group">
+                  <h3 className="stats-heading">Today</h3>
+                  <dl className="stats-list">
+                    <dt>Open</dt>
+                    <dd className="figure">{quote.open != null ? formatCurrency(quote.open) : '—'}</dd>
+                    <dt>High</dt>
+                    <dd className="figure">{quote.dayHigh != null ? formatCurrency(quote.dayHigh) : '—'}</dd>
+                    <dt>Low</dt>
+                    <dd className="figure">{quote.dayLow != null ? formatCurrency(quote.dayLow) : '—'}</dd>
+                    <dt>Volume</dt>
+                    <dd className="figure">{quote.volume != null ? formatNumber(quote.volume) : '—'}</dd>
+                  </dl>
+                </section>
+
+                <section className="stats-group">
+                  <h3 className="stats-heading">Past 52 weeks</h3>
+                  <dl className="stats-list">
+                    <dt>High</dt>
+                    <dd className="figure">{quote.yearHigh != null ? formatCurrency(quote.yearHigh) : '—'}</dd>
+                    <dt>Low</dt>
+                    <dd className="figure">{quote.yearLow != null ? formatCurrency(quote.yearLow) : '—'}</dd>
+                  </dl>
+                </section>
               </div>
+
+              <AnalystRatings assetType={assetType} symbol={symbol} price={price || null} />
             </div>
 
             <div className="asset-detail-side">
@@ -263,10 +310,13 @@ function AssetDetail({
                   </button>
                 </div>
 
-                <form onSubmit={handleSubmit}>
-                  <label htmlFor="quantity">
-                    Quantity <span className="trade-max">max: {formatNumber(maxQuantity, 1)}</span>
-                  </label>
+                <form onSubmit={handleReview}>
+                  <div className="trade-label-row">
+                    <label htmlFor="quantity">Quantity</label>
+                    <span className="figure trade-max">
+                      max {formatNumber(maxQuantity, 2)}
+                    </span>
+                  </div>
                   <input
                     id="quantity"
                     type="number"
@@ -277,21 +327,68 @@ function AssetDetail({
                     required
                   />
 
-                  <p className="trade-total">Total: {formatCurrency(total)}</p>
+                  {/* The wallet lives here rather than only in the header:
+                      "can I afford this" is the question being asked at
+                      this exact moment, and the answer is the line the
+                      order total is subtracted from. */}
+                  <dl className="trade-summary">
+                    <dt>{isBuy ? 'Order total' : 'Proceeds'}</dt>
+                    <dd className="figure">{formatCurrency(total)}</dd>
+
+                    <dt>Cash available</dt>
+                    <dd className="figure">
+                      {balance !== null ? formatCurrency(balance) : '—'}
+                    </dd>
+
+                    <dt className="trade-summary-after">Cash after</dt>
+                    <dd
+                      className={`figure trade-summary-after${
+                        cashAfter !== null && cashAfter < 0 ? ' short' : ''
+                      }`}
+                    >
+                      {cashAfter !== null ? formatCurrency(cashAfter) : '—'}
+                    </dd>
+                  </dl>
 
                   <button type="submit" className="submit-btn" disabled={submitting}>
-                    {submitting ? 'Submitting...' : 'Submit'}
+                    {submitting ? 'Submitting…' : `Review ${side}`}
                   </button>
                 </form>
 
                 {status && (
-                  <p className={`trade-status ${status.includes('successful') ? 'success' : 'error'}`}>
-                    {status}
+                  <p className={`trade-status ${status.kind}`} role="status">
+                    {status.text}
                   </p>
                 )}
               </div>
             </div>
           </div>
+
+          {confirming && (
+            <ConfirmDialog
+              title={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
+              confirmLabel={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}`}
+              cancelLabel="Back"
+              onConfirm={handleConfirm}
+              onCancel={() => setConfirming(false)}
+              message={
+                <dl className="confirm-summary">
+                  <dt>{isBuy ? 'Buying' : 'Selling'}</dt>
+                  <dd className="figure">
+                    {formatNumber(parsedQuantity, 2)} at {formatCurrency(price)}
+                  </dd>
+                  <dt>{isBuy ? 'Cost' : 'Proceeds'}</dt>
+                  <dd className="figure">{formatCurrency(total)}</dd>
+                  <dt>{symbol} after</dt>
+                  <dd className="figure">{formatNumber(sharesAfter, 2)}</dd>
+                  <dt className="confirm-summary-total">Cash after</dt>
+                  <dd className="figure confirm-summary-total">
+                    {cashAfter !== null ? formatCurrency(cashAfter) : '—'}
+                  </dd>
+                </dl>
+              }
+            />
+          )}
         </>
       )}
     </div>
