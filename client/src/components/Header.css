@@ -4,91 +4,39 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 16px 24px;
+  padding: 14px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-@media (max-width: 640px) {
-  .app-header {
-    padding: 14px 16px;
-  }
-
-  .app-header-actions {
-    gap: 10px;
-  }
-}
-
-.app-header h1 {
-  font-size: 19px;
-  margin: 0;
-}
-
-.app-header-actions {
+.wordmark {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
 }
 
-.balance {
-  font-size: 19px;
+/* Four ascending peaks, drawn in the brand ink. It is the mark, so it gets
+   to be the one piece of pure identity in an otherwise working interface. */
+.wordmark-mark {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.wordmark-text {
+  font-family: var(--heading);
   font-weight: 600;
+  font-size: var(--fs-md);
+  letter-spacing: -0.01em;
   color: var(--text-h);
 }
 
-.deposit-btn,
-.withdraw-btn {
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
-  padding: 7px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  transition:
-    background-color 0.15s,
-    border-color 0.15s;
-}
+@media (max-width: 640px) {
+  .app-header {
+    padding: 10px 14px;
+  }
 
-.deposit-btn {
-  background: var(--positive-bg);
-  border-color: var(--positive);
-  color: var(--positive);
-}
-
-.withdraw-btn {
-  background: var(--negative-bg);
-  border-color: var(--negative);
-  color: var(--negative);
-}
-
-.deposit-btn:hover {
-  background: var(--positive);
-  color: var(--surface);
-}
-
-.withdraw-btn:hover {
-  background: var(--negative);
-  color: var(--surface);
-}
-
-/* The backdrop, card, action row, and button sizing live in Modal.css. */
-
-.modal-card input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  margin-bottom: 16px;
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--text-h);
-}
-
-.modal-status.success {
-  color: var(--positive);
-}
-
-.modal-status.error {
-  color: var(--negative);
+  .wordmark-text {
+    font-size: var(--fs-base);
+  }
 }

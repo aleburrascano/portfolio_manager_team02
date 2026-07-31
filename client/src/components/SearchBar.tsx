@@ -10,7 +10,8 @@ function SearchBar({ value, onChange }: SearchBarProps) {
     <input
       type="search"
       className="search-bar"
-      placeholder="Search"
+      placeholder="Search by name or symbol"
+      aria-label="Search assets"
       value={value}
       onChange={(e) => onChange(e.target.value)}
     />
