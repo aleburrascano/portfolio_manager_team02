@@ -115,6 +115,30 @@ class Bond(Base):
     maturityDate: Mapped[date] = mapped_column(Date)
 
 
+class WatchlistEntry(Base):
+    """
+    A ticker a user has saved to watch, whether or not they hold any of it.
+
+    Deliberately not a foreign key to Assets: that table records what has
+    been *transacted*, and the whole point of a watchlist is to follow
+    something before buying it. The asset type is carried here instead, so
+    the right provider can be asked for a price.
+
+    The composite primary key is also the uniqueness constraint - saving a
+    ticker twice is the same row, so the toggle is idempotent for free.
+    """
+
+    __tablename__ = 'WatchlistEntries'
+    __table_args__ = (Index('ixWatchlistUserAdded', 'userId', 'addedAt'),)
+
+    userId: Mapped[int] = mapped_column(
+        ForeignKey('Users.userId', ondelete='CASCADE'), primary_key=True
+    )
+    ticker: Mapped[str] = mapped_column(String(12), primary_key=True)
+    assetType: Mapped[str] = mapped_column(String(16))
+    addedAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class CashTransaction(Base):
     __tablename__ = 'CashTransactions'
     __table_args__ = (
