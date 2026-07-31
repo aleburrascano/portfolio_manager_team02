@@ -1,21 +1,32 @@
+/* A monogram, sized in em so it scales with whatever it sits beside. The
+   asset type is carried by a tint rather than by an icon, which keeps the
+   three kinds distinguishable at a glance without a second visual system. */
 .asset-logo {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  object-fit: contain;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  width: 2.4em;
+  height: 2.4em;
   flex-shrink: 0;
-  padding: 4px;
-}
-
-.asset-logo-fallback {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg);
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: var(--text-muted);
+  color: var(--text);
+}
+
+.asset-logo-stock {
+  background: var(--paper-band);
+}
+
+.asset-logo-crypto {
+  background: var(--accent-bg);
+  color: var(--accent-ink);
+}
+
+.asset-logo-bond {
+  background: var(--bg);
 }
