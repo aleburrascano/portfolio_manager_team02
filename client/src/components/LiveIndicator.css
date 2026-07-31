@@ -1,0 +1,53 @@
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--positive);
+  animation: live-pulse 2s var(--ease) infinite;
+}
+
+.live-indicator.offline .live-dot {
+  background: var(--negative);
+  animation: none;
+}
+
+.live-indicator.offline {
+  color: var(--negative);
+}
+
+.live-timestamp {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+/* The one ambient animation in the app. It earns its place: a still dot
+   would say nothing that a static price doesn't already say. */
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}

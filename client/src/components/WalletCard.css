@@ -1,0 +1,180 @@
+/* The balance is set as the head of a statement, not as a card: a heavy
+   rule, a quiet label, and the figure itself carrying the weight. Nothing
+   is filled, tinted, or rounded, because a statement earns its authority
+   by refusing ornament. */
+.wallet-statement {
+  margin-bottom: 4px;
+  padding: 14px 0 18px;
+  border-top: 2px solid var(--text-h);
+  border-bottom: 1px solid var(--border);
+}
+
+.wallet-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+}
+
+.wallet-label {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wallet-balance {
+  margin: 6px 0 0;
+  font-size: var(--fs-display);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--text-h);
+}
+
+.wallet-balance-skeleton {
+  display: inline-block;
+  width: 8ch;
+  height: 0.8em;
+  vertical-align: baseline;
+}
+
+.wallet-day {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 6px 0 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.wallet-day.positive {
+  color: var(--positive);
+}
+
+.wallet-day.negative {
+  color: var(--negative);
+}
+
+.wallet-day-label {
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.wallet-split {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 10px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.wallet-split .figure {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
+.wallet-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wallet-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 8px 16px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text-h);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.wallet-btn:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent-ink);
+}
+
+/* Modal contents. The chrome itself lives in Modal.css. */
+.modal-balance {
+  margin: 0 0 18px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.modal-label {
+  display: block;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.modal-card input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  margin-bottom: 20px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--fs-base);
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.modal-card input::placeholder {
+  color: var(--text-muted);
+}
+
+.modal-status {
+  margin: 14px 0 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+/* Empty until there is something to say, but always in the tree, so the
+   live region is registered before the message arrives. */
+.modal-status:empty {
+  display: none;
+}
+
+.modal-status.success {
+  color: var(--positive);
+}
+
+.modal-status.error {
+  color: var(--negative);
+}
+
+@media (max-width: 480px) {
+  .wallet-heading {
+    flex-direction: column;
+  }
+
+  .wallet-actions {
+    width: 100%;
+  }
+
+  .wallet-btn {
+    flex: 1;
+  }
+
+  .wallet-balance {
+    font-size: var(--fs-2xl);
+  }
+}
