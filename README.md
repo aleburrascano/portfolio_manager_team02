@@ -1,198 +1,123 @@
-# Portfolio Manager
+# TreeTop Trading
 
-TAP 2026 Project — a simulated stock trading app. Users get a cash wallet, can search
-live market data, and buy/sell stocks against their balance.
+TAP 2026 Project — a simulated trading app. Users get a cash wallet, browse live
+market data, and buy or sell stocks, crypto and bonds against their balance.
 
 ![DB Schema](assets/db-schema.PNG)
 ![Wireframes](assets/wireframes.PNG)
 
-## Stack
+**Stack** — Flask + SQLAlchemy on the server (MySQL in production, SQLite locally),
+live prices from `yfinance` pushed over Socket.IO; React + TypeScript on the client,
+built with Vite.
 
-- **Server**: Flask + SQLAlchemy (MySQL in production, SQLite for local dev), live market data via `yfinance`.
-- **Client**: React + TypeScript, built with Vite.
+## Running it
 
-## Project structure
+Two processes, both needed.
 
-```
-server/
-  app.py            Flask entry point: config, blueprints
-  authorization.py  session identity + the require_user route guard
-  errors.py         the single JSON error envelope, and the handlers feeding it
-  idempotency.py    Idempotency-Key claim/replay for money-moving routes
-  realtime.py       Socket.IO quote push, replacing client-side polling
-  validation.py     amount/quantity checks at the API boundary
-  links.py          HATEOAS _links builders
-  routes/           blueprints - HTTP only, no business logic
-  services/         business logic, market data, domain exceptions
-  db/               SQLAlchemy models, engine and request-scoped session
-  migrations/       Alembic revisions - the one source of schema history
-  scripts/          standalone tooling: seed data, password reset
-client/
-  src/api/          one module per resource, behind a shared fetch helper
-  src/pages/        one per sidebar destination
-  src/components/   reusable pieces
-assets/             DB schema and wireframe references
+```bash
+# server — http://localhost:5000
+cd server
+python -m venv venv
+./venv/Scripts/activate          # source venv/bin/activate on macOS/Linux
+pip install -r requirements.txt
+alembic upgrade head             # creates or updates the schema
+python app.py
 ```
 
-Layering runs one way: `routes/ → services/ → db/`. Routes never touch the
-database or `yfinance` directly, and services never import Flask. A service
-raises from `services/exceptions.py` to reject a request (each exception
-carries the HTTP status it surfaces as), so routes carry no `try`/`except`.
-All market data access lives in `services/market_data.py`, so swapping or
-stubbing the price feed is a one-file change.
+```bash
+# client — http://localhost:5173
+cd client
+npm install
+npm run dev
+```
 
-## Server setup
+The client proxies `/api` and `/socket.io` to the server, so run both.
+
+### Configuration
+
+Everything lives in `server/.env` (not committed):
+
+| Variable | Purpose |
+| --- | --- |
+| `DATABASE_URL` | `sqlite:///dev.db`, or `mysql+mysqlconnector://user:pass@host/db`. Falls back to the `DB_*` variables if unset. |
+| `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
+| `CORS_ORIGINS` | Comma-separated. Defaults to `http://localhost:5173`. |
+
+MySQL needs its (empty) database to exist first; SQLite doesn't.
+
+## Demo data
+
+`scripts/seed` builds an account with ~2 years of history — stocks, crypto and
+bonds, priced from real market data — which is what makes the dashboard's
+performance chart, composition donut and holdings table worth looking at.
 
 ```bash
 cd server
-python -m venv venv
-./venv/Scripts/activate        # or `source venv/bin/activate` on macOS/Linux
-pip install -r requirements.txt
+python -m scripts.seed --username demo --password demopassword --first Ada --last Lovelace
 ```
 
-### Database
+Then sign in as `demo` / `demopassword`. Re-running regenerates that user's
+transactions, so it's safe to repeat.
 
-The server talks to the database through SQLAlchemy, so the backend is
-switchable via a single `DATABASE_URL` in `.env`:
-
-```
-DATABASE_URL=sqlite:///dev.db                                              # local dev
-DATABASE_URL=mysql+mysqlconnector://root:password@localhost/portfolio_manager
-```
-
-Leave it blank to fall back to the `DB_HOST`/`DB_USER`/`DB_PASSWORD`/`DB_NAME`
-variables. MySQL needs its (empty) database to exist first; SQLite doesn't.
-
-Create or update the schema with Alembic — the same command for either
-backend, and the only supported way to build one:
+To keep demo data away from your working database, point it somewhere separate:
 
 ```bash
-alembic upgrade head
+DATABASE_URL=sqlite:///demo.db alembic upgrade head
+DATABASE_URL=sqlite:///demo.db python -m scripts.seed
+DATABASE_URL=sqlite:///demo.db python app.py
 ```
 
-Optionally load ~2 years of demo transactions for a user:
+`scripts/set_password` resets a password if you need to get back into an account.
+
+## Tests
 
 ```bash
-python -m scripts.seed --first Demo --last User
+cd server && pytest              # services and routes
+cd client && npm test            # components and API layer
+cd e2e    && npx playwright test # full stack, real browser
 ```
 
-#### Schema conventions
+The e2e suite starts its own server and client against a throwaway database.
 
-- **Nothing derived is stored.** A trade's cash effect is `-qty * price`,
-  computed where it's needed. It used to be a `val` column and had already
-  drifted from the quantity and price it came from.
-- **`Assets` owns `assetType`**, not each transaction — it's a property of
-  the ticker, so a new kind of asset is an `INSERT`, not an `ALTER` on an
-  `ENUM`.
-- **Every timestamp is UTC.** The MySQL session timezone is pinned on
-  connect so the database's `now()` agrees with what Python writes.
-- **Usernames are stored lowercased.** MySQL's default collation is
-  case-insensitive and SQLite's comparison is not, so without normalising
-  the same signup would succeed on one and fail on the other.
-- **Transactions are append-only**, which is why they carry no `updatedAt`.
-- `CHECK` constraints keep each type column agreeing with the sign beside
-  it, so `'deposit'` can't hold a negative amount.
+## Layout
 
-#### Changing the schema
+```
+server/
+  routes/       blueprints — HTTP only, no business logic
+  services/     business logic, market data, domain exceptions
+  db/           SQLAlchemy models, engine, request-scoped session
+  migrations/   Alembic revisions — the source of schema history
+  scripts/      seeding and password reset
+client/src/
+  api/          one module per resource, behind a shared fetch helper
+  pages/        one per navigation destination
+  components/   reusable pieces
+```
 
-Edit `db/models.py`, then autogenerate the migration and read what it wrote
-before committing it:
+Layering runs one way: `routes/ → services/ → db/`. Routes never touch the
+database or `yfinance`; services never import Flask. A service raises from
+`services/exceptions.py` to reject a request (each exception carries the status
+it surfaces as), so routes carry no `try`/`except`. All market data access lives
+in `services/market_data.py`, so swapping or stubbing the feed is a one-file
+change.
+
+Routes are served under `/api/v1`. Responses carry a `_links` map of related
+endpoints, and errors are always `{'error': {'message': str, 'code': str}}`.
+
+## Changing the schema
+
+Edit `db/models.py`, generate the migration, and read what it wrote before
+committing it:
 
 ```bash
 alembic revision --autogenerate -m "what changed"
 alembic upgrade head
 ```
 
-`alembic check` fails when the models and the migration history disagree,
-which is what keeps them from drifting apart — worth running in CI.
+`alembic check` fails when the models and the migration history disagree.
 
-Two notes for existing databases. One created before Alembic was adopted
-already has the `0001` schema, so tell Alembic that rather than re-running
-it:
-
-```bash
-alembic stamp 0001 && alembic upgrade head
-```
-
-And migration `0002` backfills pre-existing users with an empty password
-hash, which never matches, so those accounts can't be logged into until a
-password is set:
-
-```bash
-python -m scripts.set_password --list
-python -m scripts.set_password <username> <password>
-```
-
-Run the server:
-
-```bash
-python app.py
-```
-
-The API is available at `http://localhost:5000`.
-
-### Endpoints
-
-All routes are served under an `/api/v1` prefix (kept separate from Vite's
-build output, which also lives under `/assets` in production, and versioned
-so future breaking changes can live alongside it at `/api/v2`).
-
-| Method | Route                                  | Description                                  |
-| ------ | ---------------------------------------- | --------------------------------------------- |
-| POST   | `/api/v1/auth/register`                  | Create an account (username, password, name)  |
-| POST   | `/api/v1/auth/login`                     | Log in with a username and password           |
-| POST   | `/api/v1/auth/logout`                    | End the current session                       |
-| GET    | `/api/v1/auth/me`                        | Get the user owning the current session       |
-| GET    | `/api/v1/users/:userId/balance`          | Get a user's wallet balance                   |
-| GET    | `/api/v1/users/:userId/transactions`     | Transaction history, newest first (`?limit=&offset=`) |
-| GET    | `/api/v1/assets/:assetType/search?q=`    | Search assets by ticker or name (assetType: stock, crypto) |
-| GET    | `/api/v1/assets/:assetType/popular`      | Get popular assets of that type               |
-
-Responses include a `_links` map of related endpoint URLs (HATEOAS), and
-errors are always shaped as `{'error': {'message': str, 'code': str}}`.
-
-### Live prices
-
-Prices are pushed over a Socket.IO WebSocket on the same port as the REST
-API, rather than polled. A client emits `subscribe` with `{symbols: [...]}`
-and gets a `quote` event per symbol immediately, then again every
-`BROADCAST_INTERVAL_SECONDS` (5) for as long as it stays subscribed;
-`unsubscribe` and disconnecting both stop it.
-
-Only symbols with at least one subscriber are ever fetched, so an idle
-server does no work. Quotes are public, matching the REST asset routes.
-
-### Idempotency
-
-The four routes that move money — `deposit`, `withdraw`, `buy`, `sell` —
-accept an optional `Idempotency-Key` header so a retry can't do the work
-twice. The first request to claim a key does the work and its response is
-stored; a repeat carrying the same key gets that response back without
-re-executing. Reusing a key for a *different* request is a 409 rather than
-a wrong replay, and a rejected request releases its key so the caller can
-correct it and retry with the same one. Omitting the header keeps the old
-behaviour. Records are swept after 24 hours, and a claim left without a
-response for 5 minutes is treated as abandoned so its key frees up.
-
-Every `/users/:userId/...` route is session-scoped: logging in sets a signed
-httpOnly cookie, and a request without one gets a 401 while a request for a
-different user's `:userId` gets a 403. Set `SECRET_KEY` in `.env` to sign
-those cookies — without it the app falls back to a per-process random key,
-so sessions won't survive a restart. The asset quote/search routes stay
-public.
-
-Set `CORS_ORIGINS` (comma-separated) in `.env` to allow the client's origin;
-defaults to `http://localhost:5173`.
-
-## Client setup
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-The dev server runs at `http://localhost:5173` and proxies `/api` requests to
-the Flask server at `http://localhost:5000`, so run both at once.
-
-Other scripts: `npm run build`, `npm run lint`, `npm run preview`.
+The conventions the schema relies on — nothing derived is stored, timestamps are
+UTC, transactions are append-only, `CHECK` constraints keep each type column
+agreeing with the sign beside it — are documented in `db/models.py`. The same
+goes for idempotency (`idempotency.py`) and the live quote feed (`realtime.py`),
+which each explain themselves where they live.
