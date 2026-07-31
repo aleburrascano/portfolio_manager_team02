@@ -1,14 +1,15 @@
 import { useState } from 'react'
 import { submitCashTransaction, type TransactionType, type User } from '../api'
 import { useBalance } from '../balance-context'
+import { useIdempotencyKey } from '../idempotency'
+import { validateAmountInput } from '../validation'
+import { formatCurrency } from '../format'
+import './Modal.css'
 import './Header.css'
-
-function formatCurrency(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function Header({ user }: { user: User }) {
   const { balance, refreshBalance } = useBalance()
+  const idempotency = useIdempotencyKey()
   const [isPopupOpen, setIsPopupOpen] = useState(false)
   const [transactionType, setTransactionType] = useState<TransactionType>('deposit')
   const [amount, setAmount] = useState('')
@@ -25,11 +26,12 @@ function Header({ user }: { user: User }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
 
-    const parsedAmount = Number(amount)
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setStatusMessage('Please enter a positive amount.')
+    const amountError = validateAmountInput(amount)
+    if (amountError) {
+      setStatusMessage(amountError)
       return
     }
+    const parsedAmount = Number(amount)
 
     if (transactionType === 'withdraw' && balance !== null && parsedAmount > balance) {
       setStatusMessage(`Withdrawal amount exceeds current balance of ${formatCurrency(balance)}.`)
@@ -40,7 +42,13 @@ function Header({ user }: { user: User }) {
     setStatusMessage('')
 
     try {
-      await submitCashTransaction(user.userId, transactionType, parsedAmount)
+      await submitCashTransaction(
+        user.userId,
+        transactionType,
+        parsedAmount,
+        idempotency.keyFor(`${transactionType}:${parsedAmount}`),
+      )
+      idempotency.reset()
       await refreshBalance()
       setStatusMessage(`${transactionType === 'deposit' ? 'Deposit' : 'Withdrawal'} submitted successfully.`)
       setAmount('')

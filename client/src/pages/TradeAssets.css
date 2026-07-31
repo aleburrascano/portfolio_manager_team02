@@ -1,0 +1,34 @@
+#trade-assets-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 20px 40px;
+  text-align: left;
+}
+
+.asset-type-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.asset-type-tabs button {
+  flex: 1;
+  border: none;
+  background: var(--surface);
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.asset-type-tabs button.active {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.asset-type-tabs button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

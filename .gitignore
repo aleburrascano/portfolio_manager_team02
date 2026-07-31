@@ -1,5 +1,8 @@
 .env
 
+# Local SQLite databases
+*.db
+
 # Python
 venv/
 env/
@@ -8,3 +11,6 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .egg
+
+# Local database dumps
+backups/
