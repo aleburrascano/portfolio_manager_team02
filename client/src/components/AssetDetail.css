@@ -62,37 +62,39 @@
 .trade-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  padding: 16px;
+  border-radius: var(--radius);
+  padding: 18px;
 }
 
 .trade-tabs {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 16px;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
 }
 
 .trade-tabs button {
   flex: 1;
   border: none;
-  background: var(--surface);
-  padding: 10px;
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: 9px;
   font-weight: 600;
+  font-size: 13.5px;
   cursor: pointer;
   color: var(--text-muted);
 }
 
 .trade-tabs button.active {
-  background: var(--accent-bg);
+  border-bottom-color: var(--accent);
   color: var(--accent);
 }
 
 .trade-price {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-h);
   margin-bottom: 16px;
 }
@@ -120,18 +122,24 @@
 
 .trade-max {
   float: right;
+  font-family: var(--mono);
 }
 
 .trade-card form input {
   width: 100%;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
   margin-bottom: 12px;
   font-size: 14px;
+  font-family: var(--mono);
 }
 
 .trade-total {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--text-h);
   margin: 0 0 16px;
@@ -139,14 +147,7 @@
 
 .trade-card .submit-btn {
   width: 100%;
-  border: none;
-  border-radius: 8px;
   padding: 10px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  background: var(--text-h);
-  color: var(--surface);
 }
 
 .trade-status {
@@ -166,18 +167,31 @@
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 12px 24px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-  padding: 16px;
+  border-radius: var(--radius);
+  padding: 16px 18px;
 }
 
 .stats-grid > div {
   display: flex;
   justify-content: space-between;
-  font-size: 14px;
+  font-size: 13.5px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-grid > div:nth-last-child(-n + 2) {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.stats-grid > div span:last-child {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-h);
+  font-weight: 500;
 }
 
 .stats-label {

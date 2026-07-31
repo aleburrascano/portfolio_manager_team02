@@ -2,13 +2,14 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
-  padding: 24px 20px 40px;
+  padding: 28px 24px 40px;
 }
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 20px;
+  align-items: start;
 }
 
 .dashboard-placeholder {
@@ -18,29 +19,25 @@
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 .dashboard-card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: var(--shadow-soft);
+  border-top: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px 22px;
 }
 
 .dashboard-card-header {
-  margin-bottom: 16px;
+  margin-bottom: 4px;
 }
 
-.dashboard-placeholder-card {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 280px;
-}
-
-.dashboard-placeholder-card p {
-  margin: 0;
+.dashboard-card-header h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
 }

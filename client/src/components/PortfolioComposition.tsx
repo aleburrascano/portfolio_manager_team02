@@ -1,5 +1,4 @@
 import { useMemo } from 'react'
-import { PieChart, Pie, Tooltip, Legend, ResponsiveContainer, type TooltipValueType } from 'recharts'
 import { formatCurrency } from '../format'
 import './PortfolioComposition.css'
 
@@ -14,51 +13,54 @@ interface PortfolioCompositionProps {
   title?: string
 }
 
-const DEFAULT_COLORS = ['#3f66af', '#67c4e0', '#697ada', '#80d8a0']
-
-function formatTooltipValue(value: TooltipValueType | undefined) {
-  if (value == null) {
-    return ''
-  }
-
-  if (typeof value === 'number') {
-    return formatCurrency(value)
-  }
-
-  return String(value)
+// Ledger-toned, not the chart-default rainbow - each asset class gets a
+// fixed hue so the bar reads the same way on every visit.
+const NAME_COLORS: Record<string, string> = {
+  Cash: '#6b7a5e',
+  Stocks: '#92702e',
+  Crypto: '#5b6f8c',
+  Bonds: '#7a5a3a',
 }
+const FALLBACK_COLORS = Object.values(NAME_COLORS)
 
 function PortfolioComposition({ data, title = 'Portfolio Composition' }: PortfolioCompositionProps) {
-  const chartData = useMemo(
-    () =>
-      data.map((entry, index) => ({
+  const slices = useMemo(() => {
+    const total = data.reduce((sum, entry) => sum + entry.value, 0)
+    return data
+      .filter((entry) => entry.value > 0)
+      .map((entry, index) => ({
         ...entry,
-        fill: entry.fill ?? DEFAULT_COLORS[index % DEFAULT_COLORS.length],
-      })),
-    [data],
-  )
+        fill: entry.fill ?? NAME_COLORS[entry.name] ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length],
+        percent: total > 0 ? (entry.value / total) * 100 : 0,
+      }))
+  }, [data])
 
   return (
     <section className="dashboard-card portfolio-composition-card">
       <div className="dashboard-card-header">
         <h3>{title}</h3>
       </div>
-      <div className="portfolio-chart-wrapper">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={chartData}
-              dataKey="value"
-              nameKey="name"
-              cx="50%"
-              cy="50%"
-              outerRadius={100}
-            />
-            <Tooltip formatter={formatTooltipValue} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
+
+      <div className="composition-bar" role="img" aria-label={`Portfolio composition: ${slices.map((s) => `${s.name} ${s.percent.toFixed(0)}%`).join(', ')}`}>
+        {slices.map((slice) => (
+          <div
+            key={slice.name}
+            className="composition-bar-segment"
+            style={{ width: `${slice.percent}%`, background: slice.fill }}
+          />
+        ))}
       </div>
+
+      <ul className="composition-legend">
+        {slices.map((slice) => (
+          <li key={slice.name}>
+            <span className="composition-swatch" style={{ background: slice.fill }} />
+            <span className="composition-name">{slice.name}</span>
+            <span className="figure composition-percent">{slice.percent.toFixed(1)}%</span>
+            <span className="figure composition-value">{formatCurrency(slice.value)}</span>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }

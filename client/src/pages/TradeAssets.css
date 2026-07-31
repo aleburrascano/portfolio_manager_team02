@@ -1,34 +1,46 @@
 #trade-assets-content {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  padding: 24px 20px 40px;
+  gap: 18px;
+  padding: 28px 24px 40px;
   text-align: left;
 }
 
 .asset-type-tabs {
   display: flex;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
 }
 
 .asset-type-tabs button {
   flex: 1;
   border: none;
-  background: var(--surface);
+  border-bottom: 2px solid transparent;
+  background: none;
   padding: 10px;
+  font-size: 13.5px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
   color: var(--text-muted);
 }
 
+.asset-type-tabs button:hover:not(:disabled) {
+  color: var(--text-h);
+}
+
 .asset-type-tabs button.active {
-  background: var(--accent-bg);
+  border-bottom-color: var(--accent);
   color: var(--accent);
 }
 
 .asset-type-tabs button:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+@media (max-width: 480px) {
+  #trade-assets-content {
+    padding: 20px 14px 32px;
+  }
 }

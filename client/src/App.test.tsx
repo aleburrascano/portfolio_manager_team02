@@ -10,6 +10,7 @@ vi.mock('./api', () => ({
   fetchBalance: vi.fn().mockResolvedValue(1000),
   login: vi.fn(),
   register: vi.fn(),
+  fetchPopularAssets: vi.fn().mockResolvedValue([]),
 }))
 
 vi.mock('./pages/Dashboard', () => ({ default: () => <div>Dashboard page</div> }))

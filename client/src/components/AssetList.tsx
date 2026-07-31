@@ -38,19 +38,19 @@ function AssetList({ title, assets, assetType, loading, onSelect }: AssetListPro
                 </div>
                 <div className="asset-stats">
                   {asset.currentPrice != null && (
-                    <span className="asset-price">
+                    <span className="figure asset-price">
                       {formatCurrency(asset.currentPrice)}
                     </span>
                   )}
                   {asset.changePercent != null && (
                     <span
-                      className={`asset-change ${isPositive ? 'positive' : 'negative'}`}
+                      className={`figure asset-change ${isPositive ? 'positive' : 'negative'}`}
                     >
                       {isPositive ? '▲' : '▼'} {formatNumber(Math.abs(asset.changePercent), 2)}%
                     </span>
                   )}
                   {asset.dayLow != null && asset.dayHigh != null && (
-                    <span className="asset-range">
+                    <span className="figure asset-range">
                       {formatCurrency(asset.dayLow)} - {formatCurrency(asset.dayHigh)}
                     </span>
                   )}
