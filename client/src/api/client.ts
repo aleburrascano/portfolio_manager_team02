@@ -11,6 +11,23 @@ function errorMessage(data: ApiErrorBody, fallback: string): string {
 }
 
 /**
+ * A failure the server answered, carrying the status it answered with.
+ *
+ * Callers that only want the message keep treating this as an Error; the
+ * status is there for the ones that have to tell "you aren't signed in"
+ * apart from "the server is broken", which look identical without it.
+ */
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
+/**
  * Call the API and unwrap its JSON, throwing the server's own error
  * message on failure.
  *
@@ -20,7 +37,7 @@ function errorMessage(data: ApiErrorBody, fallback: string): string {
 export async function apiFetch<T>(path: string, fallbackError: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { credentials: 'include', ...init })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(errorMessage(data, fallbackError))
+  if (!res.ok) throw new ApiError(errorMessage(data, fallbackError), res.status)
   return data as T
 }
 
