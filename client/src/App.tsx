@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Dashboard from './pages/Dashboard'
 import TradeAssets from './pages/TradeAssets'
 import TransactionHistory from './pages/TransactionHistory'
+import Account from './pages/Account'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
@@ -60,6 +61,7 @@ function App() {
             {page === 'dashboard' && <Dashboard user={user} />}
             {page === 'trade-assets' && <TradeAssets user={user} />}
             {page === 'transaction-history' && <TransactionHistory user={user} />}
+            {page === 'account' && <Account user={user} onUpdate={setUser} />}
           </main>
         </div>
       </div>

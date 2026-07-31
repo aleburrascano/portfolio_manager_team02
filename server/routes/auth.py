@@ -3,7 +3,7 @@ Routes for registering an account and logging in with a password.
 """
 from typing import Tuple
 from flask import Blueprint, request
-from services.auth import authenticate, get_user, register
+from services.auth import authenticate, get_user, register, update_user
 from authorization import current_user_id, log_in, log_out, require_user
 from errors import error_response
 from links import user_links
@@ -26,6 +26,53 @@ def get_user_route(user_id: int) -> Tuple[dict, int]:
     if user is None:
         return error_response('User not found', 404)
 
+    return {**user, '_links': user_links(user_id)}, 200
+
+@auth_bp.route('/users/<int:user_id>', methods=['PATCH'])
+@require_user
+def update_user_route(user_id: int) -> Tuple[dict, int]:
+    """
+    Edit the caller's own username, name, and/or password. Only the fields
+    present in the body are changed.
+
+    Body:
+        dict: {'username': str, 'firstName': str, 'lastName': str,
+        'currentPassword': str, 'newPassword': str}, all optional, though
+        currentPassword is required whenever newPassword is set.
+
+    Returns:
+        dict: The updated user, or a 400/401/403/409 error.
+    """
+    body = request.get_json(silent=True) or {}
+    username = body.get('username')
+    first_name = body.get('firstName')
+    last_name = body.get('lastName')
+    current_password = body.get('currentPassword') or None
+    new_password = body.get('newPassword') or None
+
+    if username is not None:
+        username = username.strip()
+        if not username:
+            return error_response('username cannot be empty', 400)
+    if first_name is not None:
+        first_name = first_name.strip()
+        if not first_name:
+            return error_response('firstName cannot be empty', 400)
+    if last_name is not None:
+        last_name = last_name.strip()
+        if not last_name:
+            return error_response('lastName cannot be empty', 400)
+    if new_password is not None and len(new_password) < MIN_PASSWORD_LENGTH:
+        return error_response(f'Password must be at least {MIN_PASSWORD_LENGTH} characters', 400)
+
+    user = update_user(
+        user_id,
+        username=username,
+        first_name=first_name,
+        last_name=last_name,
+        current_password=current_password,
+        new_password=new_password,
+    )
     return {**user, '_links': user_links(user_id)}, 200
 
 @auth_bp.route('/auth/me', methods=['GET'])
