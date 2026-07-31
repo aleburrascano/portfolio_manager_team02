@@ -1,22 +1,53 @@
-.dashboard-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: var(--shadow-soft);
-}
-
-.dashboard-card-header {
-  margin-bottom: 16px;
-}
-
-.portfolio-chart-wrapper {
+.composition-bar {
+  display: flex;
   width: 100%;
-  height: 280px;
+  height: 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--bg);
+  border: 1px solid var(--border);
 }
 
-.portfolio-composition-card h3 {
-  margin: 0;
-  font-size: 1.1rem;
-  color: var(--text-primary);
+.composition-bar-segment + .composition-bar-segment {
+  border-left: 1px solid var(--surface);
+}
+
+.composition-legend {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.composition-legend li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13.5px;
+}
+
+.composition-swatch {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+}
+
+.composition-name {
+  color: var(--text-h);
+  font-weight: 500;
+}
+
+.composition-percent {
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.composition-value {
+  color: var(--text-h);
+  font-weight: 600;
+  width: 100px;
+  text-align: right;
 }

@@ -71,6 +71,10 @@ function Sidebar({
   return (
     <>
       <nav className="sidebar">
+        <div className="sidebar-brand">
+          <span className="sidebar-brand-mark">PM</span>
+          <span className="sidebar-brand-name">Portfolio Manager</span>
+        </div>
         <ul className="sidebar-nav">
           {NAV_ITEMS.map((item) => (
             <li key={item.page}>
@@ -80,7 +84,7 @@ function Sidebar({
                 onClick={() => onNavigate(item.page)}
               >
                 <span className="sidebar-icon">{item.icon}</span>
-                {item.label}
+                <span className="sidebar-label">{item.label}</span>
               </button>
             </li>
           ))}
@@ -88,7 +92,7 @@ function Sidebar({
 
         <button type="button" className="sidebar-logout" onClick={() => setConfirmingLogout(true)}>
           <span className="sidebar-icon">{LOGOUT_ICON}</span>
-          Log Out
+          <span className="sidebar-label">Log Out</span>
         </button>
       </nav>
 

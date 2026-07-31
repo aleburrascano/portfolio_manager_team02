@@ -1,10 +1,10 @@
 .asset-list h2 {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 12.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
-  margin: 0 0 12px 4px;
+  margin: 0 0 8px 2px;
 }
 
 .asset-list-status {
@@ -14,32 +14,37 @@
   color: var(--text-muted);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
 }
 
 .asset-list ul {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .asset-row {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 11px 16px;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
   cursor: pointer;
 }
 
+.asset-row:nth-child(even) {
+  background: var(--paper-band);
+}
+
+.asset-row + .asset-row {
+  border-top: 1px solid var(--border);
+}
+
 .asset-row:hover {
-  border-color: var(--accent);
+  background: var(--accent-bg);
 }
 
 .asset-info {
@@ -52,33 +57,37 @@
 .asset-name {
   color: var(--text-h);
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .asset-symbol {
-  font-size: 13px;
+  font-family: var(--mono);
+  font-size: 12px;
   color: var(--text-muted);
 }
 
 .asset-stats {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  align-items: baseline;
+  gap: 14px;
 }
 
 .asset-price {
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 14.5px;
+  font-weight: 600;
   color: var(--text-h);
+  min-width: 76px;
+  text-align: right;
 }
 
 .asset-change {
   font-size: 13px;
   font-weight: 600;
+  min-width: 68px;
+  text-align: right;
 }
 
 .asset-change.positive {
@@ -92,4 +101,29 @@
 .asset-range {
   font-size: 12px;
   color: var(--text-muted);
+  min-width: 130px;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .asset-range {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .asset-row {
+    padding: 10px 12px;
+  }
+
+  .asset-stats {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .asset-price,
+  .asset-change {
+    min-width: 0;
+  }
 }

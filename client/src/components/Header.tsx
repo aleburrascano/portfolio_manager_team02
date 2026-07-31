@@ -71,7 +71,7 @@ function Header({ user }: { user: User }) {
         <button type="button" className="withdraw-btn" onClick={() => openPopup('withdraw')}>
           Withdraw
         </button>
-        <span className="balance">
+        <span className="figure balance">
           {balance !== null ? formatCurrency(balance) : '...'}
         </span>
       </div>

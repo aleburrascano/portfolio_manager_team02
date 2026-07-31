@@ -1,24 +1,29 @@
 :root {
-  --bg: #f7f8fa;
-  --surface: #ffffff;
-  --border: #e6e8ec;
-  --text: #5b6470;
-  --text-h: #14181f;
-  --text-muted: #8a919c;
-  --accent: #2563eb;
-  --accent-bg: rgba(37, 99, 235, 0.08);
-  --positive: #16a34a;
-  --positive-bg: rgba(22, 163, 74, 0.1);
-  --negative: #dc2626;
-  --negative-bg: rgba(220, 38, 38, 0.1);
-  --shadow:
-    rgba(20, 24, 31, 0.06) 0 1px 2px, rgba(20, 24, 31, 0.06) 0 8px 24px -8px;
+  /* Ledger paper: a trading-desk statement, not a soft SaaS dashboard.
+     Named palette - Paper, Ink, Moss, Brass, Ledger Green, Oxblood. */
+  --bg: #eeecdf;
+  --paper-band: #dde6d2;
+  --surface: #faf9f0;
+  --border: #c7cbb2;
+  --text: #4c5744;
+  --text-h: #1c2818;
+  --text-muted: #74806a;
+  --accent: #92702e;
+  --accent-bg: #ecdfbf;
+  --positive: #2c6b45;
+  --positive-bg: #dbe8d6;
+  --negative: #9c3b2a;
+  --negative-bg: #f3ddd3;
+  --shadow: rgba(28, 40, 24, 0.08) 0 1px 0;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --radius-sm: 3px;
+  --radius: 4px;
 
-  font: 16px/145% var(--sans);
+  --sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --heading: 'Roboto Slab', Georgia, serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  font: 15px/145% var(--sans);
   letter-spacing: 0.01em;
   color-scheme: light;
   color: var(--text);
@@ -45,8 +50,31 @@ body {
 }
 
 h1,
-h2 {
+h2,
+h3 {
   font-family: var(--heading);
   font-weight: 600;
   color: var(--text-h);
+}
+
+/* Every figure in the app - prices, quantities, balances, dates in a table -
+   reads as ledger type: monospace with true tabular alignment. */
+.figure {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
 }

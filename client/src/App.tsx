@@ -4,6 +4,7 @@ import TradeAssets from './pages/TradeAssets'
 import TransactionHistory from './pages/TransactionHistory'
 import Account from './pages/Account'
 import Header from './components/Header'
+import TickerRail from './components/TickerRail'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
 import { BalanceProvider } from './BalanceContext'
@@ -55,6 +56,7 @@ function App() {
     <BalanceProvider userId={user.userId}>
       <div className="app-shell">
         <Header user={user} />
+        <TickerRail />
         <div className="app-body">
           <Sidebar page={page} onNavigate={setPage} onLogout={handleLogout} />
           <main className="app-page">

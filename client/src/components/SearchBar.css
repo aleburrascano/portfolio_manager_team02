@@ -1,13 +1,12 @@
 .search-bar {
   width: 100%;
-  padding: 12px 16px;
+  padding: 11px 16px;
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-h);
-  box-shadow: var(--shadow);
 }
 
 .search-bar::placeholder {

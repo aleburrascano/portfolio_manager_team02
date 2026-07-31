@@ -5,7 +5,7 @@
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(12, 16, 24, 0.65);
+  background: rgba(20, 26, 16, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16,7 +16,8 @@
 .modal-card {
   width: min(420px, 100%);
   background: var(--surface);
-  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   padding: 24px;
 }
 
@@ -29,20 +30,50 @@
 .secondary-btn,
 .submit-btn,
 .danger-btn {
-  border: none;
-  border-radius: 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   padding: 8px 16px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
+  letter-spacing: 0.02em;
   cursor: pointer;
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+
+.secondary-btn {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.secondary-btn:hover {
+  border-color: var(--text-muted);
+  color: var(--text-h);
+}
+
+.submit-btn {
+  background: var(--accent);
+  color: var(--surface);
+}
+
+.submit-btn:hover {
+  background: var(--text-h);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .danger-btn {
   background: var(--negative-bg);
+  border-color: var(--negative);
   color: var(--negative);
-  transition: opacity 0.15s;
 }
 
 .danger-btn:hover {
-  opacity: 0.75;
+  background: var(--negative);
+  color: var(--surface);
 }
