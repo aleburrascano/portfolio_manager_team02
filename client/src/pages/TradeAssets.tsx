@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import SearchBar from '../components/SearchBar'
 import AssetList from '../components/AssetList'
-import AssetDetail from '../components/AssetDetail'
+import Icon, { type IconName } from './../components/Icon'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
 import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
-const ASSET_TYPES: { type: AssetType; label: string }[] = [
-  { type: 'stock', label: 'Stocks' },
-  { type: 'crypto', label: 'Crypto' },
-  { type: 'bond', label: 'Bonds' },
+// Carries the price chart, so it is fetched when someone opens an asset
+// rather than being paid for by everyone who only browses the list.
+const AssetDetail = lazy(() => import('../components/AssetDetail'))
+
+const ASSET_TYPES: { type: AssetType; label: string; icon: IconName }[] = [
+  { type: 'stock', label: 'Stocks', icon: 'stock' },
+  { type: 'crypto', label: 'Crypto', icon: 'crypto' },
+  { type: 'bond', label: 'Bonds', icon: 'bond' },
 ]
 
 // Derived from the tab list so a new asset type only has to be added once.
@@ -17,8 +21,15 @@ const ASSET_TYPE_LABELS = Object.fromEntries(
   ASSET_TYPES.map(({ type, label }) => [type, label]),
 ) as Record<AssetType, string>
 
-function TradeAssets({ user }: { user: User }) {
-  const [assetType, setAssetType] = useState<AssetType>('stock')
+function TradeAssets({
+  user,
+  openAsset,
+}: {
+  user: User
+  /** An asset picked elsewhere - a holdings row, a watchlist tile. */
+  openAsset?: { assetType: AssetType; symbol: string } | null
+}) {
+  const [assetType, setAssetType] = useState<AssetType>(openAsset?.assetType ?? 'stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
   const [popularLoading, setPopularLoading] = useState(true)
@@ -26,7 +37,7 @@ function TradeAssets({ user }: { user: User }) {
   // derived from what we hold rather than tracked in a separate flag that
   // could drift out of sync with it.
   const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null)
+  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(openAsset?.symbol ?? null)
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
   useEffect(() => {
@@ -90,7 +101,7 @@ function TradeAssets({ user }: { user: User }) {
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
 
   function switchAssetType(next: AssetType) {
-    if (popularLoading || next === assetType) return
+    if (next === assetType) return
     setAssetType(next)
     setQuery('')
     setSelectedSymbol(null)
@@ -99,37 +110,61 @@ function TradeAssets({ user }: { user: User }) {
   return (
     <section id="trade-assets-content">
       {selectedSymbol ? (
-        <AssetDetail
-          assetType={assetType}
-          symbol={selectedSymbol}
-          user={user}
-          onBack={() => setSelectedSymbol(null)}
-        />
+        <Suspense
+          fallback={
+            <div className="asset-detail-loading" aria-busy="true">
+              <span className="visually-hidden">Loading {selectedSymbol}</span>
+              <span className="skeleton skeleton-title" />
+              <span className="skeleton skeleton-chart" />
+            </div>
+          }
+        >
+          <AssetDetail
+            assetType={assetType}
+            symbol={selectedSymbol}
+            user={user}
+            onBack={() => setSelectedSymbol(null)}
+          />
+        </Suspense>
       ) : (
         <>
-          <div className="asset-type-tabs">
-            {ASSET_TYPES.map(({ type, label }) => (
-              <button
-                key={type}
-                type="button"
-                className={assetType === type ? 'active' : ''}
-                disabled={popularLoading}
-                onClick={() => switchAssetType(type)}
-              >
-                {label}
-              </button>
-            ))}
+          {/* Not disabled while loading: switching tabs is a navigation
+              decision the user has already made, and blocking it behind a
+              network round-trip they did not ask to wait for is the wrong
+              trade. The in-flight request for the old tab is cancelled. */}
+          {/* Tabs and search share a row once there's width for it, so the
+              list starts higher up the page instead of below two bands. */}
+          <div className="trade-controls">
+            <div className="asset-type-tabs">
+              {ASSET_TYPES.map(({ type, label, icon }) => (
+                <button
+                  key={type}
+                  type="button"
+                  className={assetType === type ? 'active' : ''}
+                  aria-pressed={assetType === type}
+                  onClick={() => switchAssetType(type)}
+                >
+                  <Icon name={icon} />
+                  {label}
+                </button>
+              ))}
+            </div>
+            <SearchBar value={query} onChange={setQuery} />
           </div>
-          <SearchBar value={query} onChange={setQuery} />
           <AssetList
             title={
               isSearching
-                ? 'Search Results'
-                : `Most Active ${ASSET_TYPE_LABELS[assetType]}`
+                ? 'Search results'
+                : `Most active ${ASSET_TYPE_LABELS[assetType].toLowerCase()}`
             }
             assetType={assetType}
             assets={assets}
             loading={isSearching ? searchLoading : popularLoading}
+            emptyMessage={
+              isSearching
+                ? `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} match "${trimmedQuery}". Check the spelling, or try another asset type above.`
+                : `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} are available right now.`
+            }
             onSelect={setSelectedSymbol}
           />
         </>
