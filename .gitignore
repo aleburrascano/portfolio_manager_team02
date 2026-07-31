@@ -3,6 +3,14 @@
 # Local SQLite databases
 *.db
 
+# Local tooling: agent config and design-review snapshots
+.claude/
+.impeccable/
+
+# Playwright
+e2e/test-results/
+e2e/playwright-report/
+
 # Python
 venv/
 env/
