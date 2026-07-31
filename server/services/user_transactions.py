@@ -73,53 +73,19 @@ def get_user_balance(user_id: int) -> Decimal:
     """
     Compute a user's net cash balance across all cash and asset transactions.
 
+    Summed in the database rather than by pulling the history into Python:
+    the balance is re-checked under a row lock on every trade, so it sits on
+    the hot path and must not scale with how long a user has been trading.
+
     Args:
         user_id (int): The ID of the user.
 
     Returns:
         Decimal: The net balance (0 if the user has no transactions).
     """
-    transactions = get_user_transactions(user_id)
-    if transactions is None:
-        return None
-    return sum(row['signedAmount'] for row in transactions)
+    session = get_session()
 
-def get_user_asset_transactions(user_id: int) -> Optional[List[Dict[str, Any]]]:
-    """
-    Fetch only a user's asset transactions.
-
-    Returns:
-        list[dict] | None: Asset transactions for the user.
-    """
-
-    conn = get_db()
-
-    if not conn:
-        return None
-
-    cursor = conn.cursor(dictionary=True)
-
-    cursor.execute(ASSET_TRANSACTIONS_QUERY, (user_id,))
-    asset_rows = cursor.fetchall()
-
-    cursor.close()
-    conn.close()
-
-    for row in asset_rows:
-        row["type"] = row["assetType"]
-        row["signedAmount"] = row["val"]
-
-    asset_rows.sort(
-        key=lambda row: row["transactionDate"],
-        reverse=True
-    )
-
-    return asset_rows
-
-
-  ''' session = get_session()
-
-  cash = session.scalar(
+    cash = session.scalar(
         select(func.coalesce(func.sum(CashTransaction.amount), 0))
         .where(CashTransaction.userId == user_id)
     )
@@ -128,4 +94,60 @@ def get_user_asset_transactions(user_id: int) -> Optional[List[Dict[str, Any]]]:
         .where(AssetTransaction.userId == user_id)
     )
     return Decimal(str(cash)) + Decimal(str(assets))
-    '''
+
+
+def get_user_asset_transactions(user_id: int) -> List[Dict[str, Any]]:
+    """
+    Fetch a user's asset trades only, oldest first, with the asset type
+    each ticker is filed under.
+
+    Oldest first because the callers - performance and cost basis - replay
+    the trades forward from the first one.
+
+    Note that `qty` is already signed in this schema: positive on a buy,
+    negative on a sell. Running totals can therefore be summed directly
+    without re-deriving a sign from the transaction type.
+
+    Args:
+        user_id (int): The ID of the user.
+
+    Returns:
+        list[dict]: Rows of ticker, assetType, qty, price, transactionDate.
+    """
+    statement = (
+        select(
+            AssetTransaction.ticker,
+            cast(Asset.assetType, String).label('assetType'),
+            AssetTransaction.qty,
+            AssetTransaction.price,
+            AssetTransaction.assetTransactionDate.label('transactionDate'),
+        )
+        .join(Asset, Asset.ticker == AssetTransaction.ticker)
+        .where(AssetTransaction.userId == user_id)
+        .order_by(AssetTransaction.assetTransactionDate.asc())
+    )
+    return [dict(row) for row in get_session().execute(statement).mappings()]
+
+
+def get_cash_flows(user_id: int) -> List[Dict[str, Any]]:
+    """
+    A user's deposits and withdrawals, oldest first.
+
+    Performance is measured against money the user actually put in, so the
+    cash ledger is needed separately from the trades that move it around.
+
+    Args:
+        user_id (int): The ID of the user.
+
+    Returns:
+        list[dict]: Rows of amount (signed) and transactionDate.
+    """
+    statement = (
+        select(
+            CashTransaction.amount,
+            CashTransaction.cashTransactionDate.label('transactionDate'),
+        )
+        .where(CashTransaction.userId == user_id)
+        .order_by(CashTransaction.cashTransactionDate.asc())
+    )
+    return [dict(row) for row in get_session().execute(statement).mappings()]

@@ -30,6 +30,8 @@ def portfolio_links(user_id: int) -> dict:
         'self': url_for('wallet.get_portfolio_breakdown', user_id=user_id),
         'balance': url_for('wallet.get_wallet_balance', user_id=user_id),
         'transactions': url_for('history.get_transaction_history', user_id=user_id),
+        'performance': url_for('wallet.get_portfolio_performance', user_id=user_id),
+        'holdings': url_for('wallet.get_portfolio_holdings', user_id=user_id),
     }
 
 
@@ -50,6 +52,14 @@ def asset_detail_links(asset_type: str, ticker: str) -> dict:
     return {
         'self': url_for('assets.get_asset_detail', asset_type=asset_type, ticker=ticker),
         'history': url_for('assets.get_asset_history', asset_type=asset_type, ticker=ticker),
+        'ratings': url_for('assets.get_asset_ratings', asset_type=asset_type, ticker=ticker),
+    }
+
+
+def watchlist_links(user_id: int) -> dict:
+    return {
+        'self': url_for('assets.get_watchlist', user_id=user_id),
+        'portfolio': url_for('wallet.get_portfolio_breakdown', user_id=user_id),
     }
 
 
