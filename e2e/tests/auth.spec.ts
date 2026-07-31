@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+﻿import { expect, test } from '@playwright/test'
 import { logOut, registerNewUser, uniqueUsername } from './fixtures'
 
 test('registers a new account and lands on the dashboard', async ({ page }) => {
@@ -30,7 +30,7 @@ test('logs out and back in with the same credentials', async ({ page }) => {
   await page.getByPlaceholder('Password').fill('password123')
   await page.getByRole('button', { name: 'Log In' }).click()
 
-  await expect(page.getByText('Hello, Ada')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Ada Lovelace/ })).toBeVisible()
 })
 
 test('rejects an incorrect password', async ({ page }) => {
@@ -48,5 +48,5 @@ test('rejects an incorrect password', async ({ page }) => {
 test('restores the session on reload', async ({ page }) => {
   await registerNewUser(page, uniqueUsername('reload'))
   await page.reload()
-  await expect(page.getByText('Hello, Ada')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Ada Lovelace/ })).toBeVisible()
 })

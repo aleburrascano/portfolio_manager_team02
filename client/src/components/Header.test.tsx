@@ -1,99 +1,82 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import Header from './Header'
-import { submitCashTransaction } from '../api'
-import { useBalance } from '../balance-context'
 
-vi.mock('../api', () => ({
-  submitCashTransaction: vi.fn(),
-}))
-
-vi.mock('../balance-context', () => ({
-  useBalance: vi.fn(),
-}))
-
-vi.mock('../idempotency', () => ({
-  useIdempotencyKey: () => ({ keyFor: (intent: string) => intent, reset: vi.fn() }),
-}))
-
-const mockedSubmit = vi.mocked(submitCashTransaction)
-const mockedUseBalance = vi.mocked(useBalance)
 const user = { userId: 1, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' }
 
-beforeEach(() => {
-  mockedSubmit.mockReset()
-  mockedUseBalance.mockReturnValue({ balance: 500, refreshBalance: vi.fn().mockResolvedValue(undefined) })
-})
+function renderHeader(overrides: Partial<Parameters<typeof Header>[0]> = {}) {
+  const props = {
+    user,
+    onOpenAccount: vi.fn(),
+    onLogout: vi.fn(),
+    ...overrides,
+  }
+  render(<Header {...props} />)
+  return props
+}
 
 describe('Header', () => {
-  it('shows the greeting and formatted balance', () => {
-    render(<Header user={user} />)
-    expect(screen.getByText('Hello, Ada')).toBeInTheDocument()
-    expect(screen.getByText('$500.00')).toBeInTheDocument()
+  it('shows the wordmark', () => {
+    renderHeader()
+    expect(
+      screen.getByText((_, element) => element?.classList.contains('wordmark-text') === true),
+    ).toHaveTextContent('TreeTop Trading')
   })
 
-  it('shows a placeholder while the balance is loading', () => {
-    mockedUseBalance.mockReturnValue({ balance: null, refreshBalance: vi.fn() })
-    render(<Header user={user} />)
-    expect(screen.getByText('...')).toBeInTheDocument()
+  it('shows the signed-in user in the account control', () => {
+    renderHeader()
+    expect(screen.getByRole('button', { name: /Ada Lovelace/ })).toBeInTheDocument()
+    expect(screen.getByText('AL')).toBeInTheDocument()
   })
 
-  it('opens the deposit modal with the current balance shown', async () => {
+  // The corner used to be a greeting and an avatar that looked interactive
+  // and did nothing; it is now the account menu people reach for there.
+  it('opens a menu with the account actions', async () => {
     const typer = userEvent.setup()
-    render(<Header user={user} />)
+    renderHeader()
 
-    await typer.click(screen.getByRole('button', { name: 'Deposit' }))
-    expect(screen.getByRole('heading', { name: 'Deposit Funds' })).toBeInTheDocument()
-    expect(screen.getByText('Current Balance: $500.00')).toBeInTheDocument()
+    const trigger = screen.getByRole('button', { name: /Ada Lovelace/ })
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+
+    await typer.click(trigger)
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('menuitem', { name: 'Account settings' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Log Out' })).toBeInTheDocument()
+    expect(screen.getByText('ada')).toBeInTheDocument()
   })
 
-  it('submits a deposit and shows a success message', async () => {
-    mockedSubmit.mockResolvedValue({ message: 'ok' })
+  it('navigates to the account page from the menu', async () => {
     const typer = userEvent.setup()
-    render(<Header user={user} />)
+    const props = renderHeader()
 
-    await typer.click(screen.getByRole('button', { name: 'Deposit' }))
-    await typer.type(screen.getByLabelText('Amount'), '100')
-    await typer.click(screen.getByRole('button', { name: 'Submit Transaction' }))
+    await typer.click(screen.getByRole('button', { name: /Ada Lovelace/ }))
+    await typer.click(screen.getByRole('menuitem', { name: 'Account settings' }))
 
-    expect(await screen.findByText('Deposit submitted successfully.')).toBeInTheDocument()
-    expect(mockedSubmit).toHaveBeenCalledWith(1, 'deposit', 100, 'deposit:100')
+    expect(props.onOpenAccount).toHaveBeenCalledOnce()
   })
 
-  it('blocks a withdrawal larger than the balance without calling the API', async () => {
+  it('confirms before logging out', async () => {
     const typer = userEvent.setup()
-    render(<Header user={user} />)
+    const props = renderHeader()
 
-    await typer.click(screen.getByRole('button', { name: 'Withdraw' }))
-    await typer.type(screen.getByLabelText('Amount'), '600')
-    // The amount input's native `max` (set to the balance) would otherwise
-    // block a real click submission before React's own check ever runs.
-    fireEvent.submit(screen.getByRole('button', { name: 'Submit Transaction' }).closest('form')!)
+    await typer.click(screen.getByRole('button', { name: /Ada Lovelace/ }))
+    await typer.click(screen.getByRole('menuitem', { name: 'Log Out' }))
+    expect(props.onLogout).not.toHaveBeenCalled()
 
-    expect(await screen.findByText('Withdrawal amount exceeds current balance of $500.00.')).toBeInTheDocument()
-    expect(mockedSubmit).not.toHaveBeenCalled()
+    await typer.click(
+      screen.getByRole('alertdialog').querySelector('.danger-btn') as HTMLElement,
+    )
+    expect(props.onLogout).toHaveBeenCalledOnce()
   })
 
-  it('shows the server error message on a failed transaction', async () => {
-    mockedSubmit.mockRejectedValue(new Error('Insufficient funds'))
+  it('closes the menu on Escape', async () => {
     const typer = userEvent.setup()
-    render(<Header user={user} />)
+    renderHeader()
 
-    await typer.click(screen.getByRole('button', { name: 'Deposit' }))
-    await typer.type(screen.getByLabelText('Amount'), '100')
-    await typer.click(screen.getByRole('button', { name: 'Submit Transaction' }))
+    await typer.click(screen.getByRole('button', { name: /Ada Lovelace/ }))
+    await typer.keyboard('{Escape}')
 
-    expect(await screen.findByText('Insufficient funds')).toBeInTheDocument()
-  })
-
-  it('closes the modal on cancel', async () => {
-    const typer = userEvent.setup()
-    render(<Header user={user} />)
-
-    await typer.click(screen.getByRole('button', { name: 'Deposit' }))
-    await typer.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
   })
 })

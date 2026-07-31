@@ -14,12 +14,13 @@ export async function registerNewUser(page: Page, username: string) {
   await page.getByPlaceholder('First Name').fill('Ada')
   await page.getByPlaceholder('Last Name').fill('Lovelace')
   await page.getByRole('button', { name: 'Sign Up' }).click()
-  await expect(page.getByText('Hello, Ada')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Ada Lovelace/ })).toBeVisible()
 }
 
-/** Log out through the sidebar's confirm-before-logout flow. */
+/** Log out through the header account menu's confirm-before-logout flow. */
 export async function logOut(page: Page) {
-  await page.getByRole('button', { name: /Log Out/ }).click()
+  await page.getByRole('button', { name: /Ada Lovelace/ }).click()
+  await page.getByRole('menuitem', { name: 'Log Out' }).click()
   await page.getByRole('alertdialog').getByRole('button', { name: 'Log Out' }).click()
   await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible()
 }
