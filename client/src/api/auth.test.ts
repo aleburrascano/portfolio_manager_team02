@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('./client', () => ({
-  apiFetch: vi.fn(),
-  post: vi.fn((body: unknown) => ({ method: 'POST', body })),
-}))
+vi.mock('./client', async () => {
+  const actual = await vi.importActual<typeof import('./client')>('./client')
+  return {
+    ApiError: actual.ApiError,
+    apiFetch: vi.fn(),
+    post: vi.fn((body: unknown) => ({ method: 'POST', body })),
+  }
+})
 
-import { apiFetch } from './client'
+import { ApiError, apiFetch } from './client'
 import { fetchCurrentUser, login, logout, register } from './auth'
 
 const mockedApiFetch = vi.mocked(apiFetch)
@@ -38,12 +42,29 @@ describe('fetchCurrentUser', () => {
   it('returns the user when a session exists', async () => {
     const user = { userId: 1, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' }
     mockedApiFetch.mockResolvedValue(user)
-    await expect(fetchCurrentUser()).resolves.toEqual(user)
+    await expect(fetchCurrentUser()).resolves.toEqual({ status: 'authenticated', user })
   })
 
-  it('returns null instead of throwing when there is no session', async () => {
-    mockedApiFetch.mockRejectedValue(new Error('Authentication required'))
-    await expect(fetchCurrentUser()).resolves.toBeNull()
+  it('reports anonymous instead of throwing when there is no session', async () => {
+    mockedApiFetch.mockRejectedValue(new ApiError('Authentication required', 401))
+    await expect(fetchCurrentUser()).resolves.toEqual({ status: 'anonymous' })
+  })
+
+  // The distinction that keeps a 500 from silently logging someone out.
+  it('reports unavailable when the server fails for any other reason', async () => {
+    mockedApiFetch.mockRejectedValue(new ApiError('Internal server error', 500))
+    await expect(fetchCurrentUser()).resolves.toEqual({
+      status: 'unavailable',
+      message: 'Internal server error',
+    })
+  })
+
+  it('reports unavailable when the request never reaches the server', async () => {
+    mockedApiFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+    await expect(fetchCurrentUser()).resolves.toEqual({
+      status: 'unavailable',
+      message: 'Failed to fetch',
+    })
   })
 })
 
