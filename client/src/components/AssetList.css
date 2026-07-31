@@ -1,17 +1,8 @@
-.asset-list h2 {
-  font-size: 12.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  margin: 0 0 8px 2px;
-}
-
 .asset-list-status {
   margin: 0;
-  padding: 24px;
+  padding: 40px 24px;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -23,27 +14,45 @@
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
+}
+
+/* The corners are rounded per row rather than clipped on the list, because
+   `overflow: hidden` here would crop the focus ring off the first and last
+   rows - the two most likely to be tabbed to. */
+.asset-list li:first-child .asset-row {
+  border-start-start-radius: var(--radius);
+  border-start-end-radius: var(--radius);
+}
+
+.asset-list li:last-child .asset-row {
+  border-end-start-radius: var(--radius);
+  border-end-end-radius: var(--radius);
 }
 
 .asset-row {
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 14px;
   padding: 11px 16px;
+  border: none;
   background: var(--surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
   cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
 }
 
-.asset-row:nth-child(even) {
+.asset-list li:nth-child(even) .asset-row {
   background: var(--paper-band);
 }
 
-.asset-row + .asset-row {
+.asset-list li + li .asset-row {
   border-top: 1px solid var(--border);
 }
 
-.asset-row:hover {
+button.asset-row:hover {
   background: var(--accent-bg);
 }
 
@@ -57,7 +66,7 @@
 .asset-name {
   color: var(--text-h);
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: var(--fs-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -65,7 +74,7 @@
 
 .asset-symbol {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
@@ -76,7 +85,7 @@
 }
 
 .asset-price {
-  font-size: 14.5px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-h);
   min-width: 76px;
@@ -84,7 +93,7 @@
 }
 
 .asset-change {
-  font-size: 13px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   min-width: 68px;
   text-align: right;
@@ -99,10 +108,34 @@
 }
 
 .asset-range {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   min-width: 130px;
   text-align: right;
+}
+
+.asset-row-skeleton {
+  cursor: default;
+  gap: 14px;
+}
+
+.skeleton-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.skeleton-name {
+  height: 14px;
+  flex: 1;
+  max-width: 220px;
+}
+
+.skeleton-price {
+  height: 14px;
+  width: 76px;
+  margin-left: auto;
 }
 
 @media (max-width: 640px) {

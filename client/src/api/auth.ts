@@ -1,4 +1,4 @@
-import { apiFetch, patch, post } from './client'
+import { ApiError, apiFetch, patch, post } from './client'
 
 export type User = {
   userId: number
@@ -28,12 +28,28 @@ export async function register(
   return apiFetch('/auth/register', 'Registration failed', post({ username, password, firstName, lastName }))
 }
 
-/** The user owning the current session, or null if there isn't one. */
-export async function fetchCurrentUser(): Promise<User | null> {
+export type SessionResult =
+  | { status: 'authenticated'; user: User }
+  | { status: 'anonymous' }
+  | { status: 'unavailable'; message: string }
+
+/**
+ * Who owns the current session, or why we couldn't find out.
+ *
+ * The three answers are deliberately distinct. Collapsing them into
+ * `User | null` makes a 500 look exactly like a signed-out visitor, which
+ * silently drops a logged-in user at the login screen with no explanation
+ * and no hint that retrying might work.
+ */
+export async function fetchCurrentUser(): Promise<SessionResult> {
   try {
-    return await apiFetch<User>('/auth/me', 'Failed to fetch session')
-  } catch {
-    return null
+    return { status: 'authenticated', user: await apiFetch<User>('/auth/me', 'Failed to fetch session') }
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) return { status: 'anonymous' }
+    return {
+      status: 'unavailable',
+      message: error instanceof Error ? error.message : 'Could not reach the server.',
+    }
   }
 }
 
