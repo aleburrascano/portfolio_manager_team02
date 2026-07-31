@@ -39,5 +39,7 @@ def index() -> dict:
 
 if __name__ == '__main__':
     # socketio.run rather than app.run, so the WebSocket endpoint is served
-    # alongside the REST routes on the same port.
-    socketio.run(app, debug=True)
+    # alongside the REST routes on the same port. allow_unsafe_werkzeug is
+    # needed to start this dev server at all under CI/e2e, which run it
+    # without a tty attached to stdin.
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True)
