@@ -1,43 +1,94 @@
 #transaction-history-content {
-  padding: 24px 20px 40px;
+  padding: 28px 24px 40px;
+}
+
+.history-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.history-header .section-title {
+  margin: 0;
 }
 
 .transaction-history-placeholder {
   margin: 0;
-  padding: 48px 24px;
+  padding: 40px 24px;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius);
+  text-wrap: pretty;
+}
+
+.transaction-history-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.skeleton-row {
+  height: 41px;
+  border-radius: 0;
+}
+
+.transaction-history-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 
 .transaction-history-table {
   width: 100%;
   border-collapse: collapse;
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  overflow: hidden;
 }
 
 .transaction-history-table th,
 .transaction-history-table td {
-  padding: 12px 16px;
+  padding: 10px 16px;
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
 
 .transaction-history-table th {
+  background: var(--bg);
   color: var(--text-muted);
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: var(--fs-sm);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.05em;
+}
+
+.transaction-history-table th:last-child {
+  text-align: right;
+}
+
+.transaction-history-table tbody tr:nth-child(even) {
+  background: var(--paper-band);
 }
 
 .transaction-history-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.transaction-history-table td:first-child,
+.transaction-history-table td:last-child {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.transaction-history-table td:last-child {
+  text-align: right;
+  font-weight: 600;
 }
 
 .transaction-history-table td.positive {
@@ -46,4 +97,61 @@
 
 .transaction-history-table td.negative {
   color: var(--negative);
+}
+
+/* Below 640px a three-column table needs ~435px of min-content against
+   roughly 267px available, so it stops being a table and becomes a stack.
+   The three lines read in their existing order - timestamp, what happened,
+   how much - which is how a statement line reads anyway, so no cell has to
+   be reordered or labelled to make sense on its own. */
+@media (max-width: 640px) {
+  #transaction-history-content {
+    padding: 20px 14px 32px;
+  }
+
+  .transaction-history-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .transaction-history-table,
+  .transaction-history-table tbody,
+  .transaction-history-table tr,
+  .transaction-history-table td {
+    display: block;
+  }
+
+  .transaction-history-table tr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .transaction-history-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .transaction-history-table td {
+    padding: 0;
+    border-bottom: none;
+  }
+
+  .transaction-history-table td[data-label='Date'] {
+    font-size: var(--fs-sm);
+    color: var(--text-muted);
+  }
+
+  .transaction-history-table td[data-label='Description'] {
+    font-weight: 600;
+    color: var(--text-h);
+    margin: 2px 0 4px;
+  }
+
+  .transaction-history-table td[data-label='Amount'] {
+    text-align: left;
+    font-size: var(--fs-md);
+  }
 }

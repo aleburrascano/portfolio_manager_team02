@@ -2,68 +2,41 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 14px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
-.app-header h1 {
-  font-size: 20px;
-  margin: 0;
-}
-
-.app-header-actions {
+.wordmark {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
 }
 
-.balance {
-  font-size: 20px;
-  font-weight: 700;
+/* Four ascending peaks, drawn in the brand ink. It is the mark, so it gets
+   to be the one piece of pure identity in an otherwise working interface. */
+.wordmark-mark {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.wordmark-text {
+  font-family: var(--heading);
+  font-weight: 600;
+  font-size: var(--fs-md);
+  letter-spacing: -0.01em;
   color: var(--text-h);
 }
 
-.deposit-btn,
-.withdraw-btn {
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
+@media (max-width: 640px) {
+  .app-header {
+    padding: 10px 14px;
+  }
 
-.deposit-btn {
-  background: var(--positive-bg);
-  color: var(--positive);
-}
-
-.withdraw-btn {
-  background: var(--negative-bg);
-  color: var(--negative);
-}
-
-.deposit-btn:hover,
-.withdraw-btn:hover {
-  opacity: 0.75;
-}
-
-/* The backdrop, card, action row, and button sizing live in Modal.css. */
-
-.modal-card input {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  margin-bottom: 16px;
-}
-
-.modal-status.success {
-  color: var(--positive);
-}
-
-.modal-status.error {
-  color: var(--negative);
+  .wordmark-text {
+    font-size: var(--fs-base);
+  }
 }

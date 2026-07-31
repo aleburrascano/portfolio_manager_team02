@@ -92,6 +92,16 @@ class AssetProvider(ABC):
         """
         return {}
 
+    def get_ratings(self, ticker: str) -> Optional[dict]:
+        """
+        Analyst coverage for this asset, or None when there is none.
+
+        None by default: analysts rate companies, not instruments priced
+        from their own terms, so a bond has nothing to report here and
+        shouldn't invent it.
+        """
+        return None
+
 
 class _MarketTradedProvider(AssetProvider):
     """
@@ -129,6 +139,9 @@ class _MarketTradedProvider(AssetProvider):
 
     def live_quotes(self, symbols: List[str]) -> Dict[str, dict]:
         return market_data.live_quotes(symbols)
+
+    def get_ratings(self, ticker: str) -> Optional[dict]:
+        return market_data.analyst_ratings(ticker)
 
 
 class StockProvider(_MarketTradedProvider):

@@ -5,42 +5,33 @@ import Sidebar from './Sidebar'
 
 describe('Sidebar', () => {
   it('marks the current page as active', () => {
-    render(<Sidebar page="trade-assets" onNavigate={vi.fn()} onLogout={vi.fn()} />)
-    expect(screen.getByRole('button', { name: /Trade Assets/ })).toHaveClass('active')
+    render(<Sidebar page="trade-assets" onNavigate={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Trade/ })).toHaveClass('active')
     expect(screen.getByRole('button', { name: /Dashboard/ })).not.toHaveClass('active')
+  })
+
+  it('tells assistive tech which page is current', () => {
+    render(<Sidebar page="trade-assets" onNavigate={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Trade/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('button', { name: /Dashboard/ })).not.toHaveAttribute('aria-current')
   })
 
   it('navigates when a nav item is clicked', async () => {
     const onNavigate = vi.fn()
     const typer = userEvent.setup()
-    render(<Sidebar page="dashboard" onNavigate={onNavigate} onLogout={vi.fn()} />)
+    render(<Sidebar page="dashboard" onNavigate={onNavigate} />)
 
-    await typer.click(screen.getByRole('button', { name: /Transaction History/ }))
+    await typer.click(screen.getByRole('button', { name: /History/ }))
     expect(onNavigate).toHaveBeenCalledWith('transaction-history')
   })
 
-  it('requires confirmation before logging out', async () => {
-    const onLogout = vi.fn()
-    const typer = userEvent.setup()
-    render(<Sidebar page="dashboard" onNavigate={vi.fn()} onLogout={onLogout} />)
+  // Account settings and logging out live in the header's account menu, so
+  // the rail carries only the three places you navigate between.
+  it('carries only the navigation destinations', () => {
+    render(<Sidebar page="dashboard" onNavigate={vi.fn()} />)
 
-    await typer.click(screen.getByRole('button', { name: /Log Out/ }))
-    expect(onLogout).not.toHaveBeenCalled()
-
-    const dialogLogoutButtons = screen.getAllByRole('button', { name: 'Log Out' })
-    await typer.click(dialogLogoutButtons[dialogLogoutButtons.length - 1])
-    expect(onLogout).toHaveBeenCalledOnce()
-  })
-
-  it('dismisses the confirmation without logging out on cancel', async () => {
-    const onLogout = vi.fn()
-    const typer = userEvent.setup()
-    render(<Sidebar page="dashboard" onNavigate={vi.fn()} onLogout={onLogout} />)
-
-    await typer.click(screen.getByRole('button', { name: /Log Out/ }))
-    await typer.click(screen.getByRole('button', { name: 'Cancel' }))
-
-    expect(onLogout).not.toHaveBeenCalled()
-    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button')).toHaveLength(3)
+    expect(screen.queryByRole('button', { name: /Log Out/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Account/ })).not.toBeInTheDocument()
   })
 })

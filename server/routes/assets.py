@@ -14,12 +14,13 @@ from typing import Tuple
 from flask import Blueprint, request
 
 import services.asset_transactions as st
+import services.watchlist as watchlist
 from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
 from authorization import require_user
 from idempotency import idempotent
 from errors import error_response
-from links import asset_detail_links, asset_summary_links, holdings_links
+from links import asset_detail_links, asset_summary_links, holdings_links, watchlist_links
 from validation import parse_quantity
 
 assets_bp = Blueprint('assets', __name__)
@@ -121,6 +122,23 @@ def get_asset_history(asset_type: str, ticker: str) -> Tuple[dict, int]:
     return {'history': PROVIDERS[asset_type].get_history(ticker)}, 200
 
 
+@assets_bp.route('/assets/<asset_type>/<ticker>/ratings', methods=['GET'])
+@known_asset_type
+def get_asset_ratings(asset_type: str, ticker: str) -> Tuple[dict, int]:
+    """
+    Get analyst coverage for an asset: the consensus call, the price
+    targets, and how the analysts split.
+
+    Its own endpoint rather than part of the detail response, because it is
+    a second upstream lookup and the price shouldn't wait behind it.
+
+    Returns:
+        dict: {'ratings': dict | null}. Null means nobody covers this
+        ticker - normal for bonds, crypto, and smaller listings.
+    """
+    return {'ratings': PROVIDERS[asset_type].get_ratings(ticker)}, 200
+
+
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/<ticker>/holdings', methods=['GET'])
 @require_user
 @known_asset_type
@@ -135,6 +153,68 @@ def get_asset_holdings(user_id: int, asset_type: str, ticker: str) -> Tuple[dict
         'shares': st.get_holding_qty(user_id, ticker),
         '_links': holdings_links(user_id, asset_type, ticker),
     }, 200
+
+
+@assets_bp.route('/users/<int:user_id>/watchlist', methods=['GET'])
+@require_user
+def get_watchlist(user_id: int) -> Tuple[dict, int]:
+    """
+    Get the tickers this user has saved to follow, newest first, quoted.
+
+    Returns:
+        dict: {'watchlist': list[dict], '_links': dict}
+    """
+    return {
+        'watchlist': watchlist.list_entries(user_id),
+        '_links': watchlist_links(user_id),
+    }, 200
+
+
+@assets_bp.route('/users/<int:user_id>/watchlist/<asset_type>/<ticker>', methods=['GET'])
+@require_user
+@known_asset_type
+def is_watched(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
+    """
+    Whether this ticker is on the user's watchlist.
+
+    A primary-key lookup, so the asset detail page can set its save button
+    without pulling and quoting the whole list to answer a boolean.
+
+    Returns:
+        dict: {'watched': bool}
+    """
+    return {'watched': watchlist.is_watched(user_id, ticker)}, 200
+
+
+@assets_bp.route('/users/<int:user_id>/watchlist/<asset_type>/<ticker>', methods=['PUT'])
+@require_user
+@known_asset_type
+def add_to_watchlist(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
+    """
+    Save a ticker to the watchlist.
+
+    PUT rather than POST because saving is idempotent - pressing the button
+    twice leaves one entry, not two.
+
+    Returns:
+        dict: {'watched': true}, or a 400 if the list is full.
+    """
+    watchlist.add(user_id, asset_type, ticker)
+    return {'watched': True, '_links': watchlist_links(user_id)}, 200
+
+
+@assets_bp.route('/users/<int:user_id>/watchlist/<asset_type>/<ticker>', methods=['DELETE'])
+@require_user
+@known_asset_type
+def remove_from_watchlist(user_id: int, asset_type: str, ticker: str) -> Tuple[dict, int]:
+    """
+    Drop a ticker from the watchlist.
+
+    Returns:
+        dict: {'watched': false}
+    """
+    watchlist.remove(user_id, ticker)
+    return {'watched': False, '_links': watchlist_links(user_id)}, 200
 
 
 @assets_bp.route('/users/<int:user_id>/assets/<asset_type>/buy', methods=['POST'])

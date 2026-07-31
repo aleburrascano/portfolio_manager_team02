@@ -2,57 +2,117 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100vh;
+  min-height: 100svh;
+  padding: 24px;
+  background: var(--bg);
+  background-image: repeating-linear-gradient(
+    var(--bg) 0,
+    var(--bg) 27px,
+    var(--border) 27px,
+    var(--border) 28px
+  );
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  width: 280px;
-  padding: 24px;
+  width: min(320px, 100%);
+  padding: 30px 28px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px -16px rgba(28, 40, 24, 0.35);
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: var(--heading);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.login-brand img {
+  display: block;
 }
 
 .login-form h1 {
-  font-size: 20px;
-  margin: 0 0 8px;
+  font-size: var(--fs-lg);
+  margin: 4px 0 8px;
   text-align: center;
 }
 
 .login-form input {
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  font-size: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: var(--fs-base);
+  font-family: var(--sans);
+  transition: border-color var(--dur-fast) var(--ease);
 }
 
-.login-form button {
+.login-form input::placeholder {
+  color: var(--text-muted);
+}
+
+/* The accent border is a second cue layered under the focus ring, not a
+   replacement for it - 1px at 2.75:1 does not meet the focus-appearance
+   minimum on its own, and this is the first control a keyboard user meets. */
+.login-form input:focus {
+  border-color: var(--accent-ink);
+}
+
+.login-form button[type='submit'] {
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 10px;
-  font-size: 14px;
+  margin-top: 4px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
   font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
   cursor: pointer;
-  background: var(--positive-bg);
-  color: var(--positive);
+  background: var(--accent-ink);
+  color: var(--surface);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.login-form button[type='submit']:hover {
+  background: var(--text-h);
 }
 
 .login-form .login-switch {
   background: none;
+  border: none;
+  font-family: var(--sans);
   color: var(--text-muted);
-  font-weight: 500;
-  padding: 0;
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  padding: 4px 0;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
 }
 
 .login-form .login-switch:hover {
   color: var(--text-h);
 }
 
+/* Always in the tree so the live region is registered before the first
+   error arrives, but taking no space until it has something to announce. */
 .login-error {
   color: var(--negative);
-  font-size: 13px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
   margin: 0;
+}
+
+.login-error:empty {
+  display: none;
 }

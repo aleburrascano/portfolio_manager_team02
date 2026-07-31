@@ -65,3 +65,30 @@ def parse_quantity(raw: Any) -> Decimal:
         InvalidInput: if it isn't a finite, positive, in-range number.
     """
     return _check_range(_to_decimal(raw, 'quantity'), 'quantity', MAX_AMOUNT)
+
+
+# A chart window, bounded because each extra day is priced from the market
+# data feed and an unbounded value would let one request pull decades.
+MIN_DAYS = 7
+MAX_DAYS = 1825
+DEFAULT_DAYS = 365
+
+
+def parse_days(raw: Any) -> int:
+    """
+    Validate a chart window in days, defaulting when it isn't given.
+
+    Raises:
+        InvalidInput: if it isn't a whole number in range.
+    """
+    if raw is None or raw == '':
+        return DEFAULT_DAYS
+
+    try:
+        days = int(raw)
+    except (TypeError, ValueError):
+        raise InvalidInput('days must be a whole number.') from None
+
+    if not MIN_DAYS <= days <= MAX_DAYS:
+        raise InvalidInput(f'days must be between {MIN_DAYS} and {MAX_DAYS}.')
+    return days

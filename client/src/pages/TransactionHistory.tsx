@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchTransactions, type Transaction, type User } from '../api'
 import { formatCurrency, formatNumber } from '../format'
 import './TransactionHistory.css'
 
+/** Full date for the table; the stacked mobile layout uses the same string. */
 function formatDate(value: string) {
   return new Date(value).toLocaleString('en-US', {
     year: 'numeric',
@@ -14,9 +15,11 @@ function formatDate(value: string) {
   })
 }
 
+// Every row reads as something that happened, in the same tense, so the
+// column scans as one list rather than two kinds of entry side by side.
 function describe(transaction: Transaction): string {
   if (transaction.type === 'cash') {
-    return transaction.transactionType === 'deposit' ? 'Cash Deposit' : 'Cash Withdrawal'
+    return transaction.transactionType === 'deposit' ? 'Deposited cash' : 'Withdrew cash'
   }
   const action = transaction.transactionType === 'buy' ? 'Bought' : 'Sold'
   const qty = transaction.qty != null ? formatNumber(Math.abs(transaction.qty), 2) : undefined
@@ -27,6 +30,7 @@ function TransactionHistory({ user }: { user: User }) {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [newestFirst, setNewestFirst] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -49,38 +53,70 @@ function TransactionHistory({ user }: { user: User }) {
     }
   }, [user.userId])
 
+  const ordered = useMemo(() => {
+    const byDate = [...transactions].sort(
+      (a, b) => Date.parse(a.transactionDate) - Date.parse(b.transactionDate),
+    )
+    return newestFirst ? byDate.reverse() : byDate
+  }, [transactions, newestFirst])
+
   return (
     <section id="transaction-history-content">
+      <div className="history-header">
+        <h1 className="section-title">Transaction history</h1>
+        {ordered.length > 0 && (
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setNewestFirst((current) => !current)}
+          >
+            {newestFirst ? 'Newest first' : 'Oldest first'}
+          </button>
+        )}
+      </div>
+
       {loading ? (
-        <p className="transaction-history-placeholder">Loading…</p>
+        <div className="transaction-history-loading" aria-busy="true">
+          <span className="visually-hidden">Loading your transactions</span>
+          {Array.from({ length: 5 }, (_, index) => (
+            <span key={index} className="skeleton skeleton-row" />
+          ))}
+        </div>
       ) : error ? (
         <p className="transaction-history-placeholder">{error}</p>
-      ) : transactions.length === 0 ? (
-        <p className="transaction-history-placeholder">No transactions to display yet.</p>
+      ) : ordered.length === 0 ? (
+        <p className="transaction-history-placeholder">
+          Every deposit, withdrawal, buy, and sell you make will be listed here.
+        </p>
       ) : (
-        <table className="transaction-history-table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Description</th>
-              <th>Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transactions.map((transaction) => {
-              const isPositive = transaction.signedAmount >= 0
-              return (
-                <tr key={`${transaction.type}-${transaction.transactionId}`}>
-                  <td>{formatDate(transaction.transactionDate)}</td>
-                  <td>{describe(transaction)}</td>
-                  <td className={isPositive ? 'positive' : 'negative'}>
-                    {isPositive ? '+' : '-'}{formatCurrency(Math.abs(transaction.signedAmount))}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        // The wrapper is the floor: if the table ever exceeds its column it
+        // scrolls inside this box rather than dragging the whole page
+        // sideways, which .app-page's overflow-y would otherwise allow.
+        <div className="transaction-history-scroll">
+          <table className="transaction-history-table">
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col">Description</th>
+                <th scope="col">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ordered.map((transaction) => {
+                const isPositive = transaction.signedAmount >= 0
+                return (
+                  <tr key={`${transaction.type}-${transaction.transactionId}`}>
+                    <td data-label="Date">{formatDate(transaction.transactionDate)}</td>
+                    <td data-label="Description">{describe(transaction)}</td>
+                    <td data-label="Amount" className={isPositive ? 'positive' : 'negative'}>
+                      {isPositive ? '+' : '-'}{formatCurrency(Math.abs(transaction.signedAmount))}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   )

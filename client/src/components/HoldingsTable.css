@@ -1,0 +1,270 @@
+.holdings-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.holdings-header .section-title {
+  margin: 0;
+}
+
+.holdings-count {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.holdings-empty {
+  margin: 0;
+  padding: 36px 24px;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 52ch;
+  margin-inline: auto;
+  text-wrap: pretty;
+}
+
+.holdings-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton-holding {
+  display: block;
+  height: 44px;
+}
+
+/* The floor: if the table ever outgrows its column it scrolls in here
+   rather than dragging the page sideways. */
+.holdings-scroll {
+  overflow-x: auto;
+}
+
+.holdings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.holdings-table th,
+.holdings-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.holdings-table th.numeric,
+.holdings-table td.numeric {
+  text-align: right;
+}
+
+.holdings-table thead th {
+  padding: 0;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+/* The whole header cell is the control, so the hit area matches what the
+   user sees rather than being a word inside a cell. */
+.holdings-table thead button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  padding: 8px 12px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.holdings-table th.numeric button {
+  justify-content: flex-end;
+}
+
+.holdings-table thead button:hover {
+  color: var(--text-h);
+}
+
+.holdings-table th[aria-sort]:not([aria-sort='none']) button {
+  color: var(--text-h);
+}
+
+.holdings-sort-glyph {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.holdings-table th[aria-sort]:not([aria-sort='none']) .holdings-sort-glyph {
+  color: var(--accent-ink);
+}
+
+.holdings-table tbody tr:hover {
+  background: var(--paper-band);
+}
+
+.holdings-asset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* A position is a way back into its trade ticket. */
+.holdings-asset-link {
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.holdings-asset-link:hover .holdings-ticker {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+
+.holdings-asset .asset-logo {
+  width: 28px;
+  height: 28px;
+}
+
+.holdings-asset-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.holdings-ticker {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.holdings-type {
+  font-size: var(--fs-micro);
+  color: var(--text-muted);
+}
+
+.holdings-delta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.holdings-delta.positive {
+  color: var(--positive);
+}
+
+.holdings-delta.negative {
+  color: var(--negative);
+}
+
+.holdings-delta-percent {
+  font-size: var(--fs-micro);
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.holdings-acquired {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.holdings-table tfoot th,
+.holdings-table tfoot td {
+  border-bottom: none;
+  border-top: 1px solid var(--border-strong);
+  padding-top: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  font-size: var(--fs-sm);
+}
+
+/* Below 700px six numeric columns cannot fit, so each position becomes a
+   block: the asset on top, its figures as labelled pairs beneath. */
+@media (max-width: 700px) {
+  .holdings-table thead,
+  .holdings-table tfoot .numeric:empty {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .holdings-table,
+  .holdings-table tbody,
+  .holdings-table tfoot,
+  .holdings-table tr,
+  .holdings-table td,
+  .holdings-table tfoot th {
+    display: block;
+  }
+
+  .holdings-table tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .holdings-table td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 3px 0;
+    border-bottom: none;
+    white-space: normal;
+  }
+
+  .holdings-table td::before {
+    content: attr(data-label);
+    font-family: var(--sans);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* The asset cell is the row's heading, so it keeps its own line. */
+  .holdings-table td[data-label='Asset'] {
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .holdings-table td[data-label='Asset']::before {
+    content: none;
+  }
+
+  .holdings-table tfoot tr {
+    border-bottom: none;
+    border-top: 1px solid var(--border-strong);
+  }
+
+  .holdings-table tfoot th {
+    padding: 12px 0 4px;
+    border-top: none;
+  }
+
+  .holdings-table tfoot td:not(:empty) {
+    display: flex;
+    padding: 3px 0;
+    border-top: none;
+  }
+
+  .holdings-table tfoot td:empty {
+    display: none;
+  }
+}

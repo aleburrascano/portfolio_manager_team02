@@ -24,13 +24,20 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from werkzeug.security import generate_password_hash
 
+import pandas as pd
+
+import services.bond_pricing as bond_pricing
 import services.market_data as market_data
 from db.connection import get_engine, init_db
-from db.models import Asset, AssetTransaction, CashTransaction, User
+from db.models import Asset, AssetTransaction, Bond, CashTransaction, User
 
 STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA']
 CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD']
-TICKERS = {t: 'stock' for t in STOCKS} | {t: 'crypto' for t in CRYPTOS}
+MARKET_TICKERS = {t: 'stock' for t in STOCKS} | {t: 'crypto' for t in CRYPTOS}
+# How many bonds from the catalog to trade, so the demo portfolio has a
+# bond bucket - the composition donut and the per-class gain/loss both have
+# one, and without any holdings they render a hole.
+BOND_COUNT = 3
 
 INITIAL_DEPOSIT_RANGE = (30_000, 60_000)
 EVENT_SPACING_DAYS = (4, 12)  # roughly one transaction every 4-12 days
@@ -56,9 +63,40 @@ def find_or_create_user(session, username, password, first_name, last_name):
     return user.userId
 
 
-def register_assets(session):
+def pick_bonds(session, today):
+    """
+    Up to BOND_COUNT unmatured bonds from the catalog, as {ticker: dict}.
+
+    Read through the model rather than services.bond_pricing, which reads
+    the Flask request-scoped session this script doesn't have.
+    """
+    bonds = session.scalars(select(Bond).order_by(Bond.maturityDate)).all()
+    chosen = {}
+    for bond in bonds:
+        if bond_pricing._as_date(bond.maturityDate) <= today:
+            continue
+        chosen[bond.ticker] = bond_pricing._serialize(bond)
+        if len(chosen) == BOND_COUNT:
+            break
+    return chosen
+
+
+def bond_close_series(bond, start, days):
+    """
+    A bond's daily price as a pandas Series, so it looks up exactly like a
+    yfinance close series does. Bonds are priced from their own terms at any
+    date, so this is computed rather than fetched.
+    """
+    dates = [start + timedelta(days=offset) for offset in range(days + 1)]
+    return pd.Series(
+        [float(bond_pricing.price_bond(bond, day.date())) for day in dates],
+        index=pd.DatetimeIndex(dates),
+    )
+
+
+def register_assets(session, tickers):
     """Assets have to exist before transactions can reference them."""
-    for ticker, asset_type in TICKERS.items():
+    for ticker, asset_type in tickers.items():
         if session.get(Asset, ticker) is None:
             session.add(Asset(ticker=ticker, assetType=asset_type))
     session.commit()
@@ -109,13 +147,19 @@ def run(username, password, first_name, last_name, days):
     session = Session(get_engine())
 
     user_id = find_or_create_user(session, username, password, first_name, last_name)
-    register_assets(session)
-    clear_user_transactions(session, user_id)
 
     # UTC, to match the clock the database writes its own defaults on.
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = now - timedelta(days=days)
-    histories = fetch_price_histories(TICKERS.keys(), days)
+
+    bonds = pick_bonds(session, now.date())
+    tickers = MARKET_TICKERS | {ticker: 'bond' for ticker in bonds}
+    register_assets(session, tickers)
+    clear_user_transactions(session, user_id)
+
+    histories = fetch_price_histories(MARKET_TICKERS.keys(), days)
+    for ticker, bond in bonds.items():
+        histories[ticker] = bond_close_series(bond, start, days)
     available_tickers = list(histories.keys())
 
     cash_rows = []
