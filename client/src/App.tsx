@@ -1,58 +1,54 @@
 import { useEffect, useState } from 'react'
-import Dashboard from './Dashboard'
-import TradeAssets from './TradeAssets'
-import TransactionHistory from './TransactionHistory'
+import Dashboard from './pages/Dashboard'
+import TradeAssets from './pages/TradeAssets'
+import TransactionHistory from './pages/TransactionHistory'
+import Account from './pages/Account'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
 import { BalanceProvider } from './BalanceContext'
-import { fetchUser, type User } from './api'
+import { fetchCurrentUser, logout, type User } from './api'
 import './App.css'
 
 function App() {
-  const [user, setUser] = useState<User | null>(() => {
-    const stored = localStorage.getItem('user')
-    return stored ? JSON.parse(stored) : null
-  })
-  const [validating, setValidating] = useState(() => localStorage.getItem('user') !== null)
+  // The server session is the only source of truth for who is logged in, so
+  // it's asked once on load rather than trusting anything the client stored.
+  const [user, setUser] = useState<User | null>(null)
+  const [restoring, setRestoring] = useState(true)
   const [page, setPage] = useState<Page>('dashboard')
 
   useEffect(() => {
-    if (!user) return
-
     let cancelled = false
-    fetchUser(user.userId).catch((err) => {
+
+    fetchCurrentUser().then((current) => {
       if (cancelled) return
-      if (err instanceof Error && err.message === 'User not found') {
-        handleLogout()
-      }
-    }).finally(() => {
-      if (!cancelled) setValidating(false)
+      setUser(current)
+      setRestoring(false)
     })
 
     return () => {
       cancelled = true
     }
-    // Only re-validate when a different user logs in, not on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.userId])
+  }, [])
 
-  function handleLogin(user: User) {
-    localStorage.setItem('user', JSON.stringify(user))
-    setUser(user)
+  async function handleLogout() {
+    // Cleared either way: if the request fails there's nothing useful the
+    // user can do about it, and leaving them on the dashboard would make
+    // the button look broken.
+    try {
+      await logout()
+    } finally {
+      setUser(null)
+      setPage('dashboard')
+    }
   }
 
-  function handleLogout() {
-    localStorage.removeItem('user')
-    setUser(null)
-  }
-
-  if (validating) {
+  if (restoring) {
     return null
   }
 
   if (!user) {
-    return <Login onLogin={handleLogin} />
+    return <Login onLogin={setUser} />
   }
 
   return (
@@ -62,9 +58,10 @@ function App() {
         <div className="app-body">
           <Sidebar page={page} onNavigate={setPage} onLogout={handleLogout} />
           <main className="app-page">
-            {page === 'dashboard' && <Dashboard />}
+            {page === 'dashboard' && <Dashboard user={user} />}
             {page === 'trade-assets' && <TradeAssets user={user} />}
             {page === 'transaction-history' && <TransactionHistory user={user} />}
+            {page === 'account' && <Account user={user} onUpdate={setUser} />}
           </main>
         </div>
       </div>

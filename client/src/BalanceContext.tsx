@@ -5,13 +5,12 @@ import { BalanceContext } from './balance-context'
 export function BalanceProvider({ userId, children }: { userId: number; children: ReactNode }) {
   const [balance, setBalance] = useState<number | null>(null)
 
-  const refreshBalance = useCallback(async () => {
-    try {
-      setBalance(await fetchBalance(userId))
-    } catch {
-      setBalance(null)
-    }
-  }, [userId])
+  // Settles in a promise callback rather than after an await, so the
+  // mount-time load below never sets state synchronously in the effect.
+  const refreshBalance = useCallback(
+    () => fetchBalance(userId).then(setBalance, () => setBalance(null)),
+    [userId],
+  )
 
   useEffect(() => {
     refreshBalance()
