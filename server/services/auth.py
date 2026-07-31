@@ -14,6 +14,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from db.connection import get_session
 from db.models import User
+from services.exceptions import InvalidInput, UnknownUser, UsernameTaken
 
 
 def normalize_username(username: str) -> str:
@@ -89,3 +90,60 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     """
     user = get_session().get(User, user_id)
     return _serialize(user) if user else None
+
+
+def update_user(
+    user_id: int,
+    username: Optional[str] = None,
+    first_name: Optional[str] = None,
+    last_name: Optional[str] = None,
+    current_password: Optional[str] = None,
+    new_password: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Edit a user's profile fields and/or password. Only the fields passed
+    (non-None) are changed; everything else is left as-is.
+
+    Args:
+        user_id (int): The ID of the user to edit.
+        username (str | None): The new username, if changing it.
+        first_name (str | None): The new first name, if changing it.
+        last_name (str | None): The new last name, if changing it.
+        current_password (str | None): The caller's existing password,
+            required to prove ownership when new_password is set.
+        new_password (str | None): The new password, if changing it.
+
+    Returns:
+        dict: The updated user.
+
+    Raises:
+        UnknownUser: No user with that ID exists.
+        UsernameTaken: Another account already uses the requested username.
+        InvalidInput: A password change was requested but current_password
+            doesn't match the account's existing password.
+    """
+    session = get_session()
+    user = session.get(User, user_id)
+    if user is None:
+        raise UnknownUser('User not found')
+
+    if username is not None:
+        normalized = normalize_username(username)
+        if normalized != user.username:
+            existing = session.scalar(select(User).where(User.username == normalized))
+            if existing is not None:
+                raise UsernameTaken('That username is already taken')
+            user.username = normalized
+
+    if first_name is not None:
+        user.firstName = first_name
+    if last_name is not None:
+        user.lastName = last_name
+
+    if new_password is not None:
+        if not current_password or not check_password_hash(user.passwordHash, current_password):
+            raise InvalidInput('Current password is incorrect')
+        user.passwordHash = generate_password_hash(new_password)
+
+    session.commit()
+    return _serialize(user)

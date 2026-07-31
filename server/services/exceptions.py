@@ -32,6 +32,12 @@ class UnknownUser(ServiceError):
     status = 404
 
 
+class UsernameTaken(ServiceError):
+    """Another account already uses that username."""
+
+    status = 409
+
+
 class MarketDataUnavailable(ServiceError):
     """The upstream market data provider had no answer for us."""
 

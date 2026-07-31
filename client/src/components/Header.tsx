@@ -3,12 +3,9 @@ import { submitCashTransaction, type TransactionType, type User } from '../api'
 import { useBalance } from '../balance-context'
 import { useIdempotencyKey } from '../idempotency'
 import { validateAmountInput } from '../validation'
+import { formatCurrency } from '../format'
 import './Modal.css'
 import './Header.css'
-
-function formatCurrency(value: number) {
-  return `$${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-}
 
 function Header({ user }: { user: User }) {
   const { balance, refreshBalance } = useBalance()

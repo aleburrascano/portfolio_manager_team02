@@ -15,6 +15,7 @@ import { useBalance } from '../balance-context'
 import { useLiveQuotes } from '../realtime'
 import { useIdempotencyKey } from '../idempotency'
 import { validateQuantityInput } from '../validation'
+import { formatCurrency, formatNumber } from '../format'
 import AssetLogo from './AssetLogo'
 import './AssetDetail.css'
 
@@ -164,10 +165,10 @@ function AssetDetail({
             <div className="asset-detail-main">
               <div className="chart-card">
                 <div className="trade-price">
-                  ${price.toFixed(2)}{' '}
+                  {formatCurrency(price)}{' '}
                   <span className={isPositive ? 'positive' : 'negative'}>
-                    {isPositive ? '▲' : '▼'} {Math.abs(quote.changePercent ?? 0).toFixed(2)}%
-                    {' '}(${Math.abs(quote.change ?? 0).toFixed(2)})
+                    {isPositive ? '▲' : '▼'} {formatNumber(Math.abs(quote.changePercent ?? 0), 2)}%
+                    {' '}({formatCurrency(Math.abs(quote.change ?? 0))})
                   </span>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
@@ -189,14 +190,14 @@ function AssetDetail({
                     />
                     <YAxis
                       domain={['auto', 'auto']}
-                      tickFormatter={(value) => `$${Number(value).toLocaleString()}`}
+                      tickFormatter={(value) => formatCurrency(Number(value), 0)}
                       tick={{ fill: 'var(--text-muted)', fontSize: 12 }}
                       axisLine={false}
                       tickLine={false}
                       width={64}
                     />
                     <Tooltip
-                      formatter={(value) => [`$${Number(value).toFixed(2)}`, 'Close']}
+                      formatter={(value) => [formatCurrency(Number(value)), 'Close']}
                       labelFormatter={(label) => formatDate(String(label))}
                       contentStyle={{
                         background: 'var(--surface)',
@@ -218,27 +219,27 @@ function AssetDetail({
               <div className="stats-grid">
                 <div>
                   <span className="stats-label">Daily High</span>
-                  <span>{quote.dayHigh != null ? `$${quote.dayHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayHigh != null ? formatCurrency(quote.dayHigh) : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Daily Low</span>
-                  <span>{quote.dayLow != null ? `$${quote.dayLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.dayLow != null ? formatCurrency(quote.dayLow) : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week High</span>
-                  <span>{quote.yearHigh != null ? `$${quote.yearHigh.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearHigh != null ? formatCurrency(quote.yearHigh) : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">52 Week Low</span>
-                  <span>{quote.yearLow != null ? `$${quote.yearLow.toFixed(2)}` : '—'}</span>
+                  <span>{quote.yearLow != null ? formatCurrency(quote.yearLow) : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Open</span>
-                  <span>{quote.open != null ? `$${quote.open.toFixed(2)}` : '—'}</span>
+                  <span>{quote.open != null ? formatCurrency(quote.open) : '—'}</span>
                 </div>
                 <div>
                   <span className="stats-label">Volume</span>
-                  <span>{quote.volume != null ? quote.volume.toLocaleString() : '—'}</span>
+                  <span>{quote.volume != null ? formatNumber(quote.volume) : '—'}</span>
                 </div>
               </div>
             </div>
@@ -264,7 +265,7 @@ function AssetDetail({
 
                 <form onSubmit={handleSubmit}>
                   <label htmlFor="quantity">
-                    Quantity <span className="trade-max">max: {maxQuantity.toFixed(1)}</span>
+                    Quantity <span className="trade-max">max: {formatNumber(maxQuantity, 1)}</span>
                   </label>
                   <input
                     id="quantity"
@@ -276,7 +277,7 @@ function AssetDetail({
                     required
                   />
 
-                  <p className="trade-total">Total: ${total.toFixed(2)}</p>
+                  <p className="trade-total">Total: {formatCurrency(total)}</p>
 
                   <button type="submit" className="submit-btn" disabled={submitting}>
                     {submitting ? 'Submitting...' : 'Submit'}
