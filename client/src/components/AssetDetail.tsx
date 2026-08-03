@@ -5,6 +5,7 @@ import {
   fetchAssetDetail,
   fetchAssetHistory,
   fetchHoldings,
+  placeLimitOrder,
   sellAsset,
   type AssetDetail as AssetDetailType,
   type AssetType,
@@ -14,7 +15,7 @@ import {
 import { useBalance } from '../balance-context'
 import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../realtime'
 import { useIdempotencyKey } from '../idempotency'
-import { validateQuantityInput } from '../validation'
+import { validateAmountInput, validateQuantityInput } from '../validation'
 import { formatCurrency, formatNumber } from '../format'
 import AssetLogo from './AssetLogo'
 import AnalystRatings from './AnalystRatings'
@@ -24,6 +25,7 @@ import WatchButton from './WatchButton'
 import './AssetDetail.css'
 
 type Side = 'buy' | 'sell'
+type OrderType = 'market' | 'limit'
 type Status = { kind: 'success' | 'error'; text: string }
 
 function formatDate(value: string) {
@@ -49,6 +51,8 @@ function AssetDetail({
   const [shares, setShares] = useState(0)
   const [side, setSide] = useState<Side>('buy')
   const [quantity, setQuantity] = useState('1')
+  const [orderType, setOrderType] = useState<OrderType>('market')
+  const [limitPrice, setLimitPrice] = useState('')
   const [status, setStatus] = useState<Status | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [confirming, setConfirming] = useState(false)
@@ -101,13 +105,19 @@ function AssetDetail({
   const connected = useQuoteConnection()
   const tick = usePriceDirection(quote?.currentPrice)
   const parsedQuantity = Number(quantity)
+  const isLimit = orderType === 'limit'
+  const parsedLimitPrice = Number(limitPrice)
+  // A limit order won't fill at the current price - that's the point of it -
+  // so once one is being entered, every downstream figure (max quantity,
+  // total, cash after) is computed off the price the user typed instead.
+  const effectivePrice = isLimit ? (Number.isFinite(parsedLimitPrice) ? parsedLimitPrice : 0) : price
   const maxQuantity =
     side === 'buy'
-      ? price > 0 && balance !== null
-        ? balance / price
+      ? effectivePrice > 0 && balance !== null
+        ? balance / effectivePrice
         : 0
       : shares
-  const total = Number.isFinite(parsedQuantity) ? parsedQuantity * price : 0
+  const total = Number.isFinite(parsedQuantity) ? parsedQuantity * effectivePrice : 0
   const isBuy = side === 'buy'
   const cashAfter = balance !== null ? (isBuy ? balance - total : balance + total) : null
   const sharesAfter = isBuy ? shares + parsedQuantity : shares - parsedQuantity
@@ -116,6 +126,8 @@ function AssetDetail({
     setSide(next)
     setStatus(null)
     setQuantity('1')
+    setOrderType('market')
+    setLimitPrice('')
   }
 
   /** Validates and opens the review. Nothing is sent from here. */
@@ -127,6 +139,13 @@ function AssetDetail({
     if (quantityError) {
       setStatus({ kind: 'error', text: quantityError })
       return
+    }
+    if (isLimit) {
+      const limitPriceError = validateAmountInput(limitPrice)
+      if (limitPriceError) {
+        setStatus({ kind: 'error', text: limitPriceError })
+        return
+      }
     }
     if (parsedQuantity > maxQuantity) {
       setStatus({
@@ -146,6 +165,24 @@ function AssetDetail({
     setSubmitting(true)
 
     try {
+      if (isLimit) {
+        const key = idempotency.keyFor(
+          `limit:${side}:${assetType}:${symbol}:${parsedQuantity}:${parsedLimitPrice}`,
+        )
+        await placeLimitOrder(user.userId, assetType, symbol, side, parsedQuantity, parsedLimitPrice, key)
+        idempotency.reset()
+        // Nothing has settled yet - a limit order just sits pending until
+        // its price is crossed - so balance and holdings are left alone.
+        setQuantity('1')
+        setLimitPrice('')
+        setOrderType('market')
+        setStatus({
+          kind: 'success',
+          text: `Limit order placed: ${isBuy ? 'buy' : 'sell'} ${formatNumber(parsedQuantity, 2)} ${symbol} at ${formatCurrency(parsedLimitPrice)} or better.`,
+        })
+        return
+      }
+
       const key = idempotency.keyFor(`${side}:${assetType}:${symbol}:${parsedQuantity}`)
       if (isBuy) {
         await buyAsset(user.userId, assetType, symbol, parsedQuantity, key)
@@ -310,6 +347,27 @@ function AssetDetail({
                   </button>
                 </div>
 
+                {/* Limit orders are stocks-only for now, so the toggle only
+                    shows up where placing one is actually possible. */}
+                {assetType === 'stock' && (
+                  <div className="order-type-tabs">
+                    <button
+                      type="button"
+                      className={orderType === 'market' ? 'active' : ''}
+                      onClick={() => setOrderType('market')}
+                    >
+                      Market
+                    </button>
+                    <button
+                      type="button"
+                      className={orderType === 'limit' ? 'active' : ''}
+                      onClick={() => setOrderType('limit')}
+                    >
+                      Limit
+                    </button>
+                  </div>
+                )}
+
                 <form onSubmit={handleReview}>
                   <div className="trade-label-row">
                     <label htmlFor="quantity">Quantity</label>
@@ -326,6 +384,21 @@ function AssetDetail({
                     onChange={(e) => setQuantity(e.target.value)}
                     required
                   />
+
+                  {isLimit && (
+                    <>
+                      <label htmlFor="limit-price">Limit price</label>
+                      <input
+                        id="limit-price"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={limitPrice}
+                        onChange={(e) => setLimitPrice(e.target.value)}
+                        required
+                      />
+                    </>
+                  )}
 
                   {/* The wallet lives here rather than only in the header:
                       "can I afford this" is the question being asked at
@@ -351,7 +424,7 @@ function AssetDetail({
                   </dl>
 
                   <button type="submit" className="submit-btn" disabled={submitting}>
-                    {submitting ? 'Submitting…' : `Review ${side}`}
+                    {submitting ? 'Submitting…' : isLimit ? `Review ${side} order` : `Review ${side}`}
                   </button>
                 </form>
 
@@ -364,7 +437,29 @@ function AssetDetail({
             </div>
           </div>
 
-          {confirming && (
+          {confirming && isLimit && (
+            <ConfirmDialog
+              title={`Place ${side} order for ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
+              confirmLabel="Place order"
+              cancelLabel="Back"
+              onConfirm={handleConfirm}
+              onCancel={() => setConfirming(false)}
+              message={
+                <dl className="confirm-summary">
+                  <dt>{isBuy ? 'Buy' : 'Sell'}</dt>
+                  <dd className="figure">
+                    {formatNumber(parsedQuantity, 2)} {symbol} at {formatCurrency(parsedLimitPrice)} or better
+                  </dd>
+                  <dt className="confirm-summary-total">Status</dt>
+                  <dd className="figure confirm-summary-total">
+                    Pending until the price is met — nothing is charged yet
+                  </dd>
+                </dl>
+              }
+            />
+          )}
+
+          {confirming && !isLimit && (
             <ConfirmDialog
               title={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
               confirmLabel={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}`}

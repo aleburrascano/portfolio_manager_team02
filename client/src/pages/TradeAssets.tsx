@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import SearchBar from '../components/SearchBar'
 import AssetList from '../components/AssetList'
 import Icon, { type IconName } from './../components/Icon'
+import OpenOrdersTab from '../components/OpenOrdersTab'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
 import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
@@ -38,6 +39,10 @@ function TradeAssets({
   // could drift out of sync with it.
   const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(openAsset?.symbol ?? null)
+  // Limit orders are stocks-only, so this only ever shows for that tab -
+  // switching away from Stocks drops back to browsing rather than leaving
+  // a dead-end view up for an asset type that doesn't support it.
+  const [showOpenOrders, setShowOpenOrders] = useState(false)
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
   useEffect(() => {
@@ -105,11 +110,19 @@ function TradeAssets({
     setAssetType(next)
     setQuery('')
     setSelectedSymbol(null)
+    setShowOpenOrders(false)
   }
 
   return (
     <section id="trade-assets-content">
-      {selectedSymbol ? (
+      {showOpenOrders ? (
+        <>
+          <button type="button" className="back-btn" onClick={() => setShowOpenOrders(false)}>
+            ← Back
+          </button>
+          <OpenOrdersTab user={user} />
+        </>
+      ) : selectedSymbol ? (
         <Suspense
           fallback={
             <div className="asset-detail-loading" aria-busy="true">
@@ -149,6 +162,15 @@ function TradeAssets({
                 </button>
               ))}
             </div>
+            {assetType === 'stock' && (
+              <button
+                type="button"
+                className="secondary-btn open-orders-toggle"
+                onClick={() => setShowOpenOrders(true)}
+              >
+                Open orders
+              </button>
+            )}
             <SearchBar value={query} onChange={setQuery} />
           </div>
           <AssetList

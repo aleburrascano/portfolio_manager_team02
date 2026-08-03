@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
 os.environ['SECRET_KEY'] = 'test-secret-key'
 os.environ.setdefault('CORS_ORIGINS', 'http://localhost:5173')
+os.environ.setdefault('START_LIMIT_ORDER_POLLER', 'false')
 
 import pytest
 
