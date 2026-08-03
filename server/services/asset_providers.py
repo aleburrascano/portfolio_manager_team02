@@ -97,6 +97,27 @@ class AssetProvider(ABC):
         """
         return {}
 
+    def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
+        """
+        Name and current price for many tickers at once, keyed by ticker.
+
+        For callers holding a list rather than one asset - a watchlist, a
+        holdings table - so the cost is one lookup for the list instead of
+        one per row. A ticker that can't be quoted is simply absent.
+
+        The default walks get_quote, which is right for a type priced from
+        local terms; the market-traded types override it with a real batch.
+        """
+        book = {}
+        for ticker in tickers:
+            try:
+                quote = self.get_quote(ticker)
+            except Exception:
+                continue
+            if quote:
+                book[ticker] = quote
+        return book
+
     def get_ratings(self, ticker: str) -> Optional[dict]:
         """
         Analyst coverage for this asset, or None when there is none.
@@ -144,6 +165,17 @@ class _MarketTradedProvider(AssetProvider):
 
     def live_quotes(self, symbols: List[str]) -> Dict[str, dict]:
         return market_data.live_quotes(symbols)
+
+    def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
+        # One batched price call for the whole list, and names from their
+        # own day-long cache - so a list that has been seen before costs a
+        # single upstream request no matter how long it is.
+        quotes = market_data.live_quotes(tickers)
+        names = market_data.display_names(list(quotes))
+        return {
+            ticker: {**quote, 'name': names.get(ticker, ticker)}
+            for ticker, quote in quotes.items()
+        }
 
     def get_ratings(self, ticker: str) -> Optional[dict]:
         return market_data.analyst_ratings(ticker)
