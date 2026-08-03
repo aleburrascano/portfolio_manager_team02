@@ -7,30 +7,20 @@ provider, so nothing here branches on what kind of asset it's handling, and
 a failed trade raises out of services.asset_transactions into the shared
 error handler.
 """
-from decimal import Decimal
 from functools import wraps
 from typing import Tuple
-
-from flask import Blueprint, request
 
 import services.asset_transactions as st
 import services.watchlist as watchlist
 from services.asset_providers import PROVIDERS
-from services.exceptions import InvalidInput
-from apidocs import IDEMPOTENCY_KEY, documents
+from apidocs import IDEMPOTENCY_KEY, Blueprint
 from authorization import require_user
 from idempotency import idempotent
 from errors import error_response
 from links import asset_detail_links, asset_summary_links, holdings_links, watchlist_links
-from validation import parse_quantity
+from schemas import SearchQuerySchema, TradeSchema
 
-assets_bp = Blueprint('assets', __name__)
-
-#: What _trade_request below reads. Buy and sell take the same body.
-_TRADE_BODY = {
-    'ticker': {'type': 'string', 'example': 'NVDA'},
-    'quantity': {'type': 'number', 'example': 1.5},
-}
+assets_bp = Blueprint('assets', __name__, description='Quotes, trading and the watchlist')
 
 
 def known_asset_type(view):
@@ -44,42 +34,20 @@ def known_asset_type(view):
     return wrapped
 
 
-def _trade_request() -> Tuple[str, Decimal]:
-    """
-    Pull a validated (ticker, quantity) out of a buy/sell request body.
-
-    Raises:
-        InvalidInput: if either field is missing or malformed.
-    """
-    body = request.get_json(silent=True) or {}
-    ticker = body.get('ticker')
-    if not isinstance(ticker, str) or not ticker.strip():
-        raise InvalidInput('ticker is required.')
-    return ticker.strip(), parse_quantity(body.get('quantity'))
-
-
 @assets_bp.route('/assets/<asset_type>/search', methods=['GET'])
 @known_asset_type
-@documents(params=[{
-    'name': 'q',
-    'in': 'query',
-    'required': True,
-    'type': 'string',
-    'example': 'NVDA',
-    'description': 'Ticker or name to search for.',
-}])
-def search_assets(asset_type: str) -> Tuple[dict, int]:
+@assets_bp.arguments(SearchQuerySchema, location='query')
+def search_assets(params: dict, asset_type: str) -> Tuple[dict, int]:
     """
     Search for assets by ticker or name.
-
-    Query params:
-        q (str): The search query.
 
     Returns:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
         'currentPrice', 'change', 'changePercent', 'dayLow', and 'dayHigh'.
     """
-    query = request.args.get('q', '').strip()
+    # The schema insists on `q` being present; a blank one still has to be
+    # rejected here, since "" satisfies "present".
+    query = params['q'].strip()
     if not query:
         return error_response('Search query required', 400)
 
@@ -236,18 +204,16 @@ def remove_from_watchlist(user_id: int, asset_type: str, ticker: str) -> Tuple[d
 @require_user
 @known_asset_type
 @idempotent
-@documents(body=_TRADE_BODY, required=['ticker', 'quantity'], params=[IDEMPOTENCY_KEY])
-def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
+@assets_bp.doc(parameters=[IDEMPOTENCY_KEY])
+@assets_bp.arguments(TradeSchema)
+def buy_asset(body: dict, user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Buy an asset for the user.
-
-    Body:
-        dict: {'ticker': str, 'quantity': float}
 
     Returns:
         dict: A success message, or a 400/404/502 error.
     """
-    ticker, quantity = _trade_request()
+    ticker, quantity = body['ticker'], body['quantity']
     st.purchase_asset(user_id, asset_type, ticker, quantity)
     return {'message': 'Purchase successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200
 
@@ -256,17 +222,15 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
 @require_user
 @known_asset_type
 @idempotent
-@documents(body=_TRADE_BODY, required=['ticker', 'quantity'], params=[IDEMPOTENCY_KEY])
-def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
+@assets_bp.doc(parameters=[IDEMPOTENCY_KEY])
+@assets_bp.arguments(TradeSchema)
+def sell_asset(body: dict, user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Sell an asset for the user.
-
-    Body:
-        dict: {'ticker': str, 'quantity': float}
 
     Returns:
         dict: A success message, or a 400/404/502 error.
     """
-    ticker, quantity = _trade_request()
+    ticker, quantity = body['ticker'], body['quantity']
     st.sell_asset(user_id, asset_type, ticker, quantity)
     return {'message': 'Sale successful!', '_links': holdings_links(user_id, asset_type, ticker)}, 200

@@ -24,6 +24,33 @@ def _default_code(status: int) -> str:
     return _DEFAULT_CODES.get(status, 'error')
 
 
+def _schema_message(exception: HTTPException) -> Optional[str]:
+    """
+    The field message behind a failed schema validation, if that is what
+    this is.
+
+    webargs hangs its messages off the exception, nested by location -
+    {'json': {'amount': ['amount must be greater than zero.']}} - and
+    leaves the description as a bare "Bad Request". Without digging them
+    out, every rejected body would surface as the same useless sentence.
+    Only the first is taken: the envelope carries one message, and the
+    first failing field is the one worth naming.
+    """
+    data = getattr(exception, 'data', None)
+    if not isinstance(data, dict):
+        return None
+
+    for fields in data.get('messages', {}).values():
+        if not isinstance(fields, dict):
+            continue
+        for texts in fields.values():
+            if isinstance(texts, str):
+                return texts
+            if isinstance(texts, (list, tuple)) and texts:
+                return str(texts[0])
+    return None
+
+
 def error_response(message: str, status: int, code: Optional[str] = None) -> Tuple[dict, int]:
     """Build a full (body, status) error response."""
     return {'error': {'message': message, 'code': code or _default_code(status)}}, status
@@ -43,7 +70,8 @@ def register_error_handlers(app: Flask) -> None:
 
     @app.errorhandler(HTTPException)
     def handle_http_exception(e: HTTPException):
-        return error_response(e.description or e.name or 'Error', e.code or 500)
+        message = _schema_message(e) or e.description or e.name or 'Error'
+        return error_response(message, e.code or 500)
 
     @app.errorhandler(Exception)
     def handle_exception(e: Exception):

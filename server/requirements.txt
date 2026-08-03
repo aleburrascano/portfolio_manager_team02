@@ -1,5 +1,7 @@
 Flask>=3.0.0
-flasgger>=0.9.7
+# Generates the OpenAPI spec from the same marshmallow schemas that parse
+# incoming requests, so the docs can't describe a body the code rejects.
+flask-smorest>=0.47.0
 flask-cors>=4.0.0
 # Serves the app in deployment; the dev server in app.py is not used there.
 # Threaded workers rather than eventlet/gevent: simple-websocket below

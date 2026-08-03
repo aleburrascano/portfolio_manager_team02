@@ -109,21 +109,32 @@ change.
 Routes are served under `/api/v1`. Responses carry a `_links` map of related
 endpoints, and errors are always `{'error': {'message': str, 'code': str}}`.
 
-Browsable docs live at `/apidocs`, with the raw spec at `/apispec_1.json`. The
-route list is generated from Flask's URL map, so a new endpoint appears there as
-soon as it is registered — nothing to remember. What can't be introspected, the
-JSON body and any query parameters, is declared with `@documents` beside the
-route; see `apidocs.py`.
+Browsable docs live at `/apidocs`, with the raw spec at `/apispec_1.json`.
+flask-smorest builds that spec from the same marshmallow schemas that parse
+incoming requests, so it can't describe a body the code would reject — one
+declaration, used twice. Routes and their path parameters come from the
+blueprints, so a new endpoint is documented as soon as it is registered.
+
+Request shapes live in `schemas.py`; the rules behind them stay in
+`validation.py`, which each field defers to. Adding a field means adding it to
+the schema — the docs and the parser both follow from that.
 
 ## Deployment
 
 The server runs on Railway (with its MySQL), the client on Vercel. Pushing to
 `main` deploys both.
 
-Migrations are the exception and are deliberately manual — three people merging
-at once should not race `alembic upgrade head` against a shared database. After
-merging a migration, run it once, from one machine, against the deployed
-database.
+Migrations run on boot: the server starts with `alembic upgrade head`, so a
+merged migration reaches the deployed database without anyone remembering to
+apply it. Forgetting had already broken production twice, which is a worse
+failure than the one being guarded against — a single service with one worker
+gives concurrent upgrades little room to race, and `upgrade head` is a no-op
+once there.
+
+A failing migration stops the container from starting, and the previous
+deployment keeps serving until a good one replaces it. The cost is that a
+rollback is no longer just redeploying an older commit: the schema has already
+moved, so going back means `alembic downgrade`.
 
 ## Changing the schema
 
