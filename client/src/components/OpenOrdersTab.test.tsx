@@ -40,7 +40,48 @@ describe('OpenOrdersTab', () => {
     mockedFetch.mockResolvedValue([])
     render(<OpenOrdersTab user={user} assetType="stock" />)
 
-    expect(await screen.findByText(/don't have any open limit orders/)).toBeInTheDocument()
+    expect(await screen.findByText(/don't have any open orders/)).toBeInTheDocument()
+  })
+
+  it('opens on the pending orders', async () => {
+    mockedFetch.mockResolvedValue([])
+    render(<OpenOrdersTab user={user} assetType="stock" />)
+
+    await screen.findByText(/don't have any open orders/)
+    expect(mockedFetch).toHaveBeenCalledWith(1, 'stock', 'pending', expect.any(Number))
+  })
+
+  // The filter, the resolvedAt field and the index behind them all existed
+  // server-side; only pending orders were ever reachable.
+  it('switches to filled orders and shows when each resolved', async () => {
+    const typer = userEvent.setup()
+    mockedFetch.mockResolvedValueOnce([])
+    render(<OpenOrdersTab user={user} assetType="stock" />)
+    await screen.findByText(/don't have any open orders/)
+
+    mockedFetch.mockResolvedValueOnce([
+      order({ status: 'filled', resolvedAt: '2026-02-03T09:30:00' }),
+    ])
+    await typer.click(screen.getByRole('button', { name: 'Filled' }))
+
+    expect(mockedFetch).toHaveBeenLastCalledWith(1, 'stock', 'filled', expect.any(Number))
+    const row = within(await screen.findByRole('row', { name: /AAPL/ }))
+    expect(row.getByText('Feb 3, 2026')).toBeInTheDocument()
+    // A resolved order is a record, not something still cancellable.
+    expect(row.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
+  it('switches to cancelled orders', async () => {
+    const typer = userEvent.setup()
+    mockedFetch.mockResolvedValueOnce([])
+    render(<OpenOrdersTab user={user} assetType="stock" />)
+    await screen.findByText(/don't have any open orders/)
+
+    mockedFetch.mockResolvedValueOnce([])
+    await typer.click(screen.getByRole('button', { name: 'Cancelled' }))
+
+    expect(mockedFetch).toHaveBeenLastCalledWith(1, 'stock', 'cancelled', expect.any(Number))
+    expect(await screen.findByText(/haven't cancelled any orders/)).toBeInTheDocument()
   })
 
   it('lists a pending order', async () => {
@@ -83,7 +124,7 @@ describe('OpenOrdersTab', () => {
     await typer.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(mockedCancel).toHaveBeenCalledWith(1, 1)
-    await waitFor(() => expect(screen.getByText(/don't have any open limit orders/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/don't have any open orders/)).toBeInTheDocument())
   })
 
   it('surfaces a failure instead of a silently empty list', async () => {
