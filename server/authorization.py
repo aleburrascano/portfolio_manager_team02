@@ -67,4 +67,13 @@ def init_app(app: Flask) -> None:
 
     app.secret_key = secret_key
     app.config['SESSION_COOKIE_HTTPONLY'] = True
-    app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+    # Deployed, the frontend is served from its own domain, which makes this
+    # cookie cross-site: Lax withholds it from every XHR, so logging in
+    # would appear to work and then every authenticated call would 401.
+    # SameSite=None is only honoured alongside Secure, so the two move
+    # together - and Secure would break plain-HTTP local development, which
+    # is why this is opt-in rather than the default.
+    cross_site = os.environ.get('CROSS_SITE_COOKIE', '').lower() in ('1', 'true', 'yes')
+    app.config['SESSION_COOKIE_SAMESITE'] = 'None' if cross_site else 'Lax'
+    app.config['SESSION_COOKIE_SECURE'] = cross_site

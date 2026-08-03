@@ -1,7 +1,10 @@
 // Shared HTTP plumbing for the API modules in this folder. Nothing here
 // knows about any particular resource.
 
-const API_BASE = '/api/v1'
+import { API_ORIGIN } from '../config'
+
+// Relative in development, absolute once an origin is configured.
+const API_BASE = `${API_ORIGIN}/api/v1`
 
 type ApiErrorBody = { error?: { message?: string } | string }
 

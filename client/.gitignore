@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
+.env*
+# ...but the template is meant to be shared: it documents VITE_API_URL and
+# holds no secrets.
+!.env.example
