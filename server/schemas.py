@@ -144,6 +144,13 @@ class SearchQuerySchema(ma.Schema):
 class TransactionsQuerySchema(ma.Schema):
     limit = ma.fields.Integer(load_default=None)
     offset = ma.fields.Integer(load_default=0)
+    # Sorting is the database's job, not the caller's: reversing one page in
+    # the client would only reverse the rows that page happens to hold.
+    sort = ma.fields.String(
+        load_default='newest',
+        validate=ma.validate.OneOf(['newest', 'oldest'], error='invalid sort'),
+        metadata={'description': 'Order by date, newest or oldest first.'},
+    )
 
 
 # Credentials are deliberately not marked required here. The rules that
