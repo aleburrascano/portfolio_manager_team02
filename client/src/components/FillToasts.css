@@ -1,0 +1,74 @@
+/* Bottom-right rather than top: a fill is news, not a response to anything
+   the user just did, so it stays out of the path of whatever they are
+   reading. Above sticky chrome but below a modal - a dialog is a decision
+   in progress and must not be covered by a notice. */
+.fill-toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: var(--z-sticky);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(360px, calc(100vw - 32px));
+}
+
+.fill-toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  /* The strong border, not the hairline: this sits over arbitrary content
+     and has to read as a separate surface rather than part of the page. */
+  border: 1px solid var(--border-strong);
+  /* A filled order is money arriving where it was asked to; the ledger
+     green edge says which kind of event it is without a whole coloured
+     panel shouting about it. */
+  border-left: 3px solid var(--positive);
+  border-radius: var(--radius);
+  animation: fill-toast-in var(--dur) var(--ease);
+}
+
+@keyframes fill-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* The motion is a courtesy, not information - the text says everything. */
+@media (prefers-reduced-motion: reduce) {
+  .fill-toast {
+    animation: none;
+  }
+}
+
+.fill-toast-title {
+  margin: 0 0 2px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text-h);
+}
+
+.fill-toast-body {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text);
+}
+
+.fill-toast-close {
+  margin-left: auto;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: var(--fs-md);
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.fill-toast-close:hover {
+  color: var(--text-h);
+}

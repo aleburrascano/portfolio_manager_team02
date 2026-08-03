@@ -134,6 +134,51 @@ export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>
   return { quotes, lastUpdate }
 }
 
+/** A conditional order that has just filled, pushed to its owner alone. */
+export type OrderFill = {
+  limitOrderId: number
+  ticker: string
+  side: 'buy' | 'sell'
+  orderType: 'limit' | 'stop'
+  quantity: number
+  /** What it actually executed at, which is not the trigger price. */
+  price: number
+  assetTransactionId: number
+}
+
+/**
+ * Run `onFill` whenever one of this user's conditional orders fills.
+ *
+ * A fill happens in the server's poller, minutes or days after the request
+ * that placed the order, so nothing on this side would otherwise know: an
+ * open orders list would sit there showing a row that has already resolved,
+ * and the balance beside it would be wrong.
+ *
+ * The handler is kept in a ref, updated in its own effect, so a caller can
+ * pass a fresh closure every render - which it will, since the useful ones
+ * capture state - without the socket listener being torn down and put back
+ * on each one. Writing the ref during render would be the shorter way to
+ * say that and is not safe: a render React discards would still have
+ * changed it.
+ */
+export function useOrderFills(onFill: (fill: OrderFill) => void): void {
+  const handler = useRef(onFill)
+
+  useEffect(() => {
+    handler.current = onFill
+  }, [onFill])
+
+  useEffect(() => {
+    const connection = getSocket()
+    const listener = (fill: OrderFill) => handler.current(fill)
+
+    connection.on('orderFilled', listener)
+    return () => {
+      connection.off('orderFilled', listener)
+    }
+  }, [])
+}
+
 /**
  * Whether pushed quotes are currently arriving.
  *

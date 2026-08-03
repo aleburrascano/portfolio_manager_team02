@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import TradeAssets from './pages/TradeAssets'
 import TransactionHistory from './pages/TransactionHistory'
 import Account from './pages/Account'
+import FillToasts from './components/FillToasts'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
@@ -124,6 +125,10 @@ function App() {
             </main>
           </div>
         </div>
+        {/* At the shell, because a conditional order can fill while the
+            user is on any screen - including none of the ones that would
+            otherwise show it. */}
+        <FillToasts />
       </BalanceProvider>
     </AssetTypesProvider>
   )
