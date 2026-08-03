@@ -12,6 +12,9 @@ bodies. Those are read at runtime out of request.get_json(), so there is
 nothing to introspect; claiming a shape here would be writing it by hand
 under a different name, with the same drift. Each operation carries the
 route, its method, its typed path parameters and its docstring.
+
+The spec is rendered by Scalar rather than Swagger UI. Both read the same
+document, so this is a change of reader, not of what is being said.
 """
 import inspect
 import re
@@ -96,13 +99,58 @@ def _generate_paths(app: Any) -> Dict[str, Dict[str, Any]]:
     return paths
 
 
+_SPEC_ROUTE = '/apispec_1.json'
+_DOCS_ROUTE = '/apidocs/'
+
+# Pinned rather than floating: an unpinned CDN URL means the docs page can
+# change without anything in this repository changing. This is the only
+# third-party request the project makes, and it is on an internal docs
+# page - not in the client bundle, which deliberately has none.
+_SCALAR_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.64.0'
+
+_SCALAR_PAGE = f"""<!doctype html>
+<html>
+  <head>
+    <title>Portfolio Manager API</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script src="{_SCALAR_SRC}"></script>
+    <script>
+      Scalar.createApiReference('#app', {{ url: '{_SPEC_ROUTE}' }})
+    </script>
+  </body>
+</html>
+"""
+
+
 def init_app(app: Any) -> None:
     """
     Wire up the docs. Must be called after every blueprint is registered -
     the URL map is the source, so anything registered later is missed.
+
+    Flasgger generates and serves the spec; its own Swagger UI is turned off
+    and Scalar renders the same document instead. Two UIs over one spec
+    would only be two things to keep in step.
     """
     Swagger(
         app,
+        config={
+            'headers': [],
+            'specs': [
+                {
+                    'endpoint': 'apispec_1',
+                    'route': _SPEC_ROUTE,
+                    'rule_filter': lambda rule: True,
+                    'model_filter': lambda tag: True,
+                }
+            ],
+            'static_url_path': '/flasgger_static',
+            'swagger_ui': False,
+            'specs_route': _DOCS_ROUTE,
+        },
         template={
             'swagger': '2.0',
             'info': {
@@ -117,3 +165,7 @@ def init_app(app: Any) -> None:
             'paths': _generate_paths(app),
         },
     )
+
+    @app.route(_DOCS_ROUTE)
+    def apidocs() -> str:
+        return _SCALAR_PAGE
