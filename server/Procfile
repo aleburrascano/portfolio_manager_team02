@@ -1,1 +1,1 @@
-web: gunicorn -w 1 --threads 8 app:app
+web: alembic upgrade head && gunicorn -w 1 --threads 8 app:app
