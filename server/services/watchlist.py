@@ -124,13 +124,12 @@ def list_entries(user_id: int) -> List[Dict[str, Any]]:
         provider = PROVIDERS.get(asset_type)
         if provider is None:
             continue
-        for ticker in tickers:
-            try:
-                quote = provider.get_quote(ticker)
-            except Exception:
-                quote = None
-            if quote:
-                quotes[ticker] = quote
+        try:
+            quotes.update(provider.quote_book(tickers))
+        except Exception:
+            # One asset type failing leaves its rows unpriced rather than
+            # taking the other types' rows down with it.
+            continue
 
     return [
         {

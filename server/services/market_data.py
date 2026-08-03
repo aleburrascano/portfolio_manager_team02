@@ -44,8 +44,11 @@ _classification = TTLCache(ttl_seconds=86400)
 _ratings = TTLCache(ttl_seconds=3600)
 _searches = TTLCache(ttl_seconds=300)
 _screens = TTLCache(ttl_seconds=60)
+# A ticker's display name is as stable as its classification, and costs the
+# same expensive .info call to learn.
+_names = TTLCache(ttl_seconds=86400)
 
-_CACHES = (_quotes, _history, _classification, _ratings, _searches, _screens)
+_CACHES = (_quotes, _history, _classification, _ratings, _searches, _screens, _names)
 
 
 def clear_caches() -> None:
@@ -74,6 +77,7 @@ def cache_sizes() -> Dict[str, int]:
         'ratings': len(_ratings),
         'searches': len(_searches),
         'screens': len(_screens),
+        'names': len(_names),
     }
 
 
@@ -126,6 +130,35 @@ def _price_book(symbols: List[str]) -> Dict[str, Optional[dict]]:
             book[symbol] = fields
 
     return book
+
+
+def display_names(symbols: List[str]) -> Dict[str, str]:
+    """
+    The long name for each symbol, keyed by symbol, falling back to the
+    symbol itself when the feed doesn't offer one.
+
+    Names come from `.info`, which is the expensive half of a quote, so they
+    are held for a day - a company's name is as stable as its exchange. That
+    is what lets a caller who needs names *and* prices batch the prices
+    through _price_book and pay for the names only once.
+    """
+    known = {}
+    for symbol in symbols:
+        cached = _names.get(symbol)
+        if cached is not MISS:
+            known[symbol] = cached
+            continue
+        try:
+            info = yf.Ticker(symbol).info or {}
+            name = info.get('longName') or info.get('shortName') or symbol
+        except Exception:
+            # Not cached: an outage should not name a ticker after itself
+            # for the next day.
+            known[symbol] = symbol
+            continue
+        _names.set(symbol, name)
+        known[symbol] = name
+    return known
 
 
 def quote_summaries(names: Dict[str, str]) -> List[dict]:

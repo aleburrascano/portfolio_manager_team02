@@ -14,9 +14,17 @@ from sqlalchemy import or_, select
 from db.connection import get_session
 from db.models import Bond
 from services.exceptions import MarketDataUnavailable
+from services.ttl_cache import TTLCache
 
 PERIODS_PER_YEAR = {'annual': 1, 'semiannual': 2}
 CENTS = Decimal('0.00000001')
+
+# A year of bond prices is 366 present-value computations, and get_quote
+# builds the whole series just to read the last two points off it. The
+# result is a pure function of the bond's terms and the date, so it is the
+# same series for every caller until the date rolls over; the window only
+# has to be shorter than a day for that to hold.
+_history = TTLCache(ttl_seconds=3600)
 
 
 def _as_date(value) -> date:
@@ -98,8 +106,14 @@ def price_bond(bond: dict, as_of: Optional[date] = None) -> Decimal:
 
 
 def price_history(bond: dict, days: int = 365) -> List[dict]:
-    """Daily closing prices for the trailing 365 days."""
+    """Daily closing prices for the trailing `days` days, oldest first."""
     today = date.today()
+    return _history.get_or_call(
+        (bond['ticker'], days, today), lambda: _price_history(bond, days, today)
+    )
+
+
+def _price_history(bond: dict, days: int, today: date) -> List[dict]:
     return [
         {
             'date': (today - timedelta(days=offset)).strftime('%Y-%m-%d'),
@@ -107,6 +121,11 @@ def price_history(bond: dict, days: int = 365) -> List[dict]:
         }
         for offset in range(days, -1, -1)
     ]
+
+
+def clear_cache() -> None:
+    """Drop cached price series. For tests."""
+    _history.clear()
 
 
 def trade_price(ticker: str) -> Decimal:

@@ -26,13 +26,30 @@ def user_id(ctx):
 
 @pytest.fixture(autouse=True)
 def stub_market_data(monkeypatch):
-    """AAPL prices at $10 and is classified as a US-listed stock."""
+    """Everything prices at $10 and is classified as a US-listed stock."""
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
     monkeypatch.setattr(market_data, 'valuation_price', lambda ticker: 10.00)
     monkeypatch.setattr(
         market_data, 'quote_classification',
         lambda ticker: {'exchange': 'NMS', 'quoteType': 'EQUITY'},
     )
+
+    # evaluate_pending_orders screens every pending ticker with one batched
+    # quote call before pricing any of them properly. Deriving the screen
+    # from trade_price rather than fixing it at $10 keeps the two answers
+    # agreeing when a test overrides trade_price - otherwise the screen
+    # would filter out the very fill under test.
+    def live_quotes(symbols):
+        book = {}
+        for symbol in symbols:
+            try:
+                price = float(market_data.trade_price(symbol))
+            except MarketDataUnavailable:
+                continue
+            book[symbol] = {'symbol': symbol, 'currentPrice': price}
+        return book
+
+    monkeypatch.setattr(market_data, 'live_quotes', live_quotes)
 
 
 def test_place_limit_order_creates_pending_buy(user_id):
@@ -224,6 +241,54 @@ def test_evaluate_pending_orders_returns_fill_count(user_id, monkeypatch):
 
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     assert lo.evaluate_pending_orders() == 2
+
+
+# The screen exists so a tick costs one batched call plus a price only for
+# the tickers that look like they have crossed.
+def test_evaluate_pending_orders_prices_only_the_tickers_that_could_fill(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+    lo.place_limit_order(user_id, 'stock', 'MSFT', 'buy', Decimal('1'), Decimal('4.00'))
+
+    priced = []
+
+    def counted_price(ticker):
+        priced.append(ticker)
+        return Decimal('10.00')
+
+    monkeypatch.setattr(market_data, 'trade_price', counted_price)
+    monkeypatch.setattr(
+        market_data, 'live_quotes',
+        lambda symbols: {s: {'symbol': s, 'currentPrice': 10.0} for s in symbols},
+    )
+
+    assert lo.evaluate_pending_orders() == 1
+    # MSFT's limit of $4 is nowhere near $10, so it never gets priced.
+    assert priced == ['AAPL']
+
+
+def test_evaluate_pending_orders_prices_a_ticker_the_screen_could_not(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+
+    # A gap in the quote feed must delay a fill at worst, never drop it.
+    monkeypatch.setattr(market_data, 'live_quotes', lambda symbols: {})
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+
+    assert lo.evaluate_pending_orders() == 1
+
+
+def test_evaluate_pending_orders_survives_a_failing_screen(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+
+    def boom(symbols):
+        raise RuntimeError('feed down')
+
+    monkeypatch.setattr(market_data, 'live_quotes', boom)
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+
+    assert lo.evaluate_pending_orders() == 1
 
 
 def test_evaluate_pending_orders_skips_ticker_when_market_data_unavailable(user_id, monkeypatch):

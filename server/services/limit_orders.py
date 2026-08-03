@@ -161,12 +161,18 @@ def evaluate_pending_orders() -> int:
     was true when the condition was first noticed) - all-or-nothing, one
     AssetTransaction per fill.
 
-    Orders are grouped by ticker so each ticker's price costs one
-    market_data call no matter how many orders are waiting on it. Each
-    candidate is then locked and resolved independently: a user (or order)
-    row lock means one fill can't race a manual trade, a manual cancel, or
-    another fill for the same user, but a stuck or slow fill for one user
-    never blocks another user's.
+    Prices are found in two stages. One batched quote call screens every
+    pending ticker at once: a ticker no waiting order could fill at - which
+    on any given tick is nearly all of them - is dropped there and costs
+    nothing further. Only the tickers that look like they have crossed are
+    then priced individually through trade_price, the same call a market
+    order books at, so a fill still executes at the authoritative price
+    rather than at the indicative one used to screen it.
+
+    Each candidate is then locked and resolved independently: a user (or
+    order) row lock means one fill can't race a manual trade, a manual
+    cancel, or another fill for the same user, but a stuck or slow fill for
+    one user never blocks another user's.
 
     If a buy's cost (or a sell's quantity) can no longer be covered at fill
     time - the user spent the cash or sold the shares elsewhere since
@@ -193,8 +199,18 @@ def evaluate_pending_orders() -> int:
     for order in pending:
         by_ticker[order.ticker].append(order)
 
+    screen = _indicative_prices(list(by_ticker))
+
     filled = 0
     for ticker, orders in by_ticker.items():
+        # A ticker the screen priced but which no waiting order has crossed
+        # needs no further lookup this tick. A ticker the screen couldn't
+        # price falls through to the authoritative fetch rather than being
+        # skipped, so a gap in the quote feed delays a fill at worst.
+        indicative = screen.get(ticker)
+        if indicative is not None and not any(_condition_met(order, indicative) for order in orders):
+            continue
+
         try:
             price = market_data.trade_price(ticker)
         except MarketDataUnavailable:
@@ -206,6 +222,34 @@ def evaluate_pending_orders() -> int:
     return filled
 
 
+def _indicative_prices(tickers: List[str]) -> dict:
+    """
+    One batched quote call for every pending ticker, as {ticker: Decimal}.
+
+    Only used to decide which tickers are worth pricing properly, so a
+    failure here is not worth reporting - it just means nothing gets
+    screened out and every ticker is priced the slow way, exactly as before.
+    """
+    try:
+        quotes = market_data.live_quotes(tickers)
+    except Exception:
+        return {}
+
+    prices = {}
+    for ticker, quote in quotes.items():
+        price = quote.get('currentPrice')
+        if price is not None:
+            prices[ticker] = Decimal(str(price))
+    return prices
+
+
+def _condition_met(order: LimitOrder, price: Decimal) -> bool:
+    """Whether `price` satisfies this order's trigger."""
+    if order.side == 'buy':
+        return price <= order.limitPrice
+    return price >= order.limitPrice
+
+
 def _try_fill(session, limit_order_id: int, price: Decimal) -> bool:
     """Fill one order under its own lock, if its condition still holds."""
     try:
@@ -213,8 +257,7 @@ def _try_fill(session, limit_order_id: int, price: Decimal) -> bool:
         if order is None or order.status != 'pending':
             return False
 
-        met = price <= order.limitPrice if order.side == 'buy' else price >= order.limitPrice
-        if not met:
+        if not _condition_met(order, price):
             return False
 
         if not db_conn.lock_user(session, order.userId):

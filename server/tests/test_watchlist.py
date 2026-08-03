@@ -12,21 +12,26 @@ from helpers import register_user
 from services.exceptions import InvalidInput
 
 
+def quote_for(ticker):
+    return {
+        'symbol': ticker,
+        'name': f'{ticker} Inc.',
+        'currentPrice': 100.0,
+        'change': 1.0,
+        'changePercent': 1.0,
+    }
+
+
 @pytest.fixture(autouse=True)
 def stub_quotes(monkeypatch):
     """Every ticker quotes at $100 under a predictable name."""
+    # quote_book, not get_quote: the watchlist prices a whole asset type in
+    # one call, which is the promise its docstring makes.
     for provider in watchlist.PROVIDERS.values():
         monkeypatch.setattr(
-            provider,
-            'get_quote',
-            lambda ticker: {
-                'symbol': ticker,
-                'name': f'{ticker} Inc.',
-                'currentPrice': 100.0,
-                'change': 1.0,
-                'changePercent': 1.0,
-            },
+            provider, 'quote_book', lambda tickers: {t: quote_for(t) for t in tickers},
         )
+        monkeypatch.setattr(provider, 'get_quote', quote_for)
 
 
 def watchlist_url(user_id, asset_type='stock', ticker='AAPL'):
@@ -133,7 +138,9 @@ def test_the_list_is_capped(client, monkeypatch):
 
 def test_a_quote_that_fails_still_lists_the_ticker(client, monkeypatch):
     for provider in watchlist.PROVIDERS.values():
-        monkeypatch.setattr(provider, 'get_quote', lambda ticker: (_ for _ in ()).throw(RuntimeError()))
+        monkeypatch.setattr(
+            provider, 'quote_book', lambda tickers: (_ for _ in ()).throw(RuntimeError()),
+        )
 
     user = register_user(client)
     client.put(watchlist_url(user['userId']))
