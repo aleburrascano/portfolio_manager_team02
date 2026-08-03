@@ -44,6 +44,11 @@ export type PerformancePoint = {
   investedValue: number
   cash: number
   netDeposits: number
+  /**
+   * What the same deposits, made on the same days, would be worth in the
+   * benchmark instead. Absent when the index couldn't be priced.
+   */
+  benchmarkValue?: number
 }
 
 export type PerformanceSummary = {
@@ -66,6 +71,8 @@ export type PortfolioPerformance = {
   series: PerformancePoint[]
   summary: PerformanceSummary
   byAssetType: AssetTypePerformance[]
+  /** What the comparison line is, so the chart can name it. */
+  benchmark: { ticker: string; label: string }
 }
 
 export type Holding = {
