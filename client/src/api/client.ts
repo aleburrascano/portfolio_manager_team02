@@ -1,4 +1,4 @@
-import { API_ORIGIN } from '../config'
+import { API_ORIGIN } from '../lib/config'
 
 export const API_BASE = `${API_ORIGIN}/api/v1`
 

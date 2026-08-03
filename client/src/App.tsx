@@ -4,12 +4,12 @@ import Dashboard from './pages/Dashboard'
 import TradeAssets from './pages/TradeAssets'
 import TransactionHistory from './pages/TransactionHistory'
 import Account from './pages/Account'
-import FillToasts from './components/FillToasts'
-import Header from './components/Header'
-import Sidebar from './components/Sidebar'
-import Login from './components/Login'
-import { AssetTypesProvider } from './AssetTypesContext'
-import { BalanceProvider } from './BalanceContext'
+import FillToasts from './components/layout/FillToasts'
+import Header from './components/layout/Header'
+import Sidebar from './components/layout/Sidebar'
+import Login from './pages/Login'
+import { AssetTypesProvider } from './context/AssetTypesContext'
+import { BalanceProvider } from './context/BalanceContext'
 import { fetchCurrentUser, logout, type SessionResult, type User } from './api'
 import './App.css'
 
@@ -57,9 +57,12 @@ function App() {
   useEffect(() => {
     let cancelled = false
 
-    fetchCurrentUser().then((result) => {
+    async function loadSession() {
+      const result = await fetchCurrentUser()
       if (!cancelled) setSession(result)
-    })
+    }
+
+    void loadSession()
 
     return () => {
       cancelled = true

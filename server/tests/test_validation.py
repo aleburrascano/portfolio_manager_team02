@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from services.exceptions import InvalidInput
-from validation import parse_amount, parse_quantity
+from api.validation import parse_amount, parse_quantity
 
 PARSERS = [parse_amount, parse_quantity]
 
