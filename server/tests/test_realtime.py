@@ -19,7 +19,6 @@ def stub_quotes(monkeypatch):
         realtime, '_quotes_for',
         lambda watched: {symbol: {'symbol': symbol, 'currentPrice': 100.0} for _, symbol in watched},
     )
-    # The broadcaster is a background loop; tests drive the emits directly.
     monkeypatch.setattr(realtime, '_ensure_broadcaster', lambda: None)
 
 
@@ -76,9 +75,6 @@ def test_disconnecting_drops_everything_it_watched(app, client):
 
     assert realtime._watchers == {}
 
-
-# A fill happens in the poller's thread long after the request that placed
-# the order, so this is the only thing that can tell its owner about it.
 
 def test_a_fill_reaches_the_user_who_placed_it(app, client):
     user = register_user(client)

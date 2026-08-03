@@ -80,8 +80,6 @@ describe('Dashboard', () => {
     expect(screen.getByText('Loading your portfolio')).toBeInTheDocument()
   })
 
-  // The first screen a new account sees. It has to say what the panel is
-  // for and offer the next step, not just report an absence.
   it('teaches the panel and offers a next step when the portfolio is empty', async () => {
     mockedFetch.mockResolvedValue({ cash: 0, stock: 0, crypto: 0, bond: 0 })
     mockedUseBalance.mockReturnValue({ balance: 0, refreshBalance: vi.fn() })
@@ -111,7 +109,6 @@ describe('Dashboard', () => {
     renderDashboard()
 
     expect(await screen.findByTestId('portfolio-composition')).toBeInTheDocument()
-    // The chart is code-split, so it resolves a tick after the rest.
     expect(await screen.findByTestId('portfolio-performance')).toBeInTheDocument()
     expect(screen.getByTestId('holdings-table')).toBeInTheDocument()
     expect(screen.getByTestId('watchlist')).toBeInTheDocument()

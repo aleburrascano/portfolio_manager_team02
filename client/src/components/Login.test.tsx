@@ -48,8 +48,6 @@ describe('Login', () => {
   it('blocks submission client-side without calling the API', async () => {
     const typer = userEvent.setup()
     render(<Login onLogin={vi.fn()} />)
-    // A lone space passes the inputs' native `required` check but still
-    // fails validateUsername, which trims before checking.
     await typer.type(screen.getByPlaceholderText('Username'), ' ')
     await typer.type(screen.getByPlaceholderText('Password'), ' ')
     await typer.click(screen.getByRole('button', { name: 'Log In' }))

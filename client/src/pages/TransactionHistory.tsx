@@ -26,8 +26,6 @@ function formatDate(value: string) {
   })
 }
 
-// Every row reads as something that happened, in the same tense, so the
-// column scans as one list rather than two kinds of entry side by side.
 function describe(transaction: Transaction): string {
   if (transaction.type === 'cash') {
     return transaction.transactionType === 'deposit' ? 'Deposited cash' : 'Withdrew cash'
@@ -56,9 +54,6 @@ function TransactionHistory({ user }: { user: User }) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Tagged with the request it answers, so flipping the sort shows a
-  // skeleton rather than the old order without a separate loading flag that
-  // could drift out of step with what is held.
   const requestKey = `${user.userId}:${sort}`
   const [page, setPage] = useState<{ key: string; result: TransactionPage | null }>({
     key: '',
@@ -81,9 +76,6 @@ function TransactionHistory({ user }: { user: User }) {
     }
   }, [requestKey, user.userId, sort])
 
-  // Appends rather than replaces, and the offset comes from what is already
-  // held - so a row that arrives between two pages can't cause one to be
-  // skipped, only repeated at worst.
   async function loadMore() {
     const held = page.result?.transactions.length ?? 0
     setLoadingMore(true)
@@ -103,9 +95,6 @@ function TransactionHistory({ user }: { user: User }) {
     }
   }
 
-  // The database sorts and pages against an index. Flipping the order
-  // refetches rather than reversing what is held, which would only reorder
-  // the rows this page happens to have - a different list entirely.
   const loading = page.key !== requestKey
   const transactions = page.result?.transactions ?? []
   const total = page.result?.total ?? 0
@@ -124,9 +113,6 @@ function TransactionHistory({ user }: { user: User }) {
             >
               {sort === 'newest' ? 'Newest first' : 'Oldest first'}
             </button>
-            {/* A plain link, not a fetch: the browser has to navigate to it
-                itself to get a file rather than a string in memory. Same
-                origin, so the session cookie goes with it. */}
             <a
               className="secondary-btn"
               href={transactionsExportUrl(page.result)}
@@ -138,9 +124,6 @@ function TransactionHistory({ user }: { user: User }) {
         )}
       </div>
 
-      {/* Error first: a request that failed never tags the page with its
-          key, so testing "still loading" ahead of it would leave a skeleton
-          up forever instead of saying what went wrong. */}
       {error ? (
         <p className="transaction-history-placeholder">{error}</p>
       ) : loading ? (
@@ -156,9 +139,6 @@ function TransactionHistory({ user }: { user: User }) {
         </p>
       ) : (
         <>
-          {/* The wrapper is the floor: if the table ever exceeds its column it
-              scrolls inside this box rather than dragging the whole page
-              sideways, which .app-page's overflow-y would otherwise allow. */}
           <div className="transaction-history-scroll">
             <table className="transaction-history-table">
               <thead>
@@ -166,9 +146,6 @@ function TransactionHistory({ user }: { user: User }) {
                   <th scope="col">Date</th>
                   <th scope="col">Description</th>
                   <th scope="col">Amount</th>
-                  {/* The unrealised side of this is on the dashboard for
-                      every open position; this is the only place a closed
-                      one says whether it was a good trade. */}
                   <th scope="col">Realized</th>
                 </tr>
               </thead>
@@ -186,8 +163,6 @@ function TransactionHistory({ user }: { user: User }) {
                         {transaction.realized ? (
                           <Realized value={transaction.realized} />
                         ) : (
-                          // An em dash, not a zero: this row didn't realise
-                          // nothing, it isn't the kind of event that can.
                           <span aria-hidden="true">—</span>
                         )}
                       </td>

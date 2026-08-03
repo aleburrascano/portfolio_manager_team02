@@ -1,7 +1,3 @@
-// Client-side validation for form inputs, checked before hitting the API.
-// Operates on the raw string from the input (not the parsed Number) so
-// decimal-place checks aren't thrown off by floating-point rounding.
-
 export function validateName(value: string, field: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return `${field} is required.`
@@ -22,9 +18,12 @@ export function validateUsername(value: string): string | null {
   return null
 }
 
-// Mirrors MIN_PASSWORD_LENGTH in the server's auth routes.
+const MIN_PASSWORD_LENGTH = 8
+
 export function validatePassword(value: string): string | null {
-  if (value.length < 8) return 'Password must be at least 8 characters.'
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    return `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`
+  }
   return null
 }
 

@@ -9,18 +9,14 @@ import { useAssetTypes } from '../asset-types'
 import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
-// Carries the price chart, so it is fetched when someone opens an asset
-// rather than being paid for by everyone who only browses the list.
 const AssetDetail = lazy(() => import('../components/AssetDetail'))
 
-// The tabs, their order, and their labels all come from the server's
-// provider registry; only the icon is a client-side decision, and a type
-// with no icon of its own gets a neutral one rather than no tab.
 const ICONS: Partial<Record<AssetType, IconName>> = {
   stock: 'stock',
   crypto: 'crypto',
   bond: 'bond',
 }
+const FALLBACK_ICON: IconName = 'stock'
 
 /**
  * Browse, search, and open one asset type - or that type's orders.
@@ -42,9 +38,6 @@ function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: bo
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
   const [popularLoading, setPopularLoading] = useState(true)
-  // Results are tagged with the search they answer, so "still loading" is
-  // derived from what we hold rather than tracked in a separate flag that
-  // could drift out of sync with it.
   const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
@@ -102,17 +95,11 @@ function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: bo
     }
   }, [assetType, trimmedQuery, isSearching, searchKey])
 
-  // Only the rows actually on screen are subscribed to, so switching tabs
-  // or searching moves the server's work with the user.
   const listed = isSearching ? search.assets : popularAssets
   const live = useLiveQuotes(assetType, listed.map((asset) => asset.symbol))
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
   const typeLabel = capabilities?.label ?? assetType
 
-  // An address naming an asset type this server doesn't have is not an
-  // error worth a page of its own; the first real tab is where they meant
-  // to be. Redirects rather than renders, so the bad address doesn't stay
-  // in the bar to be shared again.
   if (types.length > 0 && !capabilities) {
     return <Navigate to={`/trade/${types[0].assetType}`} replace />
   }
@@ -151,12 +138,6 @@ function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: bo
         </Suspense>
       ) : (
         <>
-          {/* Not disabled while loading: switching tabs is a navigation
-              decision the user has already made, and blocking it behind a
-              network round-trip they did not ask to wait for is the wrong
-              trade. The in-flight request for the old tab is cancelled. */}
-          {/* Tabs and search share a row once there's width for it, so the
-              list starts higher up the page instead of below two bands. */}
           <div className="trade-controls">
             <div className="asset-type-tabs">
               {types.map(({ assetType: type, label }) => (
@@ -167,7 +148,7 @@ function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: bo
                   aria-pressed={assetType === type}
                   onClick={() => switchAssetType(type)}
                 >
-                  <Icon name={ICONS[type] ?? 'stock'} />
+                  <Icon name={ICONS[type] ?? FALLBACK_ICON} />
                   {label}
                 </button>
               ))}

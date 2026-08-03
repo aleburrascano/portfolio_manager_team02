@@ -25,14 +25,10 @@ users = sa.table(
 
 
 def upgrade() -> None:
-    # Added with a default so existing rows satisfy NOT NULL. The default is
-    # dropped below, so new rows have to supply both columns explicitly.
     with op.batch_alter_table('Users') as batch_op:
         batch_op.add_column(sa.Column('username', sa.String(32), nullable=False, server_default=''))
         batch_op.add_column(sa.Column('passwordHash', sa.String(255), nullable=False, server_default=''))
 
-    # Backfilled row by row in Python rather than one UPDATE, because string
-    # concatenation has no portable SQL spelling across MySQL and SQLite.
     connection = op.get_bind()
     existing = connection.execute(
         sa.select(users.c.userId, users.c.firstName).where(users.c.username == '')

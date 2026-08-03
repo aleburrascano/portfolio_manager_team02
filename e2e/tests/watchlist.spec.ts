@@ -1,9 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { registerNewUser, uniqueUsername } from './fixtures'
 
-// Bonds are priced from their own terms rather than a live feed, so they
-// are the deterministic, network-free way through this flow.
-
 /** Open the bond used throughout these tests. */
 async function openBond(page: Page) {
   await page.getByRole('link', { name: 'Trade' }).click()
@@ -56,9 +53,6 @@ test('the saved state survives a reload', async ({ page }) => {
   await openBond(page)
   await toggleSave(page, 'Save for later')
 
-  // Reloading now stays on the asset's own address rather than dropping
-  // back to the dashboard, so this asserts the save on the page it was made
-  // on - which is what the test was always about.
   await page.reload()
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible()
 })

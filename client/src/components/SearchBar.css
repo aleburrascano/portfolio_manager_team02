@@ -14,8 +14,6 @@
   color: var(--text-muted);
 }
 
-/* Layered under the focus ring rather than replacing it: `outline: none`
-   here used to beat the global :focus-visible rule on specificity. */
 .search-bar:focus {
   border-color: var(--accent-ink);
 }

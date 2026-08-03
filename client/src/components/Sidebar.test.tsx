@@ -24,8 +24,6 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /Dashboard/ })).not.toHaveAttribute('aria-current')
   })
 
-  // Only the dashboard matches exactly; Trade has to stay lit while an
-  // asset underneath it is open.
   it('keeps Trade active while looking at one asset', () => {
     renderAt('/trade/stock/NVDA')
     expect(screen.getByRole('link', { name: /Trade/ })).toHaveClass('active')
@@ -37,15 +35,12 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /History/ })).toHaveClass('active')
   })
 
-  // Links, not buttons: a place should be openable in a new tab.
   it('navigates by address', () => {
     renderAt('/')
     expect(screen.getByRole('link', { name: /History/ })).toHaveAttribute('href', '/history')
     expect(screen.getByRole('link', { name: /Trade/ })).toHaveAttribute('href', '/trade')
   })
 
-  // Account settings and logging out live in the header's account menu, so
-  // the rail carries only the three places you navigate between.
   it('carries only the navigation destinations', () => {
     renderAt('/')
 

@@ -25,8 +25,6 @@ def quote_for(ticker):
 @pytest.fixture(autouse=True)
 def stub_quotes(monkeypatch):
     """Every ticker quotes at $100 under a predictable name."""
-    # quote_book, not get_quote: the watchlist prices a whole asset type in
-    # one call, which is the promise its docstring makes.
     for provider in watchlist.PROVIDERS.values():
         monkeypatch.setattr(
             provider, 'quote_book', lambda tickers: {t: quote_for(t) for t in tickers},
@@ -56,7 +54,6 @@ def test_saving_then_reading_back(client):
     assert entries[0]['currentPrice'] == 100.0
 
 
-# PUT, so the button can be pressed twice without creating two entries.
 def test_saving_twice_leaves_one_entry(client):
     user = register_user(client)
     client.put(watchlist_url(user['userId']))
@@ -100,8 +97,6 @@ def test_newest_saved_appears_first(client):
     assert [entry['symbol'] for entry in entries] == ['NVDA', 'MSFT', 'AAPL']
 
 
-# Three saves land inside the same second, so this only holds if addedAt
-# carries sub-second precision rather than the column's server default.
 def test_ordering_survives_saves_within_one_second(client):
     user = register_user(client)
     for ticker in ('ZZZZ', 'AAAA', 'MMMM'):
@@ -150,7 +145,6 @@ def test_a_quote_that_fails_still_lists_the_ticker(client, monkeypatch):
     assert entries[0]['currentPrice'] is None
 
 
-# One user's watchlist is not another's, and must not be reachable.
 def test_watchlists_are_private(client):
     alice = register_user(client, username='alice')
     client.put(watchlist_url(alice['userId']))

@@ -13,14 +13,6 @@ interface PortfolioCompositionProps {
   title?: string
 }
 
-// Ledger-toned, not the chart-default rainbow - each asset class gets a
-// fixed hue so the chart reads the same way on every visit.
-//
-// Spaced on LIGHTNESS, not hue: the classes are drawn in a fixed order and
-// the ring is cyclic, so every pair that can touch (Cash-Stocks,
-// Stocks-Crypto, Crypto-Bonds, Bonds-Cash) sits at least 1.78:1 apart. That
-// is what keeps the chart readable in greyscale and for red-green
-// deficiency, which a hue-only palette does not.
 const NAME_COLORS: Record<string, string> = {
   Cash: '#99a68c',
   Stocks: '#92702e',
@@ -45,15 +37,11 @@ function PortfolioComposition({ data, title = 'Portfolio composition' }: Portfol
         percent: total > 0 ? (entry.value / total) * 100 : 0,
       }))
 
-    // Each slice's start offset is the running total of the percents before
-    // it - with at most four asset classes, a fresh reduce per slice reads
-    // more plainly than threading a mutable accumulator through the map.
     const slices = withPercent.map((slice, index) => {
       const priorPercent = withPercent.slice(0, index).reduce((sum, s) => sum + s.percent, 0)
       const arc = (slice.percent / 100) * CIRCUMFERENCE
-      // A slice thinner than the gap keeps its full length; trimming it
-      // would erase it entirely rather than separate it.
-      const length = arc > SLICE_GAP * 2 ? arc - SLICE_GAP : arc
+      const isWideEnoughToGap = arc > SLICE_GAP * 2
+      const length = isWideEnoughToGap ? arc - SLICE_GAP : arc
       return {
         ...slice,
         dasharray: `${length} ${CIRCUMFERENCE}`,
@@ -68,12 +56,8 @@ function PortfolioComposition({ data, title = 'Portfolio composition' }: Portfol
     <section className="dashboard-card portfolio-composition-card">
       <h3 className="section-title">{title}</h3>
 
-      {/* Wrapped so that when the dashboard is fitted to the viewport a
-          long legend scrolls in the panel rather than pushing the page. */}
       <div className="composition-card-scroll">
       <div className="donut-wrap">
-        {/* The legend below carries every value as real text, so the ring
-            itself is decoration as far as a screen reader is concerned. */}
         <svg width="112" height="112" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
           <circle cx="60" cy="60" r={RADIUS} fill="none" stroke="var(--surface)" strokeWidth="16" />
           {slices.map((slice) => (
@@ -105,8 +89,6 @@ function PortfolioComposition({ data, title = 'Portfolio composition' }: Portfol
       </div>
       </div>
 
-      {/* The total sits in the document as text rather than inside the ring,
-          where a seven-figure portfolio would print straight over the arcs. */}
       <p className="composition-total">
         <span>Total value</span>
         <span className="figure">{formatCurrency(total)}</span>

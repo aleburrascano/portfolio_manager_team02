@@ -26,11 +26,7 @@ from errors import error_response
 HEADER = 'Idempotency-Key'
 MAX_KEY_LENGTH = 64
 
-# How long a completed record is replayable for. Retries happen within
-# seconds; a day is generous and keeps the table from growing forever.
 RETENTION = timedelta(hours=24)
-# A claim with no response after this long belongs to a request that died
-# rather than one still running, so the key becomes available again.
 STALE_CLAIM = timedelta(minutes=5)
 
 
@@ -67,8 +63,6 @@ def _replay(session, user_id: int, key: str, fingerprint: str):
     record = session.get(IdempotentRequest, {'userId': user_id, 'idempotencyKey': key})
 
     if record is None:
-        # Claimed and then released between our insert failing and this
-        # read - the original failed, so the caller is free to try again.
         return error_response('That request was released, please retry', 409, 'idempotency_retry')
 
     if record.fingerprint != fingerprint:
@@ -77,7 +71,6 @@ def _replay(session, user_id: int, key: str, fingerprint: str):
     if record.responseBody is None:
         return error_response(f'A request with that {HEADER} is still in progress', 409)
 
-    # Only successful responses are ever stored, so a stored body is a 200.
     return json.loads(record.responseBody), 200
 
 
@@ -102,8 +95,6 @@ def idempotent(view):
         session = get_session()
         owns = (IdempotentRequest.userId == user_id, IdempotentRequest.idempotencyKey == key)
 
-        # Claiming the key is its own committed transaction, so a concurrent
-        # duplicate collides here rather than part-way through the work.
         _purge_expired(session, user_id)
         session.add(IdempotentRequest(userId=user_id, idempotencyKey=key, fingerprint=fingerprint))
         try:

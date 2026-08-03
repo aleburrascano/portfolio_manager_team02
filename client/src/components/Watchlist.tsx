@@ -53,9 +53,6 @@ function Watchlist({
         if (cancelled) return
         setSaved(entries)
 
-        // Nothing saved yet: stand today's most active in, clearly labelled
-        // as a suggestion, so the panel is useful on day one rather than
-        // being an empty box on the dashboard of every new account.
         if (entries.length === 0) {
           try {
             const popular = await fetchPopularAssets('stock')
@@ -70,7 +67,7 @@ function Watchlist({
               )
             }
           } catch {
-            // A suggestion is a nicety; its absence isn't worth reporting.
+            if (!cancelled) setSuggested([])
           }
         }
       })
@@ -96,10 +93,6 @@ function Watchlist({
         changePercent: entry.changePercent,
       }))
 
-  // A subscription is per asset type, so the tiles are split by type and
-  // each streaming type gets its own feed. Previously this counted every
-  // non-bond tile as streamed but only ever subscribed to the stocks, so a
-  // watchlist of crypto showed a "Live" indicator that could never tick.
   const streamedTypes = types.filter((info) => info.streams).map((info) => info.assetType)
   const symbolsByType = Object.fromEntries(
     streamedTypes.map((type) => [type, tiles.filter((t) => t.assetType === type).map((t) => t.symbol)]),

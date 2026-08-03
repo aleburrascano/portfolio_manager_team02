@@ -18,9 +18,6 @@ export type IconName =
   | 'search'
 
 const PATHS: Record<IconName, ReactElement> = {
-  // Plus and minus in a ring. Money in and money out is an arithmetic
-  // idea before it is a physical one, and the pair reads unmistakably at
-  // 16px where a tray-and-arrow turns to mush.
   deposit: (
     <>
       <circle cx="10" cy="10" r="7" />
@@ -33,25 +30,21 @@ const PATHS: Record<IconName, ReactElement> = {
       <path strokeLinecap="round" d="M6.75 10h6.5" />
     </>
   ),
-  // A rising bar series.
   stock: (
     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5V11m4.5 5.5V6.5M12 16.5v-8m4.5 8V4" />
   ),
-  // A coin, seen at a slight angle.
   crypto: (
     <>
       <circle cx="10" cy="10" r="7" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M10 6.25v7.5M8 8.25h3.25a1.5 1.5 0 0 1 0 3H8h3.5a1.5 1.5 0 0 1 0 3H8" />
     </>
   ),
-  // A certificate with a seal.
   bond: (
     <>
       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 3.5h11v13l-2-1.25-2 1.25-2-1.25-2 1.25-3 1.75z" />
       <path strokeLinecap="round" d="M7.5 7h5M7.5 10h5" />
     </>
   ),
-  // An empty tray, for a panel with nothing in it yet.
   empty: (
     <>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 11.5 5 4.5h10l2 7" />

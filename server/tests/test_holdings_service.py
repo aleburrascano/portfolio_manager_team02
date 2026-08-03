@@ -133,8 +133,6 @@ def test_an_unpriceable_ticker_still_lists(user_id, priced_at):
     assert position['gainLoss'] == -500
 
 
-# Re-sorting is the client's job; the server only guarantees a stable,
-# useful opening order so the table doesn't shuffle between loads.
 def test_opens_largest_position_first(user_id, priced_at):
     record_trade(user_id, 'AAPL', qty=10, price=10, day=1)
     record_trade(user_id, 'MSFT', qty=10, price=100, day=2)
@@ -170,7 +168,6 @@ def test_totals_sum_the_book(user_id, priced_at):
 def test_todays_move_is_the_book_against_yesterdays_close(user_id, priced_at):
     record_trade(user_id, 'AAPL', qty=10, price=100, day=1)
     record_trade(user_id, 'MSFT', qty=5, price=200, day=1)
-    # AAPL is up $5 today, MSFT down $2.
     priced_at({'AAPL': 150.0, 'MSFT': 210.0}, changes={'AAPL': 5.0, 'MSFT': -2.0})
 
     result = holdings_service.get_holdings(user_id)
@@ -181,8 +178,6 @@ def test_todays_move_is_the_book_against_yesterdays_close(user_id, priced_at):
     totals = result['totals']
     assert totals['value'] == 2550.0
     assert totals['dayChange'] == 40.0
-    # The move is measured against what the book opened at - 2550 now, less
-    # the 40 it moved - not against what it is worth after moving.
     assert totals['dayChangePercent'] == round(40 / 2510 * 100, 2)
 
 

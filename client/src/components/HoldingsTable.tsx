@@ -83,8 +83,6 @@ function HoldingsTable({
   error: string | null
   onSelectAsset?: (assetType: AssetType, symbol: string) => void
 }) {
-  // Sorting is local: the whole payload is already here, so a column click
-  // is a re-render rather than a round trip and a spinner.
   const [sort, setSort] = useState<keyof Holding>('value')
   const [order, setOrder] = useState<SortOrder>('desc')
 
@@ -100,8 +98,6 @@ function HoldingsTable({
       return
     }
     setSort(column.key)
-    // Money reads largest-first, names read A-Z. Matching that on the first
-    // click saves the second click that would otherwise always follow.
     setOrder(column.numeric ? 'desc' : 'asc')
   }
 

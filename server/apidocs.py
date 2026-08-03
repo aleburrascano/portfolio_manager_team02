@@ -18,9 +18,6 @@ from flask import Flask
 from flask_smorest import Api, Blueprint as SmorestBlueprint
 from webargs.flaskparser import FlaskParser
 
-#: The optional retry header the money-moving routes honour. Documented
-#: with blp.doc rather than a headers schema, because it is read by the
-#: idempotency decorator and never wanted as a view argument.
 IDEMPOTENCY_KEY = {
     'name': 'Idempotency-Key',
     'in': 'header',
@@ -36,11 +33,7 @@ IDEMPOTENCY_KEY = {
 _SPEC_ROUTE = '/apispec_1.json'
 _DOCS_ROUTE = '/apidocs/'
 
-# Pinned rather than floating: an unpinned CDN URL means the docs page can
-# change without anything in this repository changing. This is the only
-# third-party request the project makes, and it is on an internal docs
-# page - not in the client bundle, which deliberately has none.
-_SCALAR_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.64.0'
+_PINNED_SCALAR_SRC = 'https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.64.0'
 
 _SCALAR_PAGE = f"""<!doctype html>
 <html>
@@ -51,7 +44,7 @@ _SCALAR_PAGE = f"""<!doctype html>
   </head>
   <body>
     <div id="app"></div>
-    <script src="{_SCALAR_SRC}"></script>
+    <script src="{_PINNED_SCALAR_SRC}"></script>
     <script>
       Scalar.createApiReference('#app', {{ url: '{_SPEC_ROUTE}' }})
     </script>

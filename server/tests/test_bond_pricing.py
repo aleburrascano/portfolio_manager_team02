@@ -82,7 +82,6 @@ def test_price_bond_zero_yield_is_undiscounted_sum(ctx):
         issueDate=date.today(), maturityDate=date.today() + timedelta(days=365),
     )
     price = bp.price_bond(bond, date.today())
-    # One annual coupon of 5% plus face value, undiscounted.
     assert price == Decimal('1050.00000000')
 
 

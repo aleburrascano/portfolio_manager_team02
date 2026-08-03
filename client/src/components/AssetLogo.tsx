@@ -15,13 +15,14 @@ type AssetLogoProps = {
  * uptime nobody here controls. A statement identifies a holding by its
  * ticker anyway.
  */
+const MONOGRAM_LENGTH = 2
+
 function AssetLogo({ symbol, assetType }: AssetLogoProps) {
-  // The part before the pair suffix: BTC-USD is Bitcoin, not "BTC-USD".
-  const root = symbol.split('-')[0]
+  const withoutPairSuffix = symbol.split('-')[0]
 
   return (
     <span className={`asset-logo asset-logo-${assetType}`} aria-hidden="true">
-      {root.slice(0, 2)}
+      {withoutPairSuffix.slice(0, MONOGRAM_LENGTH)}
     </span>
   )
 }

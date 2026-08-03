@@ -13,10 +13,6 @@ from schemas import LoginSchema, RegisterSchema, UpdateUserSchema
 auth_bp = Blueprint('auth', __name__, description='Accounts and sessions')
 
 MIN_PASSWORD_LENGTH = 8
-# Matches the String(32) columns in db.models. Without this a longer value
-# is silently truncated on SQLite and raises a DataError - surfacing as a
-# generic 500 - on MySQL. validation.ts checks the same rules for the
-# person typing; this is the check that actually binds.
 MAX_NAME_LENGTH = 32
 NAME_PATTERN = re.compile(r"^[A-Za-z' -]+$")
 USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]+$')
@@ -119,7 +115,6 @@ def get_current_user_route() -> Tuple[dict, int]:
     user_id = current_user_id()
     user = get_user(user_id) if user_id is not None else None
     if user is None:
-        # The session outlived the user record it points at.
         log_out()
         return error_response('Authentication required', 401)
 

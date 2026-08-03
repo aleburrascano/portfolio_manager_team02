@@ -61,9 +61,6 @@
   color: var(--text-muted);
 }
 
-/* The accent border is a second cue layered under the focus ring, not a
-   replacement for it - 1px at 2.75:1 does not meet the focus-appearance
-   minimum on its own, and this is the first control a keyboard user meets. */
 .login-form input:focus {
   border-color: var(--accent-ink);
 }
@@ -104,8 +101,6 @@
   color: var(--text-h);
 }
 
-/* Always in the tree so the live region is registered before the first
-   error arrives, but taking no space until it has something to announce. */
 .login-error {
   color: var(--negative);
   font-size: var(--fs-sm);

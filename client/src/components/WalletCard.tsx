@@ -89,8 +89,6 @@ function WalletCard({ user, totals }: { user: User; totals: HoldingsTotals | nul
 
   return (
     <>
-      {/* The top rule of a statement: label, figure, and the actions that
-          change it. No card, no fill - the typography carries the weight. */}
       <section className="wallet-statement" aria-labelledby="wallet-balance-label">
         <div className="wallet-heading">
           <h2 id="wallet-balance-label" className="wallet-label">
@@ -163,10 +161,6 @@ function WalletCard({ user, totals }: { user: User; totals: HoldingsTotals | nul
               <label className="modal-label" htmlFor="transaction-amount">
                 Amount
               </label>
-              {/* No `max`: the browser would block submission with its own
-                  bubble ("Value must be less than or equal to 50") and our
-                  message - which names the actual balance - would never
-                  fire. One error vocabulary beats two. */}
               <input
                 id="transaction-amount"
                 type="number"
@@ -255,8 +249,6 @@ function WalletCard({ user, totals }: { user: User; totals: HoldingsTotals | nul
             </>
           )}
 
-          {/* One live region for the dialog, so a screen reader hears the
-              validation or server error without hunting for it. */}
           <p className="modal-status error" role="alert">
             {errorMessage}
           </p>

@@ -32,7 +32,6 @@ def test_same_key_with_different_body_is_rejected(client):
 def test_failed_request_releases_the_key_for_retry(client):
     user = register_user(client)
 
-    # Withdrawing with no balance fails, so the key should not be burned.
     failed = client.post(
         f'/api/v1/users/{user["userId"]}/withdraw',
         json={'amount': 50},

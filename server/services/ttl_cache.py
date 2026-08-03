@@ -19,9 +19,6 @@ import threading
 import time
 from typing import Any, Callable, Hashable
 
-# Returned by get() when there is nothing usable cached, so that a cached
-# None - which asset_quote and analyst_ratings both return meaningfully -
-# is not confused with a miss.
 MISS = object()
 
 
@@ -32,9 +29,6 @@ class TTLCache:
         self.ttl_seconds = ttl_seconds
         self._entries: dict[Hashable, tuple[float, Any]] = {}
         self._lock = threading.Lock()
-        # Counted because "how much upstream traffic is this saving" is the
-        # only number that says whether the cache is worth its window, and
-        # it is not answerable from the outside.
         self.hits = 0
         self.misses = 0
 

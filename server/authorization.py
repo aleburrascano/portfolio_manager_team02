@@ -47,8 +47,6 @@ def require_user(view):
             return error_response('You cannot access another user\'s data', 403)
         return view(*args, **kwargs)
 
-    # Lets a test assert that every user-scoped route is actually guarded,
-    # without depending on how many other decorators are stacked on it.
     wrapped.requires_user = True
     return wrapped
 
@@ -68,12 +66,19 @@ def init_app(app: Flask) -> None:
     app.secret_key = secret_key
     app.config['SESSION_COOKIE_HTTPONLY'] = True
 
-    # Deployed, the frontend is served from its own domain, which makes this
-    # cookie cross-site: Lax withholds it from every XHR, so logging in
-    # would appear to work and then every authenticated call would 401.
-    # SameSite=None is only honoured alongside Secure, so the two move
-    # together - and Secure would break plain-HTTP local development, which
-    # is why this is opt-in rather than the default.
+    _configure_cross_site_cookie(app)
+
+
+def _configure_cross_site_cookie(app: Flask) -> None:
+    """
+    Let the session cookie travel to a frontend on another domain.
+
+    Lax withholds the cookie from every cross-site XHR, so a deployed client
+    on its own domain would log in and then 401 on every authenticated call.
+    SameSite=None is only honoured alongside Secure, so the two move
+    together - and Secure breaks plain-HTTP local development, which is why
+    this is opt-in rather than the default.
+    """
     cross_site = os.environ.get('CROSS_SITE_COOKIE', '').lower() in ('1', 'true', 'yes')
     app.config['SESSION_COOKIE_SAMESITE'] = 'None' if cross_site else 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = cross_site

@@ -52,7 +52,6 @@
   font-weight: 600;
 }
 
-/* The bottom line of the block, ruled off the way a statement total is. */
 .composition-total {
   display: flex;
   align-items: baseline;

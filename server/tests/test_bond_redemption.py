@@ -74,7 +74,6 @@ def test_redeeming_closes_the_position_and_returns_the_cash(user_id):
     redemption.redeem_matured_bonds()
 
     assert get_holding_qty(user_id, 'UST1') == 0.0
-    # 10000 - 1900 spent + 2000 paid out.
     assert get_user_balance(user_id) == Decimal('10100')
 
 
@@ -95,8 +94,6 @@ def test_a_bond_maturing_today_is_paid_out(user_id):
     assert len(redemption.redeem_matured_bonds()) == 1
 
 
-# The poller calls this on a timer, so it has to be a no-op once the
-# position is closed rather than paying out again on every tick.
 def test_redeeming_twice_pays_out_once(user_id):
     add_bond('UST1', matures_in_days=-1)
     deposit_cash(user_id, Decimal('10000'))
@@ -144,8 +141,6 @@ def test_only_the_matured_bond_is_touched(user_id):
     assert get_holding_qty(user_id, 'UST2') == 1.0
 
 
-# The redemption is an ordinary sale, so it shows up in the history and its
-# realised gain is computed by the same code as every other one.
 def test_a_redemption_appears_as_a_sale_with_its_gain(client, ctx):
     from services.portfolio_performance import realized_gains_for
 
@@ -158,7 +153,6 @@ def test_a_redemption_appears_as_a_sale_with_its_gain(client, ctx):
 
     gains = realized_gains_for(user['userId'])
     [gain] = list(gains.values())
-    # Bought at 950, redeemed at par.
     assert gain['costBasis'] == 1900.0
     assert gain['proceeds'] == 2000.0
     assert gain['gainLoss'] == 100.0

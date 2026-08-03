@@ -111,8 +111,6 @@
   color: var(--negative);
 }
 
-/* The name is the first thing to go when the header runs out of room; the
-   avatar and chevron still say what the control is. */
 @media (max-width: 520px) {
   .account-menu-name {
     position: absolute;

@@ -1,10 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { registerNewUser, uniqueUsername } from './fixtures'
 
-// Bonds are priced from their own terms (services/bond_pricing.py) rather
-// than a live feed, so trading one is a deterministic, network-free path
-// through buy/sell - unlike stocks and crypto, which hit real yfinance.
-
 test.beforeEach(async ({ page }) => {
   await registerNewUser(page, uniqueUsername('trade'))
 
@@ -26,8 +22,6 @@ test('buys a bond and lists it in holdings', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Review buy' }).click()
 
-  // The review states quantity, price, and the resulting cash balance
-  // before the order is placed.
   await expect(page.getByRole('alertdialog')).toContainText('Cash after')
   await page.getByRole('button', { name: 'Buy 1.00 UST2Y' }).click()
 
@@ -56,7 +50,6 @@ test('can back out of a trade at the review step', async ({ page }) => {
   await page.getByRole('button', { name: /US Treasury Note 2Y/ }).click()
   await page.getByRole('button', { name: 'Review buy' }).click()
 
-  // exact, so it doesn't also match the page's own "← Back" button.
   await page.getByRole('button', { name: 'Back', exact: true }).click()
   await expect(page.getByRole('alertdialog')).not.toBeVisible()
   await expect(page.getByText(/Bought/)).not.toBeVisible()
@@ -82,8 +75,6 @@ test('appears in the transaction history after a purchase', async ({ page }) => 
 })
 
 test('reaches the trade ticket by keyboard alone', async ({ page }) => {
-  // Asset rows are the only route into buy/sell, so they have to be
-  // operable without a mouse.
   const row = page.getByRole('button', { name: /US Treasury Note 2Y/ })
   await row.focus()
   await page.keyboard.press('Enter')

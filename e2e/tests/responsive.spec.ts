@@ -41,11 +41,9 @@ test.describe('phone', () => {
     const navBox = await nav.boundingBox()
     const viewport = page.viewportSize()!
 
-    // The bar sits in the lower half of the screen and spans its width.
     expect(navBox!.y).toBeGreaterThan(viewport.height / 2)
     expect(navBox!.width).toBeGreaterThanOrEqual(viewport.width - 1)
 
-    // Every target clears the 44px minimum.
     for (const name of ['Dashboard', 'Trade', 'History']) {
       const box = await page.getByRole('link', { name }).boundingBox()
       expect(box!.height, `${name} tap target`).toBeGreaterThanOrEqual(44)
@@ -76,7 +74,6 @@ test.describe('phone', () => {
     await expect(page.getByText('Bought 1.00 UST2Y')).toBeVisible()
     await expectNoHorizontalScroll(page, 'Transaction history')
 
-    // Account settings live in the header menu now, not the bottom bar.
     await page.getByRole('button', { name: /Ada Lovelace/ }).click()
     await page.getByRole('menuitem', { name: 'Account settings' }).click()
     await expectNoHorizontalScroll(page, 'Account')
@@ -99,9 +96,6 @@ test.describe('phone', () => {
 test.describe('desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
-  // The dashboard is fitted to the viewport above 1000x780: every panel on
-  // screen at once, with the long lists scrolling inside their own boxes
-  // rather than pushing the page down.
   test('the dashboard fits the screen without the page scrolling', async ({ page }) => {
     await registerNewUser(page, uniqueUsername('desk'))
     await fundAccount(page, '5000')
@@ -126,7 +120,6 @@ test.describe('desktop', () => {
     expect(overflow.docScroll).toBeLessThanOrEqual(1)
     expect(overflow.pageScroll, 'the dashboard should fit its column').toBeLessThanOrEqual(1)
 
-    // And every panel is genuinely on screen, not merely not-scrolling.
     for (const name of ['Watchlist', 'Most active today']) {
       const heading = page.getByRole('heading', { name })
       if (await heading.count()) await expect(heading.first()).toBeInViewport()
@@ -144,7 +137,6 @@ test.describe('tablet', () => {
   test('keeps the side rail and does not scroll sideways', async ({ page }) => {
     await registerNewUser(page, uniqueUsername('tab'))
 
-    // Above the phone breakpoint the rail is back at the side.
     const navBox = await page.locator('.sidebar').boundingBox()
     expect(navBox!.y).toBeLessThan(TABLET.height / 2)
 
