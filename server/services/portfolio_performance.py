@@ -240,6 +240,82 @@ def _by_asset_type(
     ]
 
 
+def realized_gains_for(user_id: int) -> Dict[int, Dict[str, float]]:
+    """
+    Every sale this user has made and what it realised, keyed by the
+    transactionId of the sale.
+
+    Needs the whole trade ledger regardless of what the caller is showing:
+    an average cost basis is built by replaying every buy that came before a
+    sale, so it can't be computed from one page of history.
+    """
+    return realized_gains(get_user_asset_transactions(user_id))
+
+
+def realized_gains(trades: List[dict]) -> Dict[int, Dict[str, float]]:
+    """
+    What each sale actually made, keyed by its transactionId.
+
+    The unrealised side of this is fully built - holdings reports gain
+    against average cost for every open position - but a closed one left no
+    trace: a sale showed up in the history as a signed amount and nothing
+    said whether it was a good one.
+
+    Measured against the same average cost basis the open positions use, so
+    "sold at a gain" here and "up on the position" there mean the same thing
+    and are computed one way. Replayed forward with the cost basis rather
+    than read off the finished one, because the average moves as a position
+    is added to and a sale has to be judged against the average as it stood
+    at the time.
+
+    Only sales appear; a buy realises nothing.
+
+    Args:
+        trades (list[dict]): Asset trades, oldest first, with signed `qty`
+            and a `transactionId`.
+
+    Returns:
+        dict[int, dict]: {'costBasis', 'proceeds', 'gainLoss',
+        'gainLossPercent'} per sale.
+    """
+    quantities: Dict[str, Decimal] = defaultdict(Decimal)
+    averages: Dict[str, Decimal] = defaultdict(Decimal)
+    realized: Dict[int, Dict[str, float]] = {}
+
+    for trade in trades:
+        ticker = trade['ticker']
+        quantity = Decimal(str(trade['qty']))
+        price = Decimal(str(trade['price']))
+        held = quantities[ticker]
+
+        if quantity > 0:
+            total_cost = averages[ticker] * held + quantity * price
+            quantities[ticker] = held + quantity
+            averages[ticker] = total_cost / quantities[ticker]
+            continue
+
+        sold = -quantity
+        unit_cost = averages[ticker]
+        cost = sold * unit_cost
+        proceeds = sold * price
+
+        transaction_id = trade.get('transactionId')
+        if transaction_id is not None:
+            realized[transaction_id] = {
+                'costBasis': round(float(cost), 2),
+                'proceeds': round(float(proceeds), 2),
+                'gainLoss': round(float(proceeds - cost), 2),
+                'gainLossPercent': round(float((proceeds - cost) / cost * 100), 2) if cost else 0.0,
+            }
+
+        quantities[ticker] = held + quantity
+        if quantities[ticker] <= 0:
+            quantities[ticker] = Decimal('0')
+            averages[ticker] = Decimal('0')
+
+    return realized
+
+
 def average_cost_basis(trades: List[dict]) -> Dict[str, Decimal]:
     """
     The average price paid per unit still held, per ticker.

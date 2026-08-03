@@ -10,6 +10,14 @@ import type { AssetType } from './assets'
  */
 export type PortfolioBreakdown = { cash: number } & Partial<Record<AssetType, number>>
 
+/** What a sale made against the average cost of what it came out of. */
+export type RealizedGain = {
+  costBasis: number
+  proceeds: number
+  gainLoss: number
+  gainLossPercent: number
+}
+
 export type Transaction = {
   transactionId: number
   type: 'cash' | AssetType
@@ -19,6 +27,12 @@ export type Transaction = {
   ticker?: string
   qty?: number
   price?: number
+  /**
+   * Present on sells only. Absent - not zero - on everything else, because
+   * a buy realising nothing is a different statement from one that made
+   * nothing.
+   */
+  realized?: RealizedGain
 }
 
 export type TransactionType = 'deposit' | 'withdraw'

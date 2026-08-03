@@ -138,10 +138,12 @@ def get_user_asset_transactions(user_id: int) -> List[Dict[str, Any]]:
         user_id (int): The ID of the user.
 
     Returns:
-        list[dict]: Rows of ticker, assetType, qty, price, transactionDate.
+        list[dict]: Rows of transactionId, ticker, assetType, qty, price,
+        transactionDate.
     """
     statement = (
         select(
+            AssetTransaction.assetTransactionId.label('transactionId'),
             AssetTransaction.ticker,
             cast(Asset.assetType, String).label('assetType'),
             AssetTransaction.qty,

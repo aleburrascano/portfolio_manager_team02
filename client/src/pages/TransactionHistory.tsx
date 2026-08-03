@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import {
   fetchTransactions,
   transactionsExportUrl,
+  type RealizedGain,
   type Transaction,
   type TransactionSort,
   type User,
@@ -33,6 +34,20 @@ function describe(transaction: Transaction): string {
   const action = transaction.transactionType === 'buy' ? 'Bought' : 'Sold'
   const qty = transaction.qty != null ? formatNumber(Math.abs(transaction.qty), 2) : undefined
   return `${action}${qty != null ? ` ${qty}` : ''} ${transaction.ticker ?? ''}`.trim()
+}
+
+/** A sale's outcome: what it made, and what that was as a percentage. */
+function Realized({ value }: { value: RealizedGain }) {
+  const tone = value.gainLoss > 0 ? 'positive' : value.gainLoss < 0 ? 'negative' : 'flat'
+  const sign = value.gainLoss > 0 ? '+' : value.gainLoss < 0 ? '-' : ''
+  return (
+    <span className={tone}>
+      {sign}{formatCurrency(Math.abs(value.gainLoss))}{' '}
+      <span className="history-realized-pct">
+        ({formatNumber(Math.abs(value.gainLossPercent), 2)}%)
+      </span>
+    </span>
+  )
 }
 
 function TransactionHistory({ user }: { user: User }) {
@@ -150,6 +165,10 @@ function TransactionHistory({ user }: { user: User }) {
                   <th scope="col">Date</th>
                   <th scope="col">Description</th>
                   <th scope="col">Amount</th>
+                  {/* The unrealised side of this is on the dashboard for
+                      every open position; this is the only place a closed
+                      one says whether it was a good trade. */}
+                  <th scope="col">Realized</th>
                 </tr>
               </thead>
               <tbody>
@@ -161,6 +180,15 @@ function TransactionHistory({ user }: { user: User }) {
                       <td data-label="Description">{describe(transaction)}</td>
                       <td data-label="Amount" className={isPositive ? 'positive' : 'negative'}>
                         {isPositive ? '+' : '-'}{formatCurrency(Math.abs(transaction.signedAmount))}
+                      </td>
+                      <td data-label="Realized" className="history-realized">
+                        {transaction.realized ? (
+                          <Realized value={transaction.realized} />
+                        ) : (
+                          // An em dash, not a zero: this row didn't realise
+                          // nothing, it isn't the kind of event that can.
+                          <span aria-hidden="true">—</span>
+                        )}
                       </td>
                     </tr>
                   )

@@ -115,6 +115,43 @@ describe('TransactionHistory', () => {
     expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
   })
 
+  it('reports what a sale realised', async () => {
+    const sale: Transaction = {
+      transactionId: 3, type: 'stock', transactionType: 'sell',
+      transactionDate: '2024-01-03T00:00:00Z', signedAmount: 60,
+      ticker: 'AAPL', qty: -4, price: 15,
+      realized: { costBasis: 40, proceeds: 60, gainLoss: 20, gainLossPercent: 50 },
+    }
+    mockedFetch.mockResolvedValue(page([sale]))
+    render(<TransactionHistory user={user} />)
+
+    expect(await screen.findByText('+$20.00')).toBeInTheDocument()
+    expect(screen.getByText('(50.00%)')).toBeInTheDocument()
+  })
+
+  it('shows a loss on a sale as negative', async () => {
+    const sale: Transaction = {
+      transactionId: 3, type: 'stock', transactionType: 'sell',
+      transactionDate: '2024-01-03T00:00:00Z', signedAmount: 30,
+      ticker: 'AAPL', qty: -4, price: 7.5,
+      realized: { costBasis: 40, proceeds: 30, gainLoss: -10, gainLossPercent: -25 },
+    }
+    mockedFetch.mockResolvedValue(page([sale]))
+    render(<TransactionHistory user={user} />)
+
+    const cell = await screen.findByText('-$10.00')
+    expect(cell).toHaveClass('negative')
+  })
+
+  // A buy realises nothing; that is not the same as having made nothing.
+  it('leaves the realized column blank on rows that cannot realise anything', async () => {
+    mockedFetch.mockResolvedValue(page([deposit]))
+    render(<TransactionHistory user={user} />)
+
+    await screen.findByText('Deposited cash')
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
   it('links to the CSV export as a download', async () => {
     mockedFetch.mockResolvedValue(page([deposit]))
     render(<TransactionHistory user={user} />)
