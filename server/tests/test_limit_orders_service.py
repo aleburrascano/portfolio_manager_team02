@@ -34,11 +34,6 @@ def stub_market_data(monkeypatch):
         lambda ticker: {'exchange': 'NMS', 'quoteType': 'EQUITY'},
     )
 
-    # evaluate_pending_orders screens every pending ticker with one batched
-    # quote call before pricing any of them properly. Deriving the screen
-    # from trade_price rather than fixing it at $10 keeps the two answers
-    # agreeing when a test overrides trade_price - otherwise the screen
-    # would filter out the very fill under test.
     def live_quotes(symbols):
         book = {}
         for symbol in symbols:
@@ -75,8 +70,6 @@ def test_place_limit_order_rejects_an_asset_type_that_cannot_take_one(user_id):
         lo.place_limit_order(user_id, 'bond', 'UST2Y', 'buy', Decimal('5'), Decimal('8.00'))
 
 
-# Crypto is quoted by the same feed and priced the same way as a stock, so
-# the poller needs no special case for it.
 def test_place_limit_order_accepts_crypto(user_id, monkeypatch):
     monkeypatch.setattr(
         market_data, 'quote_classification',
@@ -218,7 +211,6 @@ def test_evaluate_pending_orders_leaves_order_pending_on_insufficient_funds_at_f
     deposit_cash(user_id, Decimal('100.00'))
     lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('12.00'))
 
-    # Spend the cash elsewhere before the poller ticks.
     at.purchase_asset(user_id, 'stock', 'MSFT', Decimal('6'))
 
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
@@ -234,7 +226,6 @@ def test_evaluate_pending_orders_leaves_order_pending_on_insufficient_holdings_a
     at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
     lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'))
 
-    # Sell the shares elsewhere before the poller ticks.
     at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
 
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
@@ -247,8 +238,6 @@ def test_evaluate_pending_orders_leaves_order_pending_on_insufficient_holdings_a
 
 def test_evaluate_pending_orders_only_fills_what_can_be_afforded_in_one_pass(user_id, monkeypatch):
     deposit_cash(user_id, Decimal('100.00'))
-    # Each is affordable at placement (9*11=99 <= 100), and each is
-    # affordable alone at the fill price (9*10=90 <= 100) - but not both.
     first = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('9'), Decimal('11.00'))
     second = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('9'), Decimal('11.00'))
 
@@ -269,10 +258,6 @@ def test_evaluate_pending_orders_returns_fill_count(user_id, monkeypatch):
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     assert len(lo.evaluate_pending_orders()) == 2
 
-
-# A stop is the mirror of a limit: it waits for the price to move against
-# the position rather than in its favour. The four cases below are the whole
-# behavioural difference between the two order types.
 
 def test_stop_sell_fills_when_the_price_falls_to_the_trigger(user_id, monkeypatch):
     """A stop loss: get out once it drops this far."""
@@ -313,7 +298,6 @@ def test_stop_buy_stays_pending_below_the_trigger(user_id, monkeypatch):
     assert len(lo.evaluate_pending_orders()) == 0
 
 
-# The same price fills one and not the other, which is the point.
 def test_a_stop_and_a_limit_on_one_ticker_trigger_opposite_ways(user_id, monkeypatch):
     deposit_cash(user_id, Decimal('1000.00'))
     at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('10'))
@@ -332,8 +316,6 @@ def test_a_stop_and_a_limit_on_one_ticker_trigger_opposite_ways(user_id, monkeyp
     assert statuses[take_profit.limitOrderId] == 'pending'
 
 
-# Once more than one asset type takes conditional orders, the type in the
-# route has to actually filter or the stock tab shows the crypto orders.
 def test_list_limit_orders_filters_by_asset_type(user_id, monkeypatch):
     deposit_cash(user_id, Decimal('1000.00'))
     stock = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('8.00'))
@@ -346,7 +328,6 @@ def test_list_limit_orders_filters_by_asset_type(user_id, monkeypatch):
 
     assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'stock')] == [stock.limitOrderId]
     assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'crypto')] == [crypto.limitOrderId]
-    # Omitted, it still means "every type".
     assert len(lo.list_limit_orders(user_id)) == 2
 
 
@@ -358,8 +339,6 @@ def test_list_limit_orders_can_be_paged(user_id):
     assert len(lo.list_limit_orders(user_id, limit=2)) == 2
 
 
-# The screen exists so a tick costs one batched call plus a price only for
-# the tickers that look like they have crossed.
 def test_evaluate_pending_orders_prices_only_the_tickers_that_could_fill(user_id, monkeypatch):
     deposit_cash(user_id, Decimal('1000.00'))
     lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
@@ -378,7 +357,6 @@ def test_evaluate_pending_orders_prices_only_the_tickers_that_could_fill(user_id
     )
 
     assert len(lo.evaluate_pending_orders()) == 1
-    # MSFT's limit of $4 is nowhere near $10, so it never gets priced.
     assert priced == ['AAPL']
 
 
@@ -386,7 +364,6 @@ def test_evaluate_pending_orders_prices_a_ticker_the_screen_could_not(user_id, m
     deposit_cash(user_id, Decimal('1000.00'))
     lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
 
-    # A gap in the quote feed must delay a fill at worst, never drop it.
     monkeypatch.setattr(market_data, 'live_quotes', lambda symbols: {})
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
 

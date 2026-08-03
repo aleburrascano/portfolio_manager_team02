@@ -86,9 +86,6 @@ def test_place_limit_order_respects_idempotency_key(client):
     first = _place(client, user['userId'], key='order-1')
     second = _place(client, user['userId'], key='order-1')
     assert first.status_code == 201
-    # A replay always answers 200 (idempotency.py's _replay), even though
-    # the original request that did the work was a 201 - only the stored
-    # body is guaranteed to match.
     assert second.status_code == 200
     assert first.get_json() == second.get_json()
 
@@ -149,14 +146,10 @@ def test_list_limit_orders_serializes_the_order_type(client):
     order = _place(client, user['userId']).get_json()['order']
 
     assert order['orderType'] == 'limit'
-    # The fields an order history needs, which the client had typed all
-    # along and no route had ever been asked for.
     assert order['resolvedAt'] is None
     assert order['assetTransactionId'] is None
 
 
-# The client cancels by following this link rather than building the URL,
-# so it is part of the contract: present, and actually followable.
 def test_the_cancel_link_is_followable(client):
     user = register_user(client)
     client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
@@ -188,10 +181,6 @@ def test_cancel_limit_order_then_double_cancel_is_400(client):
 
 
 def test_cancel_limit_order_for_another_user_is_404(client):
-    # The URL is scoped to the caller's own userId (require_user passes),
-    # but the order itself belongs to someone else - the service reports
-    # that as "no such order" (404) rather than leaking that it exists
-    # under a 403.
     owner = register_user(client, username='owner')
     client.post(f'/api/v1/users/{owner["userId"]}/deposit', json={'amount': 1000})
     placed = _place(client, owner['userId']).get_json()['order']

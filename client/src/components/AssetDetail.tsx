@@ -85,9 +85,6 @@ function AssetDetail({
   useEffect(() => {
     let cancelled = false
 
-    // One-off: the live price arrives over the socket from here on, and the
-    // year of history behind the chart doesn't change second to second.
-    // Holdings only move when this user trades, which refetches them below.
     async function loadInitial() {
       setDetail(null)
       setDetailError('')
@@ -103,13 +100,13 @@ function AssetDetail({
         const h = await fetchAssetHistory(assetType, symbol)
         if (!cancelled) setHistory(h)
       } catch {
-        // history is a nice-to-have for the chart; leave it empty on failure
+        if (!cancelled) setHistory([])
       }
       try {
         const s = await fetchHoldings(user.userId, assetType, symbol)
         if (!cancelled) setShares(s)
       } catch {
-        // holdings default to 0 already
+        if (!cancelled) setShares(0)
       }
     }
 
@@ -121,8 +118,6 @@ function AssetDetail({
   }, [assetType, symbol, user.userId])
 
   const { quotes: live, lastUpdate } = useLiveFeed(assetType, [symbol])
-  // The pushed update carries only the fields that have a value, so it
-  // refreshes the price without wiping the fields it doesn't cover.
   const quote = detail ? { ...detail, ...live[symbol] } : null
 
   const price = quote?.currentPrice ?? 0
@@ -132,9 +127,6 @@ function AssetDetail({
   const parsedQuantity = Number(quantity)
   const isConditional = orderType !== 'market'
   const parsedLimitPrice = Number(limitPrice)
-  // A conditional order won't fill at the current price - that's the point
-  // of it - so once one is being entered, every downstream figure (max
-  // quantity, total, cash after) is computed off the price the user typed.
   const effectivePrice = isConditional
     ? (Number.isFinite(parsedLimitPrice) ? parsedLimitPrice : 0)
     : price
@@ -148,10 +140,8 @@ function AssetDetail({
   const isBuy = side === 'buy'
   const cashAfter = balance !== null ? (isBuy ? balance - total : balance + total) : null
   const sharesAfter = isBuy ? shares + parsedQuantity : shares - parsedQuantity
-  // A stop triggers when the price moves against the position, a limit when
-  // it moves in its favour, so the same side reads the opposite way round.
-  const triggerDirection =
-    (orderType === 'limit') === isBuy ? 'falls to or below' : 'rises to or above'
+  const waitsForFall = (orderType === 'limit') === isBuy
+  const triggerDirection = waitsForFall ? 'falls to or below' : 'rises to or above'
 
   function switchSide(next: Side) {
     setSide(next)
@@ -204,9 +194,6 @@ function AssetDetail({
           user.userId, assetType, symbol, side, parsedQuantity, parsedLimitPrice, orderType, key,
         )
         idempotency.reset()
-        // Nothing has settled yet - a conditional order just sits pending
-        // until its trigger is crossed - so balance and holdings are left
-        // alone.
         setQuantity('1')
         setLimitPrice('')
         setOrderType('market')
@@ -269,8 +256,6 @@ function AssetDetail({
           <div className="asset-detail-grid">
             <div className="asset-detail-main">
               <div className="chart-card">
-                {/* tick-* flashes for ~700ms in the direction the price moved,
-                    so a quote that changes while you are reading it says so. */}
                 <div className={`trade-price${tick ? ` tick-${tick}` : ''}`}>
                   {formatCurrency(price)}{' '}
                   <span className={isPositive ? 'positive' : 'negative'}>
@@ -278,9 +263,6 @@ function AssetDetail({
                     {' '}({formatCurrency(Math.abs(quote.change ?? 0))})
                   </span>
                 </div>
-                {/* A type repriced on a schedule rather than streamed - a
-                    bond - gets no indicator; claiming a live feed for one
-                    would be a lie. */}
                 {capabilities?.streams && (
                   <div className="quote-feed">
                     <LiveIndicator connected={connected} lastUpdate={lastUpdate} />
@@ -331,9 +313,6 @@ function AssetDetail({
                 </ResponsiveContainer>
               </div>
 
-              {/* Six figures split into the two questions they answer -
-                  what happened today, and where today sits in the year -
-                  rather than one flat grid of unrelated numbers. */}
               <div className="stats-card">
                 <section className="stats-group">
                   <h3 className="stats-heading">Today</h3>
@@ -382,8 +361,6 @@ function AssetDetail({
                   </button>
                 </div>
 
-                {/* The toggle only shows up where placing a conditional
-                    order is actually possible, which the server says. */}
                 {capabilities?.supportsLimitOrders && (
                   <div className="order-type-tabs">
                     {ORDER_TABS.map(({ type, label }) => (
@@ -432,19 +409,12 @@ function AssetDetail({
                         aria-describedby="trigger-hint"
                         required
                       />
-                      {/* Which way the trigger runs is the one thing the
-                          price box can't say for itself, and getting it
-                          backwards is the mistake this panel invites. */}
                       <p id="trigger-hint" className="trade-hint">
                         {triggerHint(orderType, isBuy)}
                       </p>
                     </>
                   )}
 
-                  {/* The wallet lives here rather than only in the header:
-                      "can I afford this" is the question being asked at
-                      this exact moment, and the answer is the line the
-                      order total is subtracted from. */}
                   <dl className="trade-summary">
                     <dt>{isBuy ? 'Order total' : 'Proceeds'}</dt>
                     <dd className="figure">{formatCurrency(total)}</dd>
@@ -496,10 +466,6 @@ function AssetDetail({
                     {formatNumber(parsedQuantity, 2)} {symbol} if the price {triggerDirection}{' '}
                     {formatCurrency(parsedLimitPrice)}
                   </dd>
-                  {/* Said plainly, because it is the difference between this
-                      dialog and the market one beside it: a stop fills at
-                      whatever the market is when it triggers, which for a
-                      falling price can be worse than the number typed. */}
                   <dt>Fills at</dt>
                   <dd className="figure">The market price when it triggers</dd>
                   <dt className="confirm-summary-total">Status</dt>

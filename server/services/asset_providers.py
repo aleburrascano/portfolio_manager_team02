@@ -24,18 +24,10 @@ class AssetProvider(ABC):
 
     asset_type: str
 
-    # What to call this asset type in a user interface. Here rather than in
-    # the client because the client should not have to carry its own list of
-    # which types exist - it asks (see routes.assets.get_asset_types).
     label: str
 
-    # Whether this asset type can be traded via a conditional order. The
-    # poller and routes stay generic, so a provider only has to flip this on.
     supports_limit_orders: bool = False
 
-    # Whether prices for this type are pushed over the quote feed. False
-    # means repriced on a schedule rather than quoted - a bond - which is
-    # what tells a client not to show a live indicator beside it.
     streams: bool = False
 
     @abstractmethod
@@ -152,8 +144,6 @@ class _MarketTradedProvider(AssetProvider):
         """Whether a market data search quote belongs to this asset type."""
 
     def owns_ticker(self, ticker: str) -> Optional[bool]:
-        # The feed reports a ticker's type in the same shape as a search
-        # result, so the same predicate answers both questions.
         classification = market_data.quote_classification(ticker)
         if classification is None:
             return None
@@ -178,9 +168,6 @@ class _MarketTradedProvider(AssetProvider):
         return market_data.live_quotes(symbols)
 
     def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
-        # One batched price call for the whole list, and names from their
-        # own day-long cache - so a list that has been seen before costs a
-        # single upstream request no matter how long it is.
         quotes = market_data.live_quotes(tickers)
         names = market_data.display_names(list(quotes))
         return {
@@ -197,7 +184,6 @@ class StockProvider(_MarketTradedProvider):
     label = 'Stocks'
     supports_limit_orders = True
 
-    # Yahoo Finance exchange codes for Nasdaq, NYSE, and NYSE American/Arca.
     US_EXCHANGES = {'NMS', 'NGM', 'NCM', 'NYQ', 'ASE', 'PCX', 'BATS'}
 
     def matches_quote(self, quote: dict) -> bool:
@@ -210,14 +196,8 @@ class StockProvider(_MarketTradedProvider):
 class CryptoProvider(_MarketTradedProvider):
     asset_type = 'crypto'
     label = 'Crypto'
-    # Quoted by the same feed as stocks and priced the same way, so a
-    # conditional order on one works exactly as it does on the other.
     supports_limit_orders = True
 
-    # The screener only supports equities/funds/ETFs, so there's no
-    # predefined (or constructible) crypto screener to back "popular" the
-    # way StockProvider does. Instead, quote a fixed set of the largest
-    # cryptocurrencies by market cap directly.
     POPULAR_SYMBOLS = {
         'BTC-USD': 'Bitcoin',
         'ETH-USD': 'Ethereum',
@@ -297,7 +277,6 @@ class BondProvider(AssetProvider):
         return bond_pricing.price_history(bond) if bond else []
 
     def owns_ticker(self, ticker: str) -> Optional[bool]:
-        # The catalog is authoritative, so this is never undecided.
         return bond_pricing.get_bond(ticker) is not None
 
     def trade_price(self, ticker: str) -> Decimal:

@@ -13,8 +13,6 @@ from typing import Any
 
 from services.exceptions import InvalidInput
 
-# The columns behind these values are DECIMAL(18,8), so more precision than
-# that would be silently rounded away - better to reject it.
 MAX_DECIMAL_PLACES = 8
 MAX_AMOUNT = Decimal('1000000000')
 
@@ -22,7 +20,6 @@ MAX_AMOUNT = Decimal('1000000000')
 def _to_decimal(raw: Any, field: str) -> Decimal:
     if raw is None:
         raise InvalidInput(f'{field} is required.')
-    # bool is an int subclass, and True would otherwise parse as 1.
     if isinstance(raw, bool) or not isinstance(raw, (int, float, str, Decimal)):
         raise InvalidInput(f'{field} must be a number.')
 
@@ -31,7 +28,6 @@ def _to_decimal(raw: Any, field: str) -> Decimal:
     except InvalidOperation:
         raise InvalidInput(f'{field} must be a number.') from None
 
-    # JSON permits NaN and Infinity, and both would poison the arithmetic.
     if not value.is_finite():
         raise InvalidInput(f'{field} must be a finite number.')
     return value
@@ -101,8 +97,6 @@ def parse_limit_price(raw: Any) -> Decimal:
     return _check_range(_to_decimal(raw, 'limitPrice'), 'limitPrice', MAX_AMOUNT)
 
 
-# A chart window, bounded because each extra day is priced from the market
-# data feed and an unbounded value would let one request pull decades.
 MIN_DAYS = 7
 MAX_DAYS = 1825
 DEFAULT_DAYS = 365

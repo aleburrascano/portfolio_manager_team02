@@ -85,8 +85,6 @@ def get_portfolio_performance(query: dict, user_id: int) -> Tuple[dict, int]:
         'netDeposits', 'benchmarkValue'}], 'summary': {...}, 'byAssetType':
         [...], 'benchmark': {'ticker', 'label'}, '_links': dict}
     """
-    # The schema leaves an absent `days` as None; parse_days turns that
-    # into the default, so the window is decided in one place.
     days = parse_days(query.get('days'))
     return {**pp.get_portfolio_performance(user_id, days), '_links': portfolio_links(user_id)}, 200
 

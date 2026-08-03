@@ -72,12 +72,6 @@
     grid-template-columns: 1fr;
   }
 
-  /* Both wrappers stop generating boxes so their cards join the single
-     column directly. That is what lets the trade card be placed between
-     the chart and the stats: buying is the reason for this page, and
-     stacking it under the stats and the ratings put it a full screen of
-     scrolling away. Dropping the side wrapper's box also drops its
-     sticky positioning, which has nothing to stick to in one column. */
   .asset-detail-main,
   .asset-detail-side {
     display: contents;
@@ -141,8 +135,6 @@
   color: var(--accent-ink);
 }
 
-/* A second, smaller tab row for market vs. limit vs. stop - subordinate to
-   the buy/sell tabs above it, not another primary choice. */
 .order-type-tabs {
   display: flex;
   gap: 6px;
@@ -169,9 +161,6 @@
   color: var(--accent-ink);
 }
 
-/* Sits directly under the trigger price box and says which way the trigger
-   runs, which the number alone can't. Quiet, because it is a caption on the
-   field above rather than a message in its own right. */
 .trade-hint {
   margin: -6px 0 14px;
   font-size: var(--fs-sm);
@@ -191,8 +180,6 @@
   transition: background-color 600ms var(--ease);
 }
 
-/* The flash is the arriving value announcing itself; it decays back to the
-   page over 600ms, which the reduced-motion rule collapses to nothing. */
 .trade-price.tick-up {
   background: var(--positive-bg);
   transition-duration: 0ms;
@@ -253,8 +240,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* A ledger extract, not a single total: what the order costs, what is in
-   the wallet, and what is left. */
 .trade-summary {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -282,7 +267,6 @@
   color: var(--text-h);
 }
 
-/* Says the order can't be afforded before the button is ever pressed. */
 .trade-summary dd.trade-summary-after.short {
   color: var(--negative);
 }

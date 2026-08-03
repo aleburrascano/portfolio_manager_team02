@@ -27,8 +27,6 @@ function AssetList({
     <div className="asset-list">
       <h2 className="section-title">{title}</h2>
       {loading ? (
-        // A list-shaped placeholder rather than a centred sentence, so the
-        // rows don't jump into place when the quotes land.
         <ul aria-hidden="true">
           {Array.from({ length: SKELETON_ROWS }, (_, index) => (
             <li key={index} className="asset-row asset-row-skeleton">
@@ -48,7 +46,6 @@ function AssetList({
               <>
                 <AssetLogo symbol={asset.symbol} assetType={assetType} />
                 <span className="asset-info">
-                  {/* title carries the full name when the ellipsis eats it. */}
                   <span className="asset-name" title={asset.name}>
                     {asset.name}
                   </span>
@@ -79,8 +76,6 @@ function AssetList({
             return (
               <li key={asset.symbol}>
                 {onSelect ? (
-                  // A real button, not a div wearing role="button": Enter and
-                  // Space come with it, and so does the focus ring.
                   <button type="button" className="asset-row" onClick={() => onSelect(asset.symbol)}>
                     {content}
                   </button>

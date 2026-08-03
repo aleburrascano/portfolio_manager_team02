@@ -20,7 +20,6 @@ test('deposits cash and reflects the new balance', async ({ page }) => {
 
   await moveCash(page, 'Deposit', '250')
 
-  // The review step states the outcome before anything is committed.
   await expect(page.getByRole('heading', { name: 'Review deposit' })).toBeVisible()
   await expect(page.getByRole('dialog')).toContainText('Balance after')
   await expect(page.getByRole('dialog')).toContainText('$250.00')
@@ -28,8 +27,6 @@ test('deposits cash and reflects the new balance', async ({ page }) => {
   await page.getByRole('button', { name: 'Deposit $250.00' }).click()
   await expect(page.getByText('Deposit submitted successfully.')).toBeVisible()
 
-  // The confirmation stays until it is dismissed, rather than vanishing on
-  // a timer before it can be read.
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.getByRole('dialog')).not.toBeVisible()
   await expect(page.locator('.wallet-balance')).toHaveText('$250.00')

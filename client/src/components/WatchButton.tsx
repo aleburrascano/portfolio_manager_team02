@@ -21,8 +21,6 @@ function WatchButton({
   /** Lets the dashboard's watchlist refresh without a page reload. */
   onChange?: (watched: boolean) => void
 }) {
-  // Tagged with the asset it answers, so switching assets shows "loading"
-  // again without an effect having to reset the state first.
   const requestKey = `${user.userId}:${assetType}:${symbol}`
   const [state, setState] = useState<{ key: string; watched: boolean }>({
     key: '',
@@ -30,10 +28,7 @@ function WatchButton({
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
-  // Counts toggles so a slower earlier request can't roll back a newer
-  // one. Without it, pressing twice quickly could leave the button showing
-  // the opposite of what the server ended up storing.
-  const intent = useRef(0)
+  const latestToggle = useRef(0)
 
   const watched = state.key === requestKey ? state.watched : null
 
@@ -45,7 +40,6 @@ function WatchButton({
         if (!cancelled) setState({ key: requestKey, watched: result })
       })
       .catch(() => {
-        // Unknown state reads as "not saved"; pressing it will find out.
         if (!cancelled) setState({ key: requestKey, watched: false })
       })
 
@@ -55,28 +49,25 @@ function WatchButton({
   }, [user.userId, assetType, symbol, requestKey])
 
   async function toggle() {
-    // Only the unknown state blocks a press. An in-flight request must
-    // not, or a quick second click would be swallowed with nothing on
-    // screen to say so - the button would simply appear stuck.
     if (watched === null) return
 
     const next = !watched
-    const ticket = ++intent.current
+    const ticket = ++latestToggle.current
+    const isStillTheLatestToggle = () => ticket === latestToggle.current
+
     setState({ key: requestKey, watched: next })
     setSaving(true)
     setError('')
 
     try {
       await setWatched(user.userId, assetType, symbol, next)
-      if (ticket === intent.current) onChange?.(next)
+      if (isStillTheLatestToggle()) onChange?.(next)
     } catch (e) {
-      // Superseded by a later press: that request owns the state now, and
-      // rolling back to this one's guess would fight it.
-      if (ticket !== intent.current) return
+      if (!isStillTheLatestToggle()) return
       setState({ key: requestKey, watched: !next })
       setError(e instanceof Error ? e.message : 'Could not update your watchlist.')
     } finally {
-      if (ticket === intent.current) setSaving(false)
+      if (isStillTheLatestToggle()) setSaving(false)
     }
   }
 

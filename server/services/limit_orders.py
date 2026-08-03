@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
-    # Naive UTC, matching how every DateTime column in this schema is
-    # written and compared (see db.connection's session-timezone pin).
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
@@ -177,9 +175,6 @@ def list_limit_orders(
         )
     if status is not None:
         statement = statement.where(LimitOrder.status == status)
-    # limitOrderId breaks ties within the same createdAt tick (SQLite's
-    # CURRENT_TIMESTAMP only has second resolution), keeping the list
-    # deterministically newest-first.
     statement = statement.order_by(LimitOrder.createdAt.desc(), LimitOrder.limitOrderId.desc())
     if limit is not None:
         statement = statement.limit(limit)
@@ -222,9 +217,6 @@ def evaluate_pending_orders() -> int:
     session = db_conn.get_session()
     pending = session.scalars(
         select(LimitOrder).where(LimitOrder.status == 'pending')
-        # Oldest-first (limitOrderId breaks createdAt ties), so when two
-        # orders on the same ticker can't both be covered, the one placed
-        # first wins - the same FIFO priority a real order book gives.
         .order_by(LimitOrder.createdAt, LimitOrder.limitOrderId)
     ).all()
     if not pending:
@@ -238,10 +230,6 @@ def evaluate_pending_orders() -> int:
 
     filled = []
     for ticker, orders in by_ticker.items():
-        # A ticker the screen priced but which no waiting order has crossed
-        # needs no further lookup this tick. A ticker the screen couldn't
-        # price falls through to the authoritative fetch rather than being
-        # skipped, so a gap in the quote feed delays a fill at worst.
         indicative = screen.get(ticker)
         if indicative is not None and not any(_condition_met(order, indicative) for order in orders):
             continue
@@ -249,7 +237,7 @@ def evaluate_pending_orders() -> int:
         try:
             price = market_data.trade_price(ticker)
         except MarketDataUnavailable:
-            continue  # try this ticker again next tick
+            continue
 
         for order in orders:
             fill = _try_fill(session, order.limitOrderId, price)
@@ -288,11 +276,8 @@ def _condition_met(order: LimitOrder, price: Decimal) -> bool:
     difference between the two, which is why both live in one table and one
     poller rather than two of each.
     """
-    if (order.side == 'buy') == (order.orderType == 'limit'):
-        # Limit buy: at or below. Stop sell: at or below.
-        return price <= order.limitPrice
-    # Limit sell: at or above. Stop buy: at or above.
-    return price >= order.limitPrice
+    waits_for_a_fall = (order.side == 'buy') == (order.orderType == 'limit')
+    return price <= order.limitPrice if waits_for_a_fall else price >= order.limitPrice
 
 
 def _try_fill(session, limit_order_id: int, price: Decimal) -> Optional[dict]:
@@ -312,7 +297,7 @@ def _try_fill(session, limit_order_id: int, price: Decimal) -> Optional[dict]:
             return None
 
         if not db_conn.lock_user(session, order.userId):
-            return None  # user no longer exists; leave the order pending
+            return None
 
         if order.side == 'buy':
             if ut.get_user_balance(order.userId) < order.quantity * price:
@@ -339,10 +324,6 @@ def _try_fill(session, limit_order_id: int, price: Decimal) -> Optional[dict]:
         session.commit()
         return fill
     except Exception:
-        # Logged, not just swallowed: this is the one place a money-moving
-        # failure has no request to report into, and an unfilled order that
-        # hit a constraint violation is otherwise indistinguishable from one
-        # whose price simply hasn't been met yet.
         logger.exception('Limit order %s failed to fill', limit_order_id)
         session.rollback()
         return None

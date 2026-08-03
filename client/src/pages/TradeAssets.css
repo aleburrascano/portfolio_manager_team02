@@ -6,9 +6,6 @@
   text-align: left;
 }
 
-/* Duplicated from AssetDetail.css rather than shared: that stylesheet only
-   loads once AssetDetail's lazy chunk does, and the Open Orders view (which
-   also uses .back-btn) can be the first thing on this page to render. */
 .back-btn {
   align-self: flex-start;
   border: none;
@@ -25,7 +22,6 @@
   color: var(--text-h);
 }
 
-/* Tabs left, search right, on one line while there is room for both. */
 .trade-controls {
   display: flex;
   align-items: center;
@@ -82,8 +78,6 @@
     padding: 16px 14px 32px;
   }
 
-  /* The tab group takes the full row and splits it three ways, so each
-     target stays comfortably over 44px on a phone. */
   .asset-type-tabs {
     width: 100%;
   }

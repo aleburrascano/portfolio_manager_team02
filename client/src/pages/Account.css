@@ -21,9 +21,6 @@
   gap: 22px;
 }
 
-/* Identity and credentials are two different errands. The fieldset gives
-   each its own boundary and its own accessible grouping, instead of seven
-   controls sharing one undivided column and one save button. */
 .account-group {
   margin: 0;
   padding: 16px 0 0;

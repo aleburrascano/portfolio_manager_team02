@@ -45,21 +45,13 @@ function AppShell({
           </main>
         </div>
       </div>
-      {/* At the shell, because a conditional order can fill - or a bond
-          mature - while the user is on any screen, including none of the
-          ones that would otherwise show it. */}
       <FillToasts />
     </BalanceProvider>
   )
 }
 
 function App() {
-  // The server session is the only source of truth for who is logged in, so
-  // it's asked once on load rather than trusting anything the client stored.
   const [session, setSession] = useState<SessionResult | null>(null)
-  // Bumped by the retry button; the effect re-runs the session check when
-  // it changes. The effect only reports the answer, so clearing back to the
-  // loading state stays in the click handler where it belongs.
   const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
@@ -80,9 +72,6 @@ function App() {
   }
 
   async function handleLogout() {
-    // Cleared either way: if the request fails there's nothing useful the
-    // user can do about it, and leaving them on the dashboard would make
-    // the button look broken.
     try {
       await logout()
     } finally {
@@ -103,8 +92,6 @@ function App() {
     )
   }
 
-  // A server that couldn't answer is not the same as a signed-out visitor,
-  // and saying so is the difference between "try again" and "log in again".
   if (session.status === 'unavailable') {
     return (
       <div className="app-boot">
@@ -132,19 +119,12 @@ function App() {
         <Routes>
           <Route element={<AppShell user={user} onLogout={handleLogout} />}>
             <Route index element={<Dashboard user={user} />} />
-            {/* An asset type is part of the address, so a tab is a place -
-                shareable, bookmarkable, and reachable with the back button.
-                Bare /trade picks the first tab rather than showing nothing. */}
             <Route path="trade" element={<Navigate to="/trade/stock" replace />} />
             <Route path="trade/:assetType" element={<TradeAssets user={user} />} />
             <Route path="trade/:assetType/:symbol" element={<TradeAssets user={user} />} />
-            {/* Its own path rather than a third segment under trade, which
-                would be ambiguous with a ticker named "orders". */}
             <Route path="orders/:assetType" element={<TradeAssets user={user} showOrders />} />
             <Route path="history" element={<TransactionHistory user={user} />} />
             <Route path="account" element={<Account user={user} onUpdate={handleLogin} />} />
-            {/* An address this app doesn't have is not worth an error page;
-                the dashboard is where someone wanted to be anyway. */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

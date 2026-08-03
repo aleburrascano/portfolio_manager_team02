@@ -63,13 +63,10 @@ def test_history_reports_what_a_sale_realised(client, monkeypatch):
     rows = client.get(f'/api/v1/users/{user["userId"]}/transactions').get_json()['transactions']
     sale = next(row for row in rows if row['transactionType'] == 'sell')
 
-    # 4 units bought at 10, sold at 15.
     assert sale['realized'] == {
         'costBasis': 40.0, 'proceeds': 60.0, 'gainLoss': 20.0, 'gainLossPercent': 50.0,
     }
 
-    # A buy realises nothing, and a deposit isn't a trade at all - so the
-    # field is absent rather than zero, which would read as "made nothing".
     assert 'realized' not in next(row for row in rows if row['transactionType'] == 'buy')
     assert 'realized' not in next(row for row in rows if row['type'] == 'cash')
 
@@ -89,11 +86,9 @@ def test_export_returns_csv_of_every_row(client):
         'Date', 'Type', 'Action', 'Ticker', 'Quantity', 'Price', 'Amount',
         'Cost basis', 'Realized gain/loss',
     ]
-    assert len(rows) == 3  # header plus both deposits
+    assert len(rows) == 3
 
 
-# The client follows this link rather than building the URL, so it is part
-# of the contract: it has to be present and it has to actually work.
 def test_the_export_link_is_followable(client):
     user = register_user(client)
     _deposit(client, user['userId'])
@@ -114,9 +109,6 @@ def test_export_requires_authentication(client):
     assert client.get('/api/v1/users/1/transactions/export').status_code == 401
 
 
-# A ticker is upstream data, and a spreadsheet reads a leading = as a
-# formula - so a downloaded file must not be able to execute what a feed
-# put in a name.
 def test_export_defuses_a_formula_in_a_cell(client, monkeypatch):
     import routes.history as history
 

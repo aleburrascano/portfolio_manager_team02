@@ -43,8 +43,6 @@ def _quote_book(held: Dict[str, str]) -> Dict[str, Tuple[float, float]]:
             quote = quotes.get(ticker) or {}
             price = quote.get('currentPrice')
             if price is None:
-                # Best-effort by design: one unpriceable ticker should leave
-                # a zero in the table rather than fail the whole request.
                 price = provider.valuation_price(ticker)
             book[ticker] = (float(price or 0.0), float(quote.get('change') or 0.0))
 
@@ -82,8 +80,6 @@ def get_holdings(user_id: int) -> Dict[str, Any]:
         ticker = trade['ticker']
         asset_type_of[ticker] = trade['assetType']
         quantities[ticker] = quantities.get(ticker, Decimal('0')) + Decimal(str(trade['qty']))
-        # Trades arrive oldest first, so the first buy seen is the date the
-        # position was opened - what "sort by date acquired" means.
         if ticker not in first_bought and Decimal(str(trade['qty'])) > 0:
             first_bought[ticker] = _iso(trade['transactionDate'])
 
@@ -97,9 +93,6 @@ def get_holdings(user_id: int) -> Dict[str, Any]:
     quotes = _quote_book(held)
 
     holdings = []
-    # Accumulated unrounded, because rounding each position and then summing
-    # drifts a cent or two away from the same book totalled anywhere else -
-    # and the performance headline sits directly above this table.
     raw_value = 0.0
     raw_cost = 0.0
     raw_day_change = 0.0
@@ -142,8 +135,6 @@ def _iso(value: Any) -> str:
 
 def _totals(positions: int, value: float, cost: float, day_change: float = 0.0) -> dict:
     """The footer row: the whole book at market against what it cost."""
-    # Yesterday's close of the same book, which is what today's move is a
-    # move from - so the percentage is against that, not against today.
     opening = value - day_change
     return {
         'positions': positions,

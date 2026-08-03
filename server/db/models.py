@@ -22,7 +22,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-# Money and quantities are DECIMAL(18,8) so balance/holdings math is exact.
 MONEY = Numeric(18, 8)
 
 
@@ -34,14 +33,9 @@ class User(Base):
     __tablename__ = 'Users'
 
     userId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    # The login identity, stored lowercased by services.auth so uniqueness
-    # means the same thing on MySQL (case-insensitive collation) as it does
-    # on SQLite (byte-exact). First/last name are display-only and
-    # deliberately not unique - two people are allowed to share a name.
     username: Mapped[str] = mapped_column(String(32), unique=True)
     firstName: Mapped[str] = mapped_column(String(32))
     lastName: Mapped[str] = mapped_column(String(32))
-    # Werkzeug PBKDF2 digest, never the password itself.
     passwordHash: Mapped[str] = mapped_column(String(255))
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -56,20 +50,13 @@ class IdempotentRequest(Base):
     """
 
     __tablename__ = 'IdempotentRequests'
-    # Indexed so the retention sweep in idempotency.py is a range scan
-    # rather than a table scan.
     __table_args__ = (Index('ixIdempotentCreated', 'createdAt'),)
 
     userId: Mapped[int] = mapped_column(
         ForeignKey('Users.userId', ondelete='CASCADE'), primary_key=True
     )
     idempotencyKey: Mapped[str] = mapped_column(String(64), primary_key=True)
-    # Hash of the request the key was claimed for, so reusing a key for a
-    # different request is caught instead of silently replaying the old one.
     fingerprint: Mapped[str] = mapped_column(String(64))
-    # Null until the request succeeds; a null response means "in progress".
-    # Only successful responses are stored, so there's no status to record
-    # alongside it - a stored body always means 200.
     responseBody: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -86,7 +73,6 @@ class Asset(Base):
     __tablename__ = 'Assets'
 
     ticker: Mapped[str] = mapped_column(String(12), primary_key=True)
-    # Validated against the provider registry in services.asset_providers.
     assetType: Mapped[str] = mapped_column(String(16))
 
 
@@ -105,7 +91,6 @@ class Bond(Base):
     ticker: Mapped[str] = mapped_column(ForeignKey('Assets.ticker'), primary_key=True)
     name: Mapped[str] = mapped_column(String(64))
     faceValue: Mapped[Decimal] = mapped_column(MONEY)
-    # Rates are fractions, not percentages: 0.0422 is 4.22%.
     couponRate: Mapped[Decimal] = mapped_column(Numeric(6, 4))
     marketYield: Mapped[Decimal] = mapped_column(Numeric(6, 4))
     couponFrequency: Mapped[str] = mapped_column(
@@ -142,8 +127,6 @@ class WatchlistEntry(Base):
 class CashTransaction(Base):
     __tablename__ = 'CashTransactions'
     __table_args__ = (
-        # The type and the sign of the amount say the same thing; this stops
-        # them from ever disagreeing.
         CheckConstraint(
             "(cashTransactionType = 'deposit' AND amount > 0)"
             " OR (cashTransactionType = 'withdraw' AND amount < 0)",
@@ -179,10 +162,7 @@ class AssetTransaction(Base):
         ),
         CheckConstraint('price > 0', name='assetPricePositive'),
         Index('ixAssetUserDate', 'userId', 'assetTransactionDate'),
-        # Serves the holdings lookup, which filters on both columns.
         Index('ixAssetUserTicker', 'userId', 'ticker'),
-        # ticker leading, which is what InnoDB needs to back the foreign key
-        # - the composite above has it second, so it doesn't qualify.
         Index('ixAssetTicker', 'ticker'),
     )
 
@@ -227,12 +207,8 @@ class LimitOrder(Base):
     __table_args__ = (
         CheckConstraint('quantity > 0', name='limitOrderQuantityPositive'),
         CheckConstraint('limitPrice > 0', name='limitOrderPricePositive'),
-        # The poller's hot path: every pending order, grouped by ticker.
         Index('ixLimitOrderStatusTicker', 'status', 'ticker'),
-        # A user's own orders, newest first (the Open Orders view).
         Index('ixLimitOrderUserStatus', 'userId', 'status', 'createdAt'),
-        # ticker leading, which is what InnoDB needs to back the foreign
-        # key - mirrors ixAssetTicker on AssetTransaction.
         Index('ixLimitOrderTicker', 'ticker'),
     )
 

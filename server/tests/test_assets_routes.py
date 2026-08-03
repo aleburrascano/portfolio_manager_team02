@@ -50,8 +50,6 @@ def test_asset_types_lists_every_registered_provider(client):
     assert by_type['stock'] == {
         'assetType': 'stock', 'label': 'Stocks', 'streams': True, 'supportsLimitOrders': True,
     }
-    # A bond is priced from its own terms on a schedule, so it neither
-    # streams nor takes a conditional order.
     assert by_type['bond']['streams'] is False
     assert by_type['bond']['supportsLimitOrders'] is False
 

@@ -52,8 +52,6 @@ describe('OpenOrdersTab', () => {
     expect(mockedFetch).toHaveBeenCalledWith(1, 'stock', 'pending', expect.any(Number))
   })
 
-  // The filter, the resolvedAt field and the index behind them all existed
-  // server-side; only pending orders were ever reachable.
   it('switches to filled orders and shows when each resolved', async () => {
     const typer = userEvent.setup()
     mockedFetch.mockResolvedValueOnce([])
@@ -68,7 +66,6 @@ describe('OpenOrdersTab', () => {
     expect(mockedFetch).toHaveBeenLastCalledWith(1, 'stock', 'filled', expect.any(Number))
     const row = within(await screen.findByRole('row', { name: /AAPL/ }))
     expect(row.getByText('Feb 3, 2026')).toBeInTheDocument()
-    // A resolved order is a record, not something still cancellable.
     expect(row.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
   })
 
@@ -93,7 +90,6 @@ describe('OpenOrdersTab', () => {
     expect(row.getByText('buy')).toBeInTheDocument()
     expect(row.getByText('limit')).toBeInTheDocument()
     expect(row.getByText('5.00')).toBeInTheDocument()
-    // A limit buy waits for a fall, so the trigger reads as a ceiling.
     expect(row.getByText('≤ $8.00')).toBeInTheDocument()
   })
 

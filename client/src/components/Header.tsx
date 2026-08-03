@@ -18,9 +18,6 @@ function Header({
         <img className="wordmark-mark" src={treetopIcon} alt="" width="28" height="28" />
         <span className="wordmark-text">TreeTop Trading</span>
       </div>
-      {/* The top-right corner is where people reach for account actions, so
-          that is what lives there - rather than a greeting and an avatar
-          that looked interactive and weren't. */}
       <AccountMenu user={user} onOpenAccount={onOpenAccount} onLogout={onLogout} />
     </header>
   )

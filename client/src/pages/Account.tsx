@@ -9,8 +9,6 @@ function Account({ user, onUpdate }: { user: User; onUpdate: (user: User) => voi
   const [username, setUsername] = useState(user.username)
   const [firstName, setFirstName] = useState(user.firstName)
   const [lastName, setLastName] = useState(user.lastName)
-  // Three password fields are irrelevant to most visits, so they stay
-  // folded away behind a control until someone says that's why they came.
   const [changingPassword, setChangingPassword] = useState(false)
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')

@@ -17,8 +17,6 @@ from db.models import Base
 load_dotenv()
 
 config = context.config
-# Escaped because ConfigParser treats a bare % as interpolation, and URL
-# encoded passwords contain them.
 config.set_main_option('sqlalchemy.url', database_url().replace('%', '%%'))
 
 if config.config_file_name is not None:
@@ -52,8 +50,6 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            # SQLite can't ALTER most things in place; batch mode rebuilds
-            # the table instead, so one migration runs on both backends.
             render_as_batch=connection.dialect.name == 'sqlite',
         )
 

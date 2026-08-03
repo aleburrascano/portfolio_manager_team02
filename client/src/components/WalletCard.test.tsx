@@ -45,8 +45,6 @@ beforeEach(() => {
 })
 
 describe('WalletCard', () => {
-  // The head of the statement is the one place the app answers "what am I
-  // worth", so it totals the cash and the book rather than showing cash.
   it('shows the whole portfolio, not just the cash', () => {
     const { container } = render(<WalletCard user={user} totals={TOTALS} />)
     expect(container.querySelector('.wallet-balance')).toHaveTextContent('$1,500.00')
@@ -96,8 +94,6 @@ describe('WalletCard', () => {
     expect(screen.getByText('Current balance: $500.00')).toBeInTheDocument()
   })
 
-  // The point of the review step: no money moves on the first click, and
-  // the user is told what they will be left with before it does.
   it('does not call the API until the deposit is confirmed', async () => {
     const typer = userEvent.setup()
     render(<WalletCard user={user} totals={TOTALS} />)
@@ -158,7 +154,6 @@ describe('WalletCard', () => {
       await screen.findByText('Withdrawal amount exceeds current balance of $500.00.'),
     ).toBeInTheDocument()
     expect(mockedSubmit).not.toHaveBeenCalled()
-    // It stays on the amount step, so the number can be corrected in place.
     expect(screen.getByLabelText('Amount')).toBeInTheDocument()
   })
 

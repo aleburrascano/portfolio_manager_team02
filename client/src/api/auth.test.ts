@@ -50,7 +50,6 @@ describe('fetchCurrentUser', () => {
     await expect(fetchCurrentUser()).resolves.toEqual({ status: 'anonymous' })
   })
 
-  // The distinction that keeps a 500 from silently logging someone out.
   it('reports unavailable when the server fails for any other reason', async () => {
     mockedApiFetch.mockRejectedValue(new ApiError('Internal server error', 500))
     await expect(fetchCurrentUser()).resolves.toEqual({

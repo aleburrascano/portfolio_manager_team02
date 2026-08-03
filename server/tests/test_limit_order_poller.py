@@ -22,8 +22,6 @@ def test_run_once_swallows_exceptions_and_returns_zero(app, monkeypatch):
     assert poller.run_once(app) == 0
 
 
-# The fill is committed by the time it gets here, so the announcement is the
-# only thing that tells its owner - who has no request in flight - about it.
 def test_run_once_announces_every_fill(app, monkeypatch):
     announced = []
     monkeypatch.setattr(poller, 'notify_order_filled', announced.append)

@@ -21,17 +21,8 @@ from services.bond_redemption import redeem_matured_bonds
 from services.limit_orders import evaluate_pending_orders
 from services.market_data import sweep_caches
 
-# Configurable so a test harness running against a stubbed feed doesn't have
-# to wait a production interval to watch an order fill. Five seconds is the
-# real default: it matches the quote broadcast, so a fill lands about as
-# soon as the price that triggered it reaches the screen.
 POLL_INTERVAL_SECONDS = float(os.environ.get('POLL_INTERVAL_SECONDS', '5'))
 
-# How long the thread waits before its *first* tick, separately from the
-# interval between them. Not the same number and not configurable with it:
-# the first wait exists to keep this thread from being the first thing to
-# touch the database, and tying it to the interval means turning the
-# interval down for a test also removes that guarantee.
 STARTUP_DELAY_SECONDS = 5
 
 logger = logging.getLogger(__name__)
@@ -51,19 +42,12 @@ def run_once(app) -> int:
     """
     with app.app_context():
         try:
-            # Piggybacked here rather than given its own thread: market data
-            # entries expire on read, so this only clears out tickers nobody
-            # asked about again, and this is the one loop already on a timer.
             sweep_caches()
             fills = evaluate_pending_orders()
         except Exception:
-            # One bad tick (a DB hiccup, an upstream outage) must not kill
-            # the thread - there is no supervisor to restart it.
             logger.exception('Limit order evaluation failed')
             fills = []
 
-        # Its own try, so an outage in one of these does not stop the other:
-        # they share a timer, not a fate.
         try:
             payouts = redeem_matured_bonds()
         except Exception:
@@ -78,13 +62,6 @@ def run_once(app) -> int:
 
 
 def _run(app, stop_event: threading.Event) -> None:
-    # Waits before the first tick: this thread starts as a side effect of
-    # importing app.py, before anything has confirmed the schema this
-    # process's own engine will bind to is actually migrated - a deploy step
-    # that normally finishes well before the app is reachable, but which
-    # tooling (this repo's e2e harness rebuilds its SQLite file on every
-    # run) can still be mid-flight at process start. The wait is a cheap way
-    # to not be the first thing to touch the database.
     if stop_event.wait(STARTUP_DELAY_SECONDS):
         return
 

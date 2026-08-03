@@ -1,6 +1,4 @@
-/* Chrome shared by every modal: the backdrop, the card, its title, action
-   row, and the buttons in it. Imported by Modal.tsx, which every dialog in
-   the app renders through. */
+
 
 .modal-backdrop {
   position: fixed;
@@ -33,11 +31,6 @@
   gap: 10px;
 }
 
-/* The review block on anything that moves money: what is about to happen,
-   itemised, with the resulting balance as the last line. Set as a ledger
-   extract rather than prose so the numbers line up and can be checked.
-   Lives here because both the wallet dialog and the trade confirmation
-   render it, and both go through Modal. */
 .confirm-summary {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -61,8 +54,6 @@
   font-weight: 600;
 }
 
-/* The bottom line of the extract - what the user is left with - gets the
-   rule above it that a statement total would have. */
 .confirm-summary .confirm-summary-total {
   padding-top: 10px;
   border-top: 1px solid var(--border);

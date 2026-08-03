@@ -40,8 +40,6 @@
   height: 44px;
 }
 
-/* The floor: if the table ever outgrows its column it scrolls in here
-   rather than dragging the page sideways. */
 .holdings-scroll {
   overflow-x: auto;
 }
@@ -69,8 +67,6 @@
   border-bottom: 1px solid var(--border-strong);
 }
 
-/* The whole header cell is the control, so the hit area matches what the
-   user sees rather than being a word inside a cell. */
 .holdings-table thead button {
   width: 100%;
   display: flex;
@@ -118,7 +114,6 @@
   gap: 10px;
 }
 
-/* A position is a way back into its trade ticket. */
 .holdings-asset-link {
   width: 100%;
   border: none;
@@ -193,8 +188,6 @@
   font-size: var(--fs-sm);
 }
 
-/* Below 700px six numeric columns cannot fit, so each position becomes a
-   block: the asset on top, its figures as labelled pairs beneath. */
 @media (max-width: 700px) {
   .holdings-table thead,
   .holdings-table tfoot .numeric:empty {
@@ -238,7 +231,6 @@
     color: var(--text-muted);
   }
 
-  /* The asset cell is the row's heading, so it keeps its own line. */
   .holdings-table td[data-label='Asset'] {
     display: block;
     margin-bottom: 8px;

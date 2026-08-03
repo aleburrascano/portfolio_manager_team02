@@ -32,13 +32,11 @@ def test_a_sale_at_a_loss():
     assert gains[2]['gainLossPercent'] == -20.0
 
 
-# The average moves as a position is added to, so a sale has to be judged
-# against the average as it stood when it happened - not the final one.
 def test_a_sale_uses_the_average_at_the_time():
     gains = realized_gains([
         trade(1, 'AAPL', 10, 10),
-        trade(2, 'AAPL', -5, 12),   # average is still 10 here
-        trade(3, 'AAPL', 10, 20),   # average moves to (5*10 + 10*20) / 15 = 16.67
+        trade(2, 'AAPL', -5, 12),
+        trade(3, 'AAPL', 10, 20),
         trade(4, 'AAPL', -5, 20),
     ])
 
@@ -46,8 +44,6 @@ def test_a_sale_uses_the_average_at_the_time():
     assert gains[4]['costBasis'] == round(5 * (5 * 10 + 10 * 20) / 15, 2)
 
 
-# Closing a position out resets it, so buying back in starts from the new
-# price rather than inheriting the old average.
 def test_closing_out_then_buying_back_in_resets_the_basis():
     gains = realized_gains([
         trade(1, 'AAPL', 10, 10),
