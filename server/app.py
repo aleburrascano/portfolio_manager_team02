@@ -6,6 +6,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
+from apidocs import init_app as init_apidocs
 from authorization import init_app as init_sessions
 from db.connection import init_app as init_db
 from errors import register_error_handlers
@@ -44,6 +45,9 @@ if os.environ.get('START_LIMIT_ORDER_POLLER', 'true').lower() != 'false':
 def index() -> dict:
     """Health check endpoint."""
     return {'status': 'ok'}
+
+# Last, so the URL map it reads is complete.
+init_apidocs(app)
 
 if __name__ == '__main__':
     # socketio.run rather than app.run, so the WebSocket endpoint is served

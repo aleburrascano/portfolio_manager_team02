@@ -6,6 +6,7 @@ from typing import Tuple
 from flask import Blueprint, request
 
 import services.limit_orders as lo
+from apidocs import IDEMPOTENCY_KEY, documents
 from authorization import require_user
 from errors import error_response
 from idempotency import idempotent
@@ -56,6 +57,16 @@ def _place_request():
 @require_user
 @known_asset_type
 @idempotent
+@documents(
+    body={
+        'ticker': {'type': 'string', 'example': 'NVDA'},
+        'side': {'type': 'string', 'enum': ['buy', 'sell'], 'example': 'buy'},
+        'quantity': {'type': 'number', 'example': 10},
+        'limitPrice': {'type': 'number', 'example': 120.50},
+    },
+    required=['ticker', 'side', 'quantity', 'limitPrice'],
+    params=[IDEMPOTENCY_KEY],
+)
 def place_limit_order(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Place a GTC limit order.
@@ -74,6 +85,14 @@ def place_limit_order(user_id: int, asset_type: str) -> Tuple[dict, int]:
 @limit_orders_bp.route('/users/<int:user_id>/assets/<asset_type>/limit-orders', methods=['GET'])
 @require_user
 @known_asset_type
+@documents(params=[{
+    'name': 'status',
+    'in': 'query',
+    'required': False,
+    'type': 'string',
+    'enum': ['pending', 'filled', 'cancelled'],
+    'description': 'Filter by status. Omitted returns all.',
+}])
 def list_limit_orders(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     List this user's limit orders.

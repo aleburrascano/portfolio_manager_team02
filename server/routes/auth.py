@@ -4,6 +4,7 @@ Routes for registering an account and logging in with a password.
 from typing import Tuple
 from flask import Blueprint, request
 from services.auth import authenticate, get_user, register, update_user
+from apidocs import documents
 from authorization import current_user_id, log_in, log_out, require_user
 from errors import error_response
 from links import user_links
@@ -11,6 +12,11 @@ from links import user_links
 auth_bp = Blueprint('auth', __name__)
 
 MIN_PASSWORD_LENGTH = 8
+
+_CREDENTIALS = {
+    'username': {'type': 'string', 'example': 'ada'},
+    'password': {'type': 'string', 'format': 'password', 'example': 'correct-horse-battery'},
+}
 
 @auth_bp.route('/users/<int:user_id>', methods=['GET'])
 @require_user
@@ -30,6 +36,18 @@ def get_user_route(user_id: int) -> Tuple[dict, int]:
 
 @auth_bp.route('/users/<int:user_id>', methods=['PATCH'])
 @require_user
+# No required list: every field is optional, which is the point of a PATCH.
+@documents(body={
+    'username': {'type': 'string'},
+    'firstName': {'type': 'string'},
+    'lastName': {'type': 'string'},
+    'currentPassword': {
+        'type': 'string',
+        'format': 'password',
+        'description': 'Required whenever newPassword is set.',
+    },
+    'newPassword': {'type': 'string', 'format': 'password'},
+})
 def update_user_route(user_id: int) -> Tuple[dict, int]:
     """
     Edit the caller's own username, name, and/or password. Only the fields
@@ -94,6 +112,14 @@ def get_current_user_route() -> Tuple[dict, int]:
     return {**user, '_links': user_links(user['userId'])}, 200
 
 @auth_bp.route('/auth/register', methods=['POST'])
+@documents(
+    body={
+        **_CREDENTIALS,
+        'firstName': {'type': 'string', 'example': 'Ada'},
+        'lastName': {'type': 'string', 'example': 'Lovelace'},
+    },
+    required=['username', 'password', 'firstName', 'lastName'],
+)
 def register_route() -> Tuple[dict, int]:
     """
     Create an account.
@@ -123,6 +149,7 @@ def register_route() -> Tuple[dict, int]:
     return {**user, '_links': user_links(user['userId'])}, 201
 
 @auth_bp.route('/auth/login', methods=['POST'])
+@documents(body=_CREDENTIALS, required=['username', 'password'])
 def login_route() -> Tuple[dict, int]:
     """
     Log in with a username and password.

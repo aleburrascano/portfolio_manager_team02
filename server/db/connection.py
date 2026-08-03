@@ -21,6 +21,21 @@ _engine: Optional[Engine] = None
 _new_session: Optional[sessionmaker] = None
 
 
+def _name_the_driver(url: str) -> str:
+    """
+    Spell out the driver in a bare `mysql://` URL.
+
+    Managed MySQL hosts hand out `mysql://user:pass@host/db`. SQLAlchemy
+    reads a driver-less `mysql://` as MySQLdb, which this project doesn't
+    install, so the app dies on boot with an import error that never
+    mentions the URL it came from. Everything else is passed through
+    untouched - `sqlite://` and an already-qualified URL both mean what
+    they say.
+    """
+    prefix = 'mysql://'
+    return f"mysql+mysqlconnector://{url[len(prefix):]}" if url.startswith(prefix) else url
+
+
 def database_url() -> str:
     """
     The configured database URL: DATABASE_URL if set, otherwise a MySQL URL
@@ -28,7 +43,7 @@ def database_url() -> str:
     """
     url = os.environ.get('DATABASE_URL')
     if url:
-        return url
+        return _name_the_driver(url)
 
     host = os.environ.get('DB_HOST', 'localhost')
     user = os.environ.get('DB_USER', 'root')

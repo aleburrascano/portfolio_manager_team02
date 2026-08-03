@@ -72,8 +72,31 @@
     grid-template-columns: 1fr;
   }
 
+  /* Both wrappers stop generating boxes so their cards join the single
+     column directly. That is what lets the trade card be placed between
+     the chart and the stats: buying is the reason for this page, and
+     stacking it under the stats and the ratings put it a full screen of
+     scrolling away. Dropping the side wrapper's box also drops its
+     sticky positioning, which has nothing to stick to in one column. */
+  .asset-detail-main,
   .asset-detail-side {
-    position: static;
+    display: contents;
+  }
+
+  .chart-card {
+    order: 1;
+  }
+
+  .trade-card {
+    order: 2;
+  }
+
+  .stats-card {
+    order: 3;
+  }
+
+  .ratings-card {
+    order: 4;
   }
 }
 
