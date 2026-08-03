@@ -95,6 +95,17 @@ def test_newest_saved_appears_first(client):
     assert [entry['symbol'] for entry in entries] == ['NVDA', 'MSFT', 'AAPL']
 
 
+# Three saves land inside the same second, so this only holds if addedAt
+# carries sub-second precision rather than the column's server default.
+def test_ordering_survives_saves_within_one_second(client):
+    user = register_user(client)
+    for ticker in ('ZZZZ', 'AAAA', 'MMMM'):
+        client.put(watchlist_url(user['userId'], ticker=ticker))
+
+    entries = client.get(f'/api/v1/users/{user["userId"]}/watchlist').get_json()['watchlist']
+    assert [entry['symbol'] for entry in entries] == ['MMMM', 'AAAA', 'ZZZZ']
+
+
 def test_any_asset_type_can_be_watched(client):
     user = register_user(client)
     client.put(watchlist_url(user['userId'], asset_type='bond', ticker='UST2Y'))

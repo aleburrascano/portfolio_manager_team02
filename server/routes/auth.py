@@ -1,7 +1,8 @@
 """
 Routes for registering an account and logging in with a password.
 """
-from typing import Tuple
+import re
+from typing import Optional, Tuple
 from services.auth import authenticate, get_user, register, update_user
 from apidocs import Blueprint
 from authorization import current_user_id, log_in, log_out, require_user
@@ -12,6 +13,31 @@ from schemas import LoginSchema, RegisterSchema, UpdateUserSchema
 auth_bp = Blueprint('auth', __name__, description='Accounts and sessions')
 
 MIN_PASSWORD_LENGTH = 8
+# Matches the String(32) columns in db.models. Without this a longer value
+# is silently truncated on SQLite and raises a DataError - surfacing as a
+# generic 500 - on MySQL. validation.ts checks the same rules for the
+# person typing; this is the check that actually binds.
+MAX_NAME_LENGTH = 32
+NAME_PATTERN = re.compile(r"^[A-Za-z' -]+$")
+USERNAME_PATTERN = re.compile(r'^[A-Za-z0-9_.-]+$')
+
+
+def _name_error(value: str, field: str, label: str) -> Optional[str]:
+    """The first rule `value` breaks as a display name, or None if it's fine."""
+    if len(value) > MAX_NAME_LENGTH:
+        return f'{field} must be {MAX_NAME_LENGTH} characters or fewer'
+    if not NAME_PATTERN.match(value):
+        return f'{label} can only contain letters, spaces, hyphens, and apostrophes'
+    return None
+
+
+def _username_error(value: str) -> Optional[str]:
+    """The first rule `value` breaks as a username, or None if it's fine."""
+    if len(value) > MAX_NAME_LENGTH:
+        return f'username must be {MAX_NAME_LENGTH} characters or fewer'
+    if not USERNAME_PATTERN.match(value):
+        return 'Username can only contain letters, numbers, underscores, dots, and hyphens'
+    return None
 
 @auth_bp.route('/users/<int:user_id>', methods=['GET'])
 @require_user
@@ -51,14 +77,23 @@ def update_user_route(body: dict, user_id: int) -> Tuple[dict, int]:
         username = username.strip()
         if not username:
             return error_response('username cannot be empty', 400)
+        error = _username_error(username)
+        if error:
+            return error_response(error, 400)
     if first_name is not None:
         first_name = first_name.strip()
         if not first_name:
             return error_response('firstName cannot be empty', 400)
+        error = _name_error(first_name, 'firstName', 'First name')
+        if error:
+            return error_response(error, 400)
     if last_name is not None:
         last_name = last_name.strip()
         if not last_name:
             return error_response('lastName cannot be empty', 400)
+        error = _name_error(last_name, 'lastName', 'Last name')
+        if error:
+            return error_response(error, 400)
     if new_password is not None and len(new_password) < MIN_PASSWORD_LENGTH:
         return error_response(f'Password must be at least {MIN_PASSWORD_LENGTH} characters', 400)
 
@@ -106,6 +141,13 @@ def register_route(body: dict) -> Tuple[dict, int]:
 
     if not username or not first_name or not last_name:
         return error_response('username, firstName and lastName are required', 400)
+    error = (
+        _username_error(username)
+        or _name_error(first_name, 'firstName', 'First name')
+        or _name_error(last_name, 'lastName', 'Last name')
+    )
+    if error:
+        return error_response(error, 400)
     if len(password) < MIN_PASSWORD_LENGTH:
         return error_response(f'Password must be at least {MIN_PASSWORD_LENGTH} characters', 400)
 
