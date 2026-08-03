@@ -42,8 +42,13 @@ Everything lives in `server/.env` (not committed):
 | `DATABASE_URL` | `sqlite:///dev.db`, or `mysql+mysqlconnector://user:pass@host/db`. Falls back to the `DB_*` variables if unset. |
 | `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
 | `CORS_ORIGINS` | Comma-separated. Defaults to `http://localhost:5173`. |
+| `CROSS_SITE_COOKIE` | Set to `1` only where the client is on a different domain than the server. Sends the session cookie as `SameSite=None; Secure`, which needs HTTPS — so it breaks local sign-in. |
 
 MySQL needs its (empty) database to exist first; SQLite doesn't.
+
+The client reads one variable, `VITE_API_URL`, from `client/.env`. Leave it unset
+locally: Vite's proxy already forwards `/api` and `/socket.io` to port 5000, and
+setting it would bypass that. Both folders have a `.env.example` to copy.
 
 ## Demo data
 
@@ -103,6 +108,22 @@ change.
 
 Routes are served under `/api/v1`. Responses carry a `_links` map of related
 endpoints, and errors are always `{'error': {'message': str, 'code': str}}`.
+
+Browsable docs live at `/apidocs`, with the raw spec at `/apispec_1.json`. The
+route list is generated from Flask's URL map, so a new endpoint appears there as
+soon as it is registered — nothing to remember. What can't be introspected, the
+JSON body and any query parameters, is declared with `@documents` beside the
+route; see `apidocs.py`.
+
+## Deployment
+
+The server runs on Railway (with its MySQL), the client on Vercel. Pushing to
+`main` deploys both.
+
+Migrations are the exception and are deliberately manual — three people merging
+at once should not race `alembic upgrade head` against a shared database. After
+merging a migration, run it once, from one machine, against the deployed
+database.
 
 ## Changing the schema
 
