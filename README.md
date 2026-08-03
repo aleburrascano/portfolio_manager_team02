@@ -94,18 +94,29 @@ or on a company keeping its name.
 
 ```
 server/
-  routes/       blueprints — HTTP only, no business logic
+  app.py        entry point — wires the app together
+  api/          everything that speaks HTTP: schemas and validation, the
+                error envelope, sessions, idempotency, HATEOAS links, the
+                OpenAPI setup, request logging, the Socket.IO feed
+    routes/     blueprints — HTTP only, no business logic
   services/     business logic, market data, domain exceptions
   db/           SQLAlchemy models, engine, request-scoped session
   migrations/   Alembic revisions — the source of schema history
   scripts/      seeding and password reset
 client/src/
   api/          one module per resource, behind a shared fetch helper
-  pages/        one per navigation destination
-  components/   reusable pieces
+  pages/        one per screen the address bar can reach
+  components/
+    layout/     the chrome every signed-in page sits inside
+    ui/         presentational pieces that carry no domain logic
+    portfolio/  what the dashboard is made of
+    trading/    what the trade screens are made of
+  context/      session-wide state and its providers
+  hooks/        the live quote feed, idempotency keys
+  lib/          formatting, input validation, backend origin
 ```
 
-Layering runs one way: `routes/ → services/ → db/`. Routes never touch the
+Layering runs one way: `api/ → services/ → db/`. Routes never touch the
 database or `yfinance`; services never import Flask. A service raises from
 `services/exceptions.py` to reject a request (each exception carries the status
 it surfaces as), so routes carry no `try`/`except`. All market data access lives
@@ -121,9 +132,9 @@ incoming requests, so it can't describe a body the code would reject — one
 declaration, used twice. Routes and their path parameters come from the
 blueprints, so a new endpoint is documented as soon as it is registered.
 
-Request shapes live in `schemas.py`; the rules behind them stay in
-`validation.py`, which each field defers to. Adding a field means adding it to
-the schema — the docs and the parser both follow from that.
+Request shapes live in `api/schemas.py`; the rules behind them stay in
+`api/validation.py`, which each field defers to. Adding a field means adding it
+to the schema — the docs and the parser both follow from that.
 
 ## Deployment
 
@@ -179,5 +190,5 @@ alembic upgrade head
 The conventions the schema relies on — nothing derived is stored, timestamps are
 UTC, transactions are append-only, `CHECK` constraints keep each type column
 agreeing with the sign beside it — are documented in `db/models.py`. The same
-goes for idempotency (`idempotency.py`) and the live quote feed (`realtime.py`),
-which each explain themselves where they live.
+goes for idempotency (`api/idempotency.py`) and the live quote feed
+(`api/realtime.py`), which each explain themselves where they live.

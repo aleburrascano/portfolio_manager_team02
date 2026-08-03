@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { updateUser, type User } from '../api'
-import { validateName, validatePassword, validateUsername } from '../validation'
+import { validateName, validatePassword, validateUsername } from '../lib/validation'
 import './Account.css'
 
 type Status = { kind: 'success' | 'error'; text: string }

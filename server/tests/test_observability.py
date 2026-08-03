@@ -7,7 +7,7 @@ never raises, since a 500 tells a platform nothing it can act on.
 """
 import logging
 
-import observability
+import api.observability as observability
 import services.market_data as market_data
 
 
@@ -86,7 +86,7 @@ def test_a_slow_request_is_logged_louder(client, caplog, monkeypatch):
 
 
 def test_a_server_error_is_logged_as_one(client, caplog, monkeypatch):
-    import routes.assets as assets
+    import api.routes.assets as assets
 
     monkeypatch.setattr(
         assets, 'capabilities', lambda: (_ for _ in ()).throw(RuntimeError('boom')),

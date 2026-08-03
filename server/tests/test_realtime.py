@@ -8,7 +8,7 @@ and nobody else.
 """
 import pytest
 
-import realtime
+import api.realtime as realtime
 from helpers import register_user
 
 

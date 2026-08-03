@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Dashboard from './Dashboard'
 import { fetchPortfolioBreakdown } from '../api'
-import { useBalance } from '../balance-context'
+import { useBalance } from '../context/balance-context'
 
 vi.mock('../api', () => ({
   fetchPortfolioBreakdown: vi.fn(),
@@ -22,29 +22,29 @@ vi.mock('../api', () => ({
   }),
 }))
 
-vi.mock('../balance-context', () => ({
+vi.mock('../context/balance-context', () => ({
   useBalance: vi.fn(),
 }))
 
-vi.mock('../components/PortfolioComposition', () => ({
+vi.mock('../components/portfolio/PortfolioComposition', () => ({
   default: ({ data }: { data: { name: string; value: number }[] }) => (
     <div data-testid="portfolio-composition">{JSON.stringify(data)}</div>
   ),
 }))
 
-vi.mock('../components/WalletCard', () => ({
+vi.mock('../components/portfolio/WalletCard', () => ({
   default: () => <div data-testid="wallet-card" />,
 }))
 
-vi.mock('../components/Watchlist', () => ({
+vi.mock('../components/portfolio/Watchlist', () => ({
   default: () => <div data-testid="watchlist" />,
 }))
 
-vi.mock('../components/PortfolioPerformance', () => ({
+vi.mock('../components/portfolio/PortfolioPerformance', () => ({
   default: () => <div data-testid="portfolio-performance" />,
 }))
 
-vi.mock('../components/HoldingsTable', () => ({
+vi.mock('../components/portfolio/HoldingsTable', () => ({
   default: () => <div data-testid="holdings-table" />,
 }))
 

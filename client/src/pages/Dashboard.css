@@ -12,14 +12,6 @@
   align-items: start;
 }
 
-.dashboard-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px 18px;
-  min-width: 0;
-}
-
 .dashboard-empty-body {
   margin: 0 0 16px;
   max-width: 46ch;
@@ -58,35 +50,35 @@
     overflow: hidden;
   }
 
-  .dashboard-row,
-  .dashboard-card {
+  #dashboard-content .dashboard-row,
+  #dashboard-content .card {
     min-height: 0;
   }
 
-  .dashboard-card {
+  #dashboard-content .card {
     display: flex;
     flex-direction: column;
   }
 
-  .performance-card .performance-body {
+  #dashboard-content .performance-card .performance-body {
     flex: 1;
     min-height: 150px;
     height: auto;
   }
 
-  .holdings-card .holdings-scroll {
+  #dashboard-content .holdings-card .holdings-scroll {
     flex: 1;
     overflow-y: auto;
   }
 
-  .holdings-card .holdings-table thead th {
+  #dashboard-content .holdings-card .holdings-table thead th {
     position: sticky;
     top: 0;
     z-index: var(--z-sticky);
     background: var(--surface);
   }
 
-  .composition-card-scroll {
+  #dashboard-content .composition-card-scroll {
     flex: 1;
     overflow-y: auto;
   }
@@ -104,7 +96,7 @@
     gap: 12px;
   }
 
-  .dashboard-card {
+  #dashboard-content .card {
     padding: 14px;
   }
 }
