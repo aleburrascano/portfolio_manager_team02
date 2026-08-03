@@ -171,8 +171,28 @@ def analyst_ratings(ticker: str) -> Optional[dict]:
     }
 
 
+def close_series(ticker: str, days: int):
+    """
+    The same closes as price_history, as the pandas Series bulk historical
+    lookups take. Included so `MARKET_DATA=fake` really does close every
+    door to the feed - the seed script goes through here, and a stub that
+    left one lookup live would still need the network.
+    """
+    import pandas as pd
+
+    today = date.today()
+    dates = [today - timedelta(days=offset) for offset in range(days, -1, -1)]
+    if ticker not in CATALOG:
+        return None
+    return pd.Series(
+        [_close_on(ticker, day) for day in dates],
+        index=pd.DatetimeIndex(dates),
+    )
+
+
 def install(market_data) -> None:
     """Point market_data's fetch primitives at this module."""
+    market_data.close_series = close_series
     market_data._fetch_prices = fetch_prices
     market_data._fetch_display_name = fetch_display_name
     market_data._quote_classification = quote_classification
