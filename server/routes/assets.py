@@ -17,6 +17,7 @@ import services.asset_transactions as st
 import services.watchlist as watchlist
 from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
+from apidocs import IDEMPOTENCY_KEY, documents
 from authorization import require_user
 from idempotency import idempotent
 from errors import error_response
@@ -24,6 +25,12 @@ from links import asset_detail_links, asset_summary_links, holdings_links, watch
 from validation import parse_quantity
 
 assets_bp = Blueprint('assets', __name__)
+
+#: What _trade_request below reads. Buy and sell take the same body.
+_TRADE_BODY = {
+    'ticker': {'type': 'string', 'example': 'NVDA'},
+    'quantity': {'type': 'number', 'example': 1.5},
+}
 
 
 def known_asset_type(view):
@@ -53,6 +60,14 @@ def _trade_request() -> Tuple[str, Decimal]:
 
 @assets_bp.route('/assets/<asset_type>/search', methods=['GET'])
 @known_asset_type
+@documents(params=[{
+    'name': 'q',
+    'in': 'query',
+    'required': True,
+    'type': 'string',
+    'example': 'NVDA',
+    'description': 'Ticker or name to search for.',
+}])
 def search_assets(asset_type: str) -> Tuple[dict, int]:
     """
     Search for assets by ticker or name.
@@ -221,6 +236,7 @@ def remove_from_watchlist(user_id: int, asset_type: str, ticker: str) -> Tuple[d
 @require_user
 @known_asset_type
 @idempotent
+@documents(body=_TRADE_BODY, required=['ticker', 'quantity'], params=[IDEMPOTENCY_KEY])
 def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Buy an asset for the user.
@@ -240,6 +256,7 @@ def buy_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
 @require_user
 @known_asset_type
 @idempotent
+@documents(body=_TRADE_BODY, required=['ticker', 'quantity'], params=[IDEMPOTENCY_KEY])
 def sell_asset(user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
     Sell an asset for the user.

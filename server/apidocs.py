@@ -18,7 +18,7 @@ document, so this is a change of reader, not of what is being said.
 """
 import inspect
 import re
-from typing import Any, Dict, List
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from flasgger import Swagger
 
@@ -37,6 +37,55 @@ _SKIP_ENDPOINTS = {'static'}
 
 # HTTP methods Werkzeug adds on its own behalf rather than the route's.
 _IMPLICIT_METHODS = {'HEAD', 'OPTIONS'}
+
+
+#: The optional retry header the money-moving routes honour. Shared rather
+#: than repeated, so the wording is the same everywhere it appears.
+IDEMPOTENCY_KEY = {
+    'name': 'Idempotency-Key',
+    'in': 'header',
+    'required': False,
+    'type': 'string',
+    'description': (
+        'Optional. Makes the request safe to retry: the work is done for '
+        'whichever request claims the key first, and any repeat gets that '
+        'same response back instead of acting twice.'
+    ),
+}
+
+
+def documents(
+    *,
+    body: Optional[Dict[str, Any]] = None,
+    required: Optional[Sequence[str]] = None,
+    params: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Callable:
+    """
+    Declare the parts of a request that can't be read off the URL map: the
+    JSON body, and any query or header parameters.
+
+    Path parameters are deliberately not declared here - those come from the
+    route itself, so they cannot drift. This carries only what Flask pulls
+    out of request.get_json() and request.args at runtime, which no amount
+    of introspection can see.
+
+    Apply it closest to the function, under the route and auth decorators.
+    functools.wraps copies __dict__, so the declaration still travels up
+    through require_user, known_asset_type and idempotent to the view Flask
+    actually registers.
+    """
+    declared = list(params or [])
+    if body is not None:
+        schema: Dict[str, Any] = {'type': 'object', 'properties': body}
+        if required:
+            schema['required'] = list(required)
+        declared.append({'name': 'body', 'in': 'body', 'required': True, 'schema': schema})
+
+    def decorate(view: Any) -> Any:
+        view._apidoc_params = declared
+        return view
+
+    return decorate
 
 
 def _openapi_path(rule: str) -> str:
@@ -74,8 +123,12 @@ def _operation(view: Any, tag: str, parameters: List[Dict[str, Any]]) -> Dict[st
     }
     if description:
         operation['description'] = description
-    if parameters:
-        operation['parameters'] = parameters
+
+    # Path parameters come from the route; everything else was declared with
+    # @documents because nothing can see it from the outside.
+    declared = list(getattr(view, '_apidoc_params', ()))
+    if parameters or declared:
+        operation['parameters'] = parameters + declared
     return operation
 
 
