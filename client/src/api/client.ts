@@ -3,8 +3,10 @@
 
 import { API_ORIGIN } from '../config'
 
-// Relative in development, absolute once an origin is configured.
-const API_BASE = `${API_ORIGIN}/api/v1`
+// Relative in development, absolute once an origin is configured. Exported
+// for the one case that can't go through apiFetch: a download, which the
+// browser has to navigate to itself so it gets a file rather than a string.
+export const API_BASE = `${API_ORIGIN}/api/v1`
 
 type ApiErrorBody = { error?: { message?: string } | string }
 
@@ -42,6 +44,31 @@ export async function apiFetch<T>(path: string, fallbackError: string, init?: Re
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new ApiError(errorMessage(data, fallbackError), res.status)
   return data as T
+}
+
+/**
+ * Call a URL the server handed back in an `_links` map.
+ *
+ * Every response carries one, and following the link is the difference
+ * between the client knowing *that* an order can be cancelled and knowing
+ * *where* the cancel route lives. The link is already a full API path
+ * (`/api/v1/...`), so unlike apiFetch it is not appended to the base - only
+ * the origin is, for the case where the client points somewhere else.
+ */
+export async function followLink<T>(
+  link: string,
+  fallbackError: string,
+  init?: RequestInit,
+): Promise<T> {
+  const res = await fetch(`${API_ORIGIN}${link}`, { credentials: 'include', ...init })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new ApiError(errorMessage(data, fallbackError), res.status)
+  return data as T
+}
+
+/** The absolute URL for a link, for the cases a browser has to navigate to. */
+export function linkUrl(link: string): string {
+  return `${API_ORIGIN}${link}`
 }
 
 /**

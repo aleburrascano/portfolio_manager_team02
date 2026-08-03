@@ -16,19 +16,24 @@ CASH_EFFECT = -AssetTransaction.qty * AssetTransaction.price
 
 
 def get_user_transactions(
-    user_id: int, limit: Optional[int] = None, offset: int = 0
+    user_id: int, limit: Optional[int] = None, offset: int = 0, newest_first: bool = True,
 ) -> List[Dict[str, Any]]:
     """
-    Fetch a user's transaction history (cash and asset), newest first.
+    Fetch a user's transaction history (cash and asset).
 
     The two tables are combined with UNION ALL rather than being merged in
     Python, so the sort and any limit happen in the database against an
     index instead of pulling the user's whole history into memory.
 
+    The sort direction is a parameter rather than the caller's job for the
+    same reason the limit is: reversing a page in the client would only
+    reverse the rows that page happens to hold, which is not the same list.
+
     Args:
         user_id (int): The ID of the user.
         limit (int | None): Maximum rows to return, or None for all of them.
         offset (int): Rows to skip, for paging through the history.
+        newest_first (bool): Sort direction.
 
     Returns:
         list[dict]: Transaction rows, each with a `signedAmount` field
@@ -62,11 +67,32 @@ def get_user_transactions(
     )
 
     combined = union_all(cash, assets).subquery()
-    statement = select(combined).order_by(combined.c.transactionDate.desc())
+    ordering = combined.c.transactionDate.desc() if newest_first else combined.c.transactionDate.asc()
+    statement = select(combined).order_by(ordering)
     if limit is not None:
         statement = statement.limit(limit).offset(offset)
 
     return [dict(row) for row in get_session().execute(statement).mappings()]
+
+
+def count_user_transactions(user_id: int) -> int:
+    """
+    How many rows a user's history has, cash and asset together.
+
+    Counted in the database rather than by measuring a fetched list, so a
+    caller asking for one page can still say how many pages there are
+    without pulling the other ones to find out.
+    """
+    session = get_session()
+    cash = session.scalar(
+        select(func.count()).select_from(CashTransaction)
+        .where(CashTransaction.userId == user_id)
+    )
+    assets = session.scalar(
+        select(func.count()).select_from(AssetTransaction)
+        .where(AssetTransaction.userId == user_id)
+    )
+    return int(cash or 0) + int(assets or 0)
 
 
 def get_user_balance(user_id: int) -> Decimal:
@@ -112,10 +138,12 @@ def get_user_asset_transactions(user_id: int) -> List[Dict[str, Any]]:
         user_id (int): The ID of the user.
 
     Returns:
-        list[dict]: Rows of ticker, assetType, qty, price, transactionDate.
+        list[dict]: Rows of transactionId, ticker, assetType, qty, price,
+        transactionDate.
     """
     statement = (
         select(
+            AssetTransaction.assetTransactionId.label('transactionId'),
             AssetTransaction.ticker,
             cast(Asset.assetType, String).label('assetType'),
             AssetTransaction.qty,

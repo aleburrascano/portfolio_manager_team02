@@ -4,21 +4,41 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../server')
-const dbPath = path.join(serverDir, 'e2e.db')
 
 /**
- * Rebuild a throwaway SQLite database via the real Alembic migrations
- * (rather than Base.metadata.create_all) so the bond catalog migration
- * seeds - e2e trades against bonds, which need no live market data.
+ * Migrate this run's throwaway SQLite database, and clear away older ones.
+ *
+ * Migrated through real Alembic revisions rather than Base.metadata
+ * .create_all so the bond catalog migration seeds - several specs trade
+ * bonds, which are priced from that catalog.
+ *
+ * The file is this run's own (playwright.config puts the path on the
+ * environment), so there is nothing here to delete first: the server is
+ * already up by the time this runs, and it holds whichever database it was
+ * pointed at.
  */
 export default function globalSetup(): void {
-  if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath)
+  const dbPath = process.env.E2E_DB_PATH
+  if (!dbPath) throw new Error('E2E_DB_PATH is not set; playwright.config should have set it')
 
-  const databaseUrl = `sqlite:///${dbPath.replace(/\\/g, '/')}`
+  sweepOldDatabases(path.basename(dbPath))
+
   execFileSync('alembic', ['upgrade', 'head'], {
     cwd: serverDir,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env: { ...process.env, DATABASE_URL: `sqlite:///${dbPath.replace(/\\/g, '/')}` },
     stdio: 'inherit',
     shell: true,
   })
+}
+
+/** Best effort: a file another run still holds is skipped, not fatal. */
+function sweepOldDatabases(keep: string): void {
+  for (const name of fs.readdirSync(serverDir)) {
+    if (!/^e2e-\d+\.db/.test(name) || name.startsWith(keep)) continue
+    try {
+      fs.unlinkSync(path.join(serverDir, name))
+    } catch {
+      // Still open somewhere. It is a scratch file; leaving it costs nothing.
+    }
+  }
 }

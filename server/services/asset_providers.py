@@ -24,10 +24,19 @@ class AssetProvider(ABC):
 
     asset_type: str
 
-    # Whether this asset type can be traded via a GTC limit order. Stocks
-    # only for now; the poller and routes stay generic so a future provider
-    # only has to flip this on.
+    # What to call this asset type in a user interface. Here rather than in
+    # the client because the client should not have to carry its own list of
+    # which types exist - it asks (see routes.assets.get_asset_types).
+    label: str
+
+    # Whether this asset type can be traded via a conditional order. The
+    # poller and routes stay generic, so a provider only has to flip this on.
     supports_limit_orders: bool = False
+
+    # Whether prices for this type are pushed over the quote feed. False
+    # means repriced on a schedule rather than quoted - a bond - which is
+    # what tells a client not to show a live indicator beside it.
+    streams: bool = False
 
     @abstractmethod
     def search(self, query: str) -> List[dict]:
@@ -97,6 +106,27 @@ class AssetProvider(ABC):
         """
         return {}
 
+    def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
+        """
+        Name and current price for many tickers at once, keyed by ticker.
+
+        For callers holding a list rather than one asset - a watchlist, a
+        holdings table - so the cost is one lookup for the list instead of
+        one per row. A ticker that can't be quoted is simply absent.
+
+        The default walks get_quote, which is right for a type priced from
+        local terms; the market-traded types override it with a real batch.
+        """
+        book = {}
+        for ticker in tickers:
+            try:
+                quote = self.get_quote(ticker)
+            except Exception:
+                continue
+            if quote:
+                book[ticker] = quote
+        return book
+
     def get_ratings(self, ticker: str) -> Optional[dict]:
         """
         Analyst coverage for this asset, or None when there is none.
@@ -114,6 +144,8 @@ class _MarketTradedProvider(AssetProvider):
     They differ only in which search results count as theirs and what
     "popular" means.
     """
+
+    streams = True
 
     @abstractmethod
     def matches_quote(self, quote: dict) -> bool:
@@ -145,12 +177,24 @@ class _MarketTradedProvider(AssetProvider):
     def live_quotes(self, symbols: List[str]) -> Dict[str, dict]:
         return market_data.live_quotes(symbols)
 
+    def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
+        # One batched price call for the whole list, and names from their
+        # own day-long cache - so a list that has been seen before costs a
+        # single upstream request no matter how long it is.
+        quotes = market_data.live_quotes(tickers)
+        names = market_data.display_names(list(quotes))
+        return {
+            ticker: {**quote, 'name': names.get(ticker, ticker)}
+            for ticker, quote in quotes.items()
+        }
+
     def get_ratings(self, ticker: str) -> Optional[dict]:
         return market_data.analyst_ratings(ticker)
 
 
 class StockProvider(_MarketTradedProvider):
     asset_type = 'stock'
+    label = 'Stocks'
     supports_limit_orders = True
 
     # Yahoo Finance exchange codes for Nasdaq, NYSE, and NYSE American/Arca.
@@ -165,6 +209,10 @@ class StockProvider(_MarketTradedProvider):
 
 class CryptoProvider(_MarketTradedProvider):
     asset_type = 'crypto'
+    label = 'Crypto'
+    # Quoted by the same feed as stocks and priced the same way, so a
+    # conditional order on one works exactly as it does on the other.
+    supports_limit_orders = True
 
     # The screener only supports equities/funds/ETFs, so there's no
     # predefined (or constructible) crypto screener to back "popular" the
@@ -198,6 +246,7 @@ class BondProvider(AssetProvider):
     """
 
     asset_type = 'bond'
+    label = 'Bonds'
 
     def search(self, query: str) -> List[dict]:
         today = date.today()
@@ -267,3 +316,24 @@ PROVIDERS: Dict[str, AssetProvider] = {
     provider.asset_type: provider
     for provider in (StockProvider(), CryptoProvider(), BondProvider())
 }
+
+
+def capabilities() -> List[dict]:
+    """
+    What each registered asset type is called and what can be done with it.
+
+    Exists so a client can render its tabs, its labels, and its order-type
+    toggles from the registry rather than from its own hardcoded copy of it.
+    Registering a provider above is then the only edit a new asset type
+    needs on this side, which is what the rest of this module already
+    assumed and the client did not.
+    """
+    return [
+        {
+            'assetType': provider.asset_type,
+            'label': provider.label,
+            'streams': provider.streams,
+            'supportsLimitOrders': provider.supports_limit_orders,
+        }
+        for provider in PROVIDERS.values()
+    ]

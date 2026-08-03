@@ -22,8 +22,9 @@ export type QuoteUpdate = {
 let socket: Socket | null = null
 
 function getSocket(): Socket {
-  // No argument means "same origin", which is what the dev proxy wants;
-  // deployed, the backend is elsewhere and has to be named.
+  // No argument means "same origin", which is what both the dev proxy and
+  // the deployed rewrites want. API_ORIGIN is the escape hatch for pointing
+  // a local client somewhere else; see config.ts.
   if (!socket) socket = io(API_ORIGIN || undefined)
   return socket
 }
@@ -84,6 +85,126 @@ export function useLiveFeed(assetType: AssetType, symbols: string[]): LiveFeed {
   }, [assetType, subscription])
 
   return { quotes, lastUpdate }
+}
+
+/**
+ * One feed covering several asset types at once, keyed {assetType: symbols}.
+ *
+ * A subscription names the type its symbols belong to - the server needs it
+ * to know which provider to price them through - so a list mixing types, a
+ * watchlist, needs one subscription per type. The quotes come back in a
+ * single map because a symbol belongs to exactly one type, so nothing
+ * collides and callers can look a tile up without knowing what kind it is.
+ */
+export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>): LiveFeed {
+  const [quotes, setQuotes] = useState<Record<string, QuoteUpdate>>({})
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  // Depend on the contents, not the object identity - callers build a fresh
+  // one every render and it would otherwise resubscribe constantly.
+  const subscription = Object.entries(symbolsByType)
+    .filter(([, symbols]) => symbols && symbols.length > 0)
+    .map(([assetType, symbols]) => `${assetType}:${symbols!.join(',')}`)
+    .sort()
+    .join('|')
+
+  useEffect(() => {
+    if (!subscription) return
+
+    const requests = subscription.split('|').map((group) => {
+      const [assetType, symbols] = group.split(':')
+      return { assetType: assetType as AssetType, symbols: symbols.split(',') }
+    })
+    const connection = getSocket()
+
+    function handleQuote(update: QuoteUpdate) {
+      setQuotes((current) => ({ ...current, [update.symbol]: update }))
+      setLastUpdate(new Date())
+    }
+
+    connection.on('quote', handleQuote)
+    for (const request of requests) connection.emit('subscribe', request)
+
+    return () => {
+      for (const request of requests) connection.emit('unsubscribe', request)
+      connection.off('quote', handleQuote)
+    }
+  }, [subscription])
+
+  return { quotes, lastUpdate }
+}
+
+/** A conditional order that has just filled, pushed to its owner alone. */
+export type OrderFill = {
+  limitOrderId: number
+  ticker: string
+  side: 'buy' | 'sell'
+  orderType: 'limit' | 'stop'
+  quantity: number
+  /** What it actually executed at, which is not the trigger price. */
+  price: number
+  assetTransactionId: number
+}
+
+/** A bond of this user's that has matured and been paid out at par. */
+export type BondRedemption = {
+  ticker: string
+  quantity: number
+  /** Face value, which is what a bond pays at maturity. */
+  price: number
+  proceeds: number
+}
+
+/**
+ * Run `onRedeem` whenever a bond of this user's matures and pays out.
+ *
+ * Same shape of subscription as a fill, and for the same reason: it happens
+ * on a date rather than in response to anything they did, so nothing on
+ * this side would otherwise know their cash had moved.
+ */
+export function useBondRedemptions(onRedeem: (payout: BondRedemption) => void): void {
+  useUserEvent('bondRedeemed', onRedeem)
+}
+
+/**
+ * Run `onFill` whenever one of this user's conditional orders fills.
+ *
+ * A fill happens in the server's poller, minutes or days after the request
+ * that placed the order, so nothing on this side would otherwise know: an
+ * open orders list would sit there showing a row that has already resolved,
+ * and the balance beside it would be wrong.
+ *
+ */
+export function useOrderFills(onFill: (fill: OrderFill) => void): void {
+  useUserEvent('orderFilled', onFill)
+}
+
+/**
+ * Subscribe to an event the server addresses to this user alone.
+ *
+ * The handler is kept in a ref, updated in its own effect, so a caller can
+ * pass a fresh closure every render - which it will, since the useful ones
+ * capture state - without the socket listener being torn down and put back
+ * on each one. Writing the ref during render would be the shorter way to
+ * say that and is not safe: a render React discards would still have
+ * changed it.
+ */
+function useUserEvent<T>(event: string, onEvent: (payload: T) => void): void {
+  const handler = useRef(onEvent)
+
+  useEffect(() => {
+    handler.current = onEvent
+  }, [onEvent])
+
+  useEffect(() => {
+    const connection = getSocket()
+    const listener = (payload: T) => handler.current(payload)
+
+    connection.on(event, listener)
+    return () => {
+      connection.off(event, listener)
+    }
+  }, [event])
 }
 
 /**

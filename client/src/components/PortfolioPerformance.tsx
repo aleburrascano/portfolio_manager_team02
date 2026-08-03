@@ -5,6 +5,7 @@ import {
   type PortfolioPerformance as Performance,
   type User,
 } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { formatCurrency, formatNumber } from '../format'
 import './PortfolioPerformance.css'
 
@@ -15,12 +16,6 @@ const RANGES = [
   { days: 365, label: '1Y' },
   { days: 1825, label: 'All' },
 ] as const
-
-const ASSET_LABELS: Record<string, string> = {
-  stock: 'Stocks',
-  crypto: 'Crypto',
-  bond: 'Bonds',
-}
 
 function formatAxisDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -45,6 +40,7 @@ function Signed({ value, percent }: { value: number; percent: number }) {
 }
 
 function PortfolioPerformance({ user, balance }: { user: User; balance: number | null }) {
+  const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
   // Results are tagged with the request they answer, so "still loading" is
   // derived from what we hold rather than tracked in a separate flag that
@@ -83,7 +79,11 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
   // Recharts needs a plain number for the axis domain; padding it keeps the
   // line off the frame instead of running along the bottom edge.
   const domain = useMemo(() => {
-    const values = (data?.series ?? []).flatMap((point) => [point.portfolioValue, point.netDeposits])
+    const values = (data?.series ?? []).flatMap((point) => [
+      point.portfolioValue,
+      point.netDeposits,
+      ...(point.benchmarkValue != null ? [point.benchmarkValue] : []),
+    ])
     if (values.length === 0) return undefined
     const low = Math.min(...values)
     const high = Math.max(...values)
@@ -93,6 +93,18 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
 
   const summary = data?.summary
   const hasSeries = (data?.series.length ?? 0) > 1
+  // Absent when the index couldn't be priced - best-effort, like every
+  // other price on this chart.
+  const hasBenchmark = (data?.series ?? []).some((point) => point.benchmarkValue != null)
+  const benchmarkLabel = data?.benchmark?.label ?? 'Benchmark'
+
+  // The comparison that actually answers "was this worth doing": the same
+  // deposits, on the same days, left in an index fund instead.
+  const beatBenchmark = useMemo(() => {
+    const last = data?.series.at(-1)
+    if (!last || last.benchmarkValue == null) return null
+    return last.portfolioValue - last.benchmarkValue
+  }, [data])
 
   return (
     <section className="dashboard-card performance-card" aria-labelledby="performance-title">
@@ -110,6 +122,12 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
               <span className="performance-caption">
                 against {formatCurrency(summary.netDeposits)} paid in
               </span>
+              {beatBenchmark !== null && (
+                <span className="performance-caption">
+                  {beatBenchmark >= 0 ? 'ahead of' : 'behind'} {benchmarkLabel} by{' '}
+                  {formatCurrency(Math.abs(beatBenchmark))}
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -199,6 +217,20 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
                   strokeDasharray="4 4"
                   dot={false}
                 />
+                {/* The harder question. Beating your own deposits only means
+                    you didn't lose money; beating this means the picking was
+                    worth doing. Solid, so it reads as a real alternative
+                    rather than another reference line. */}
+                {hasBenchmark && (
+                  <Line
+                    type="monotone"
+                    dataKey="benchmarkValue"
+                    name={benchmarkLabel}
+                    stroke="var(--accent-ink)"
+                    strokeWidth={1.5}
+                    dot={false}
+                  />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -207,7 +239,7 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
             <dl className="performance-classes">
               {data!.byAssetType.map((row) => (
                 <div key={row.assetType}>
-                  <dt>{ASSET_LABELS[row.assetType] ?? row.assetType}</dt>
+                  <dt>{byType[row.assetType]?.label ?? row.assetType}</dt>
                   <dd>
                     <Signed value={row.gainLoss} percent={row.gainLossPercent} />
                   </dd>

@@ -1,9 +1,11 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import SearchBar from '../components/SearchBar'
 import AssetList from '../components/AssetList'
 import Icon, { type IconName } from './../components/Icon'
 import OpenOrdersTab from '../components/OpenOrdersTab'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
@@ -11,26 +13,32 @@ import './TradeAssets.css'
 // rather than being paid for by everyone who only browses the list.
 const AssetDetail = lazy(() => import('../components/AssetDetail'))
 
-const ASSET_TYPES: { type: AssetType; label: string; icon: IconName }[] = [
-  { type: 'stock', label: 'Stocks', icon: 'stock' },
-  { type: 'crypto', label: 'Crypto', icon: 'crypto' },
-  { type: 'bond', label: 'Bonds', icon: 'bond' },
-]
+// The tabs, their order, and their labels all come from the server's
+// provider registry; only the icon is a client-side decision, and a type
+// with no icon of its own gets a neutral one rather than no tab.
+const ICONS: Partial<Record<AssetType, IconName>> = {
+  stock: 'stock',
+  crypto: 'crypto',
+  bond: 'bond',
+}
 
-// Derived from the tab list so a new asset type only has to be added once.
-const ASSET_TYPE_LABELS = Object.fromEntries(
-  ASSET_TYPES.map(({ type, label }) => [type, label]),
-) as Record<AssetType, string>
+/**
+ * Browse, search, and open one asset type - or that type's orders.
+ *
+ * The asset type, the selected symbol, and whether the orders view is
+ * showing are all read from the address rather than held here, so every one
+ * of them is a place: shareable, bookmarkable, and reachable with the
+ * browser's back button.
+ */
+function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: boolean }) {
+  const { types, byType } = useAssetTypes()
+  const navigate = useNavigate()
+  const params = useParams<{ assetType: string; symbol: string }>()
 
-function TradeAssets({
-  user,
-  openAsset,
-}: {
-  user: User
-  /** An asset picked elsewhere - a holdings row, a watchlist tile. */
-  openAsset?: { assetType: AssetType; symbol: string } | null
-}) {
-  const [assetType, setAssetType] = useState<AssetType>(openAsset?.assetType ?? 'stock')
+  const assetType = params.assetType as AssetType
+  const selectedSymbol = params.symbol ?? null
+  const capabilities = byType[assetType]
+
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
   const [popularLoading, setPopularLoading] = useState(true)
@@ -38,11 +46,6 @@ function TradeAssets({
   // derived from what we hold rather than tracked in a separate flag that
   // could drift out of sync with it.
   const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
-  const [selectedSymbol, setSelectedSymbol] = useState<string | null>(openAsset?.symbol ?? null)
-  // Limit orders are stocks-only, so this only ever shows for that tab -
-  // switching away from Stocks drops back to browsing rather than leaving
-  // a dead-end view up for an asset type that doesn't support it.
-  const [showOpenOrders, setShowOpenOrders] = useState(false)
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
   useEffect(() => {
@@ -104,23 +107,30 @@ function TradeAssets({
   const listed = isSearching ? search.assets : popularAssets
   const live = useLiveQuotes(assetType, listed.map((asset) => asset.symbol))
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
+  const typeLabel = capabilities?.label ?? assetType
+
+  // An address naming an asset type this server doesn't have is not an
+  // error worth a page of its own; the first real tab is where they meant
+  // to be. Redirects rather than renders, so the bad address doesn't stay
+  // in the bar to be shared again.
+  if (types.length > 0 && !capabilities) {
+    return <Navigate to={`/trade/${types[0].assetType}`} replace />
+  }
 
   function switchAssetType(next: AssetType) {
     if (next === assetType) return
-    setAssetType(next)
     setQuery('')
-    setSelectedSymbol(null)
-    setShowOpenOrders(false)
+    navigate(`/trade/${next}`)
   }
 
   return (
     <section id="trade-assets-content">
-      {showOpenOrders ? (
+      {showOrders ? (
         <>
-          <button type="button" className="back-btn" onClick={() => setShowOpenOrders(false)}>
+          <Link className="back-btn" to={`/trade/${assetType}`}>
             ← Back
-          </button>
-          <OpenOrdersTab user={user} />
+          </Link>
+          <OpenOrdersTab user={user} assetType={assetType} />
         </>
       ) : selectedSymbol ? (
         <Suspense
@@ -136,7 +146,7 @@ function TradeAssets({
             assetType={assetType}
             symbol={selectedSymbol}
             user={user}
-            onBack={() => setSelectedSymbol(null)}
+            onBack={() => navigate(`/trade/${assetType}`)}
           />
         </Suspense>
       ) : (
@@ -149,7 +159,7 @@ function TradeAssets({
               list starts higher up the page instead of below two bands. */}
           <div className="trade-controls">
             <div className="asset-type-tabs">
-              {ASSET_TYPES.map(({ type, label, icon }) => (
+              {types.map(({ assetType: type, label }) => (
                 <button
                   key={type}
                   type="button"
@@ -157,37 +167,29 @@ function TradeAssets({
                   aria-pressed={assetType === type}
                   onClick={() => switchAssetType(type)}
                 >
-                  <Icon name={icon} />
+                  <Icon name={ICONS[type] ?? 'stock'} />
                   {label}
                 </button>
               ))}
             </div>
-            {assetType === 'stock' && (
-              <button
-                type="button"
-                className="secondary-btn open-orders-toggle"
-                onClick={() => setShowOpenOrders(true)}
-              >
-                Open orders
-              </button>
+            {capabilities?.supportsLimitOrders && (
+              <Link className="secondary-btn open-orders-toggle" to={`/orders/${assetType}`}>
+                Orders
+              </Link>
             )}
             <SearchBar value={query} onChange={setQuery} />
           </div>
           <AssetList
-            title={
-              isSearching
-                ? 'Search results'
-                : `Most active ${ASSET_TYPE_LABELS[assetType].toLowerCase()}`
-            }
+            title={isSearching ? 'Search results' : `Most active ${typeLabel.toLowerCase()}`}
             assetType={assetType}
             assets={assets}
             loading={isSearching ? searchLoading : popularLoading}
             emptyMessage={
               isSearching
-                ? `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} match "${trimmedQuery}". Check the spelling, or try another asset type above.`
-                : `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} are available right now.`
+                ? `No ${typeLabel.toLowerCase()} match "${trimmedQuery}". Check the spelling, or try another asset type above.`
+                : `No ${typeLabel.toLowerCase()} are available right now.`
             }
-            onSelect={setSelectedSymbol}
+            onSelect={(symbol) => navigate(`/trade/${assetType}/${encodeURIComponent(symbol)}`)}
           />
         </>
       )}

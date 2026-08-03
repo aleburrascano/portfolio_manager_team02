@@ -2,6 +2,12 @@
 HATEOAS link builders: small `_links` maps attached to API responses so
 clients can navigate to related resources/actions instead of hardcoding
 route shapes.
+
+Worth knowing which of these are load-bearing. The client follows `cancel`
+on a limit order and `export` on the transaction history rather than
+building either URL, so those two are part of the contract and moving the
+routes behind them is safe. The rest are an affordance for a caller that
+wants them - the docs page, a script - and nothing breaks if they change.
 """
 from flask import url_for
 
@@ -38,6 +44,7 @@ def portfolio_links(user_id: int) -> dict:
 def transactions_links(user_id: int) -> dict:
     return {
         'self': url_for('history.get_transaction_history', user_id=user_id),
+        'export': url_for('history.export_transaction_history', user_id=user_id),
         'balance': url_for('wallet.get_wallet_balance', user_id=user_id),
         'portfolio': url_for('wallet.get_portfolio_breakdown', user_id=user_id),
     }

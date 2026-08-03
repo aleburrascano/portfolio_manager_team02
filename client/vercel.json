@@ -16,6 +16,10 @@
     {
       "source": "/socket.io/:path*",
       "destination": "https://api-production-bf98.up.railway.app/socket.io/:path*"
+    },
+    {
+      "source": "/((?!api/|socket.io).*)",
+      "destination": "/index.html"
     }
   ]
 }

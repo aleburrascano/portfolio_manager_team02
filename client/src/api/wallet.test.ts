@@ -23,17 +23,48 @@ describe('fetchBalance', () => {
 })
 
 describe('fetchPortfolioBreakdown', () => {
-  it('defaults missing fields to zero', async () => {
-    mockedApiFetch.mockResolvedValue({ cash: 100 })
-    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 100, stock: 0, crypto: 0, bond: 0 })
+  it('defaults a missing cash figure to zero', async () => {
+    mockedApiFetch.mockResolvedValue({ stock: 50 })
+    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 0, stock: 50 })
+  })
+
+  // The server builds these buckets from its provider registry, so a type
+  // this client has never heard of has to survive the trip rather than
+  // being dropped by a fixed list of keys.
+  it('passes through an asset type it does not know about', async () => {
+    mockedApiFetch.mockResolvedValue({ cash: 100, commodity: 25 })
+    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 100, commodity: 25 })
   })
 })
 
 describe('fetchTransactions', () => {
-  it('unwraps the transactions field', async () => {
-    const transactions = [{ transactionId: 1 }]
-    mockedApiFetch.mockResolvedValue({ transactions })
-    await expect(fetchTransactions(1)).resolves.toBe(transactions)
+  it('returns the page with its total', async () => {
+    const page = { transactions: [{ transactionId: 1 }], total: 214 }
+    mockedApiFetch.mockResolvedValue(page)
+    await expect(fetchTransactions(1)).resolves.toBe(page)
+  })
+
+  it('asks for the whole history when given no paging', async () => {
+    mockedApiFetch.mockResolvedValue({ transactions: [], total: 0 })
+    await fetchTransactions(1)
+    expect(mockedApiFetch).toHaveBeenCalledWith('/users/1/transactions', expect.any(String))
+  })
+
+  it('sends limit, offset and sort when they are asked for', async () => {
+    mockedApiFetch.mockResolvedValue({ transactions: [], total: 0 })
+    await fetchTransactions(1, 50, 100, 'oldest')
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      '/users/1/transactions?limit=50&offset=100&sort=oldest',
+      expect.any(String),
+    )
+  })
+
+  // The default is what the server does anyway, so saying it would be noise
+  // in the URL.
+  it('leaves the default sort out of the query', async () => {
+    mockedApiFetch.mockResolvedValue({ transactions: [], total: 0 })
+    await fetchTransactions(1, 50)
+    expect(mockedApiFetch).toHaveBeenCalledWith('/users/1/transactions?limit=50', expect.any(String))
   })
 })
 

@@ -15,7 +15,7 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.locator('.wallet-balance')).toHaveText('$5,000.00')
 
-  await page.getByRole('button', { name: 'Trade' }).click()
+  await page.getByRole('link', { name: 'Trade' }).click()
   await page.getByRole('button', { name: 'Bonds' }).click()
   await expect(page.getByText('Most active bonds')).toBeVisible()
 })
@@ -33,7 +33,7 @@ test('buys a bond and lists it in holdings', async ({ page }) => {
 
   await expect(page.getByText(/Bought 1\.00 UST2Y for/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page.getByRole('table').filter({ hasText: 'UST2Y' })).toBeVisible()
 })
 
@@ -77,7 +77,7 @@ test('appears in the transaction history after a purchase', async ({ page }) => 
   await page.getByRole('button', { name: 'Buy 1.00 UST2Y' }).click()
   await expect(page.getByText(/Bought 1\.00 UST2Y for/)).toBeVisible()
 
-  await page.getByRole('button', { name: 'History' }).click()
+  await page.getByRole('link', { name: 'History' }).click()
   await expect(page.getByText('Bought 1.00 UST2Y')).toBeVisible()
 })
 

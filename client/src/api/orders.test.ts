@@ -2,14 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./client', () => ({
   apiFetch: vi.fn(),
+  followLink: vi.fn(),
   post: vi.fn((body: unknown, idempotencyKey?: string) => ({ method: 'POST', body, idempotencyKey })),
   del: vi.fn(() => ({ method: 'DELETE' })),
 }))
 
-import { apiFetch } from './client'
+import { apiFetch, followLink } from './client'
 import { cancelLimitOrder, fetchLimitOrders, placeLimitOrder } from './orders'
+import type { LimitOrder } from './orders'
 
 const mockedApiFetch = vi.mocked(apiFetch)
+const mockedFollowLink = vi.mocked(followLink)
 
 beforeEach(() => {
   mockedApiFetch.mockReset()
@@ -17,14 +20,40 @@ beforeEach(() => {
 
 describe('placeLimitOrder', () => {
   it('posts the order fields and idempotency key, and unwraps the order', async () => {
-    const order = { limitOrderId: 1, ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8, status: 'pending', createdAt: '2026-01-01T00:00:00', resolvedAt: null, assetTransactionId: null }
+    const order = { limitOrderId: 1, ticker: 'AAPL', side: 'buy', orderType: 'limit', quantity: 5, limitPrice: 8, status: 'pending', createdAt: '2026-01-01T00:00:00', resolvedAt: null, assetTransactionId: null }
     mockedApiFetch.mockResolvedValue({ order })
 
-    await expect(placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8, 'key-1')).resolves.toBe(order)
+    await expect(placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8, 'limit', 'key-1')).resolves.toBe(order)
     expect(mockedApiFetch).toHaveBeenCalledWith(
       '/users/1/assets/stock/limit-orders',
       expect.any(String),
-      { method: 'POST', body: { ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8 }, idempotencyKey: 'key-1' },
+      {
+        method: 'POST',
+        body: { ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8, orderType: 'limit' },
+        idempotencyKey: 'key-1',
+      },
+    )
+  })
+
+  it('defaults to a limit order', async () => {
+    mockedApiFetch.mockResolvedValue({ order: {} })
+    await placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8)
+
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ body: expect.objectContaining({ orderType: 'limit' }) }),
+    )
+  })
+
+  it('sends a stop order as one', async () => {
+    mockedApiFetch.mockResolvedValue({ order: {} })
+    await placeLimitOrder(1, 'stock', 'AAPL', 'sell', 5, 8, 'stop')
+
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ body: expect.objectContaining({ orderType: 'stop' }) }),
     )
   })
 })
@@ -53,11 +82,16 @@ describe('fetchLimitOrders', () => {
 })
 
 describe('cancelLimitOrder', () => {
-  it('issues a DELETE to the order-scoped route', async () => {
-    mockedApiFetch.mockResolvedValue({ status: 'cancelled' })
-    await cancelLimitOrder(1, 42)
-    expect(mockedApiFetch).toHaveBeenCalledWith(
-      '/users/1/limit-orders/42',
+  // The route shape isn't repeated on this side: the server said where the
+  // action lives when it handed the order over.
+  it('DELETEs the cancel link the order came with', async () => {
+    mockedFollowLink.mockResolvedValue({ status: 'cancelled' })
+    const order = { _links: { cancel: '/api/v1/users/1/limit-orders/42' } } as LimitOrder
+
+    await cancelLimitOrder(order)
+
+    expect(mockedFollowLink).toHaveBeenCalledWith(
+      '/api/v1/users/1/limit-orders/42',
       expect.any(String),
       { method: 'DELETE' },
     )

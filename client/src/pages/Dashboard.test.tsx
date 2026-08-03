@@ -1,6 +1,7 @@
-﻿import { render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import Dashboard from './Dashboard'
 import { fetchPortfolioBreakdown } from '../api'
 import { useBalance } from '../balance-context'
@@ -56,12 +57,26 @@ beforeEach(() => {
   mockedUseBalance.mockReturnValue({ balance: 500, refreshBalance: vi.fn().mockResolvedValue(undefined) })
 })
 
-const onBrowseAssets = vi.fn()
+/**
+ * Rendered inside a router, since opening an asset is now navigation
+ * rather than a callback. The stub route reports where it landed, which is
+ * what the old onBrowseAssets spy was standing in for.
+ */
+function renderDashboard() {
+  return render(
+    <MemoryRouter initialEntries={['/']}>
+      <Routes>
+        <Route path="/" element={<Dashboard user={user} />} />
+        <Route path="/trade" element={<div>Trade screen</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
 
 describe('Dashboard', () => {
   it('shows a loading state before the portfolio resolves', () => {
     mockedFetch.mockReturnValue(new Promise(() => {}))
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
     expect(screen.getByText('Loading your portfolio')).toBeInTheDocument()
   })
 
@@ -71,29 +86,29 @@ describe('Dashboard', () => {
     mockedFetch.mockResolvedValue({ cash: 0, stock: 0, crypto: 0, bond: 0 })
     mockedUseBalance.mockReturnValue({ balance: 0, refreshBalance: vi.fn() })
     const typer = userEvent.setup()
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
 
     expect(await screen.findByText(/Deposit some cash above to get started/)).toBeInTheDocument()
 
     await typer.click(screen.getByRole('button', { name: 'Browse assets' }))
-    expect(onBrowseAssets).toHaveBeenCalled()
+    expect(await screen.findByText('Trade screen')).toBeInTheDocument()
   })
 
   it('tells a funded but unheld account what to do next', async () => {
     mockedFetch.mockResolvedValue({ cash: 0, stock: 0, crypto: 0, bond: 0 })
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
     expect(await screen.findByText(/Once you buy your first stock/)).toBeInTheDocument()
   })
 
   it('renders the composition chart once data resolves', async () => {
     mockedFetch.mockResolvedValue({ cash: 100, stock: 50, crypto: 0, bond: 0 })
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
     expect(await screen.findByTestId('portfolio-composition')).toBeInTheDocument()
   })
 
   it('shows every panel on one screen', async () => {
     mockedFetch.mockResolvedValue({ cash: 100, stock: 50, crypto: 0, bond: 0 })
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
 
     expect(await screen.findByTestId('portfolio-composition')).toBeInTheDocument()
     // The chart is code-split, so it resolves a tick after the rest.
@@ -104,7 +119,7 @@ describe('Dashboard', () => {
 
   it('shows the error message on failure', async () => {
     mockedFetch.mockRejectedValue(new Error('Failed to fetch portfolio breakdown'))
-    render(<Dashboard user={user} onBrowseAssets={onBrowseAssets} onSelectAsset={vi.fn()} />)
+    renderDashboard()
     expect(await screen.findByText(/Failed to fetch portfolio breakdown/)).toBeInTheDocument()
   })
 })

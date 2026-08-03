@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 import {
   fetchPortfolioBreakdown,
@@ -11,6 +12,7 @@ import PortfolioComposition from '../components/PortfolioComposition'
 import HoldingsTable from '../components/HoldingsTable'
 import Watchlist from '../components/Watchlist'
 import WalletCard from '../components/WalletCard'
+import { useAssetTypes } from '../asset-types'
 import { useBalance } from '../balance-context'
 
 // Charting is the single largest thing the client ships, and nothing above
@@ -30,16 +32,15 @@ function ChartFallback() {
   )
 }
 
-function Dashboard({
-  user,
-  onBrowseAssets,
-  onSelectAsset,
-}: {
-  user: User
-  onBrowseAssets: () => void
-  onSelectAsset: (assetType: AssetType, symbol: string) => void
-}) {
+function Dashboard({ user }: { user: User }) {
+  const navigate = useNavigate()
+  // Opening an asset is navigation, so it goes to that asset's address
+  // rather than being handed up as a callback and held as state.
+  const onSelectAsset = (assetType: AssetType, symbol: string) =>
+    navigate(`/trade/${assetType}/${encodeURIComponent(symbol)}`)
+
   const { balance } = useBalance()
+  const { types } = useAssetTypes()
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,11 +62,14 @@ function Dashboard({
       try {
         const res = await fetchPortfolioBreakdown(user.userId)
         if (cancelled) return
+        // Cash first, then a slice per asset type the server reports, so
+        // the donut gains a slice when the server gains a provider.
         setData([
           { name: 'Cash', value: res.cash },
-          { name: 'Stocks', value: res.stock },
-          { name: 'Crypto', value: res.crypto },
-          { name: 'Bonds', value: res.bond },
+          ...types.map(({ assetType, label }) => ({
+            name: label,
+            value: res[assetType] ?? 0,
+          })),
         ])
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load portfolio')
@@ -78,7 +82,7 @@ function Dashboard({
     return () => {
       cancelled = true
     }
-  }, [user.userId, balance])
+  }, [user.userId, balance, types])
 
   useEffect(() => {
     let cancelled = false
@@ -147,7 +151,7 @@ function Dashboard({
                 ? 'Once you buy your first stock, crypto, or bond, this is where the split across them will appear.'
                 : 'This is where the split of your money across cash, stocks, crypto, and bonds will appear. Deposit some cash above to get started.'}
             </p>
-            <button type="button" className="secondary-btn" onClick={onBrowseAssets}>
+            <button type="button" className="secondary-btn" onClick={() => navigate('/trade')}>
               Browse assets
             </button>
           </section>

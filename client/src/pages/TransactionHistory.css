@@ -15,6 +15,41 @@
   margin: 0;
 }
 
+.history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* The count sits opposite the button so "showing 50 of 214" and the way to
+   change that read as one statement rather than two stacked controls. */
+.history-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+/* Tabular so gains line up down the column, and quiet on the percentage -
+   the money figure is the answer, the percentage is context for it. */
+.history-realized {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.history-realized-pct {
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.history-count {
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
 .transaction-history-placeholder {
   margin: 0;
   padding: 40px 24px;

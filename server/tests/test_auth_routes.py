@@ -24,6 +24,50 @@ def test_register_rejects_short_password(client):
     assert response.status_code == 400
 
 
+def test_register_rejects_overlong_username(client):
+    response = client.post('/api/v1/auth/register', json={
+        'username': 'a' * 33, 'password': 'password1', 'firstName': 'Ada', 'lastName': 'Lovelace',
+    })
+    assert response.status_code == 400
+    assert '32 characters' in response.get_json()['error']['message']
+
+
+def test_register_rejects_overlong_name(client):
+    response = client.post('/api/v1/auth/register', json={
+        'username': 'ada', 'password': 'password1', 'firstName': 'A' * 33, 'lastName': 'Lovelace',
+    })
+    assert response.status_code == 400
+
+
+def test_register_rejects_name_with_digits(client):
+    response = client.post('/api/v1/auth/register', json={
+        'username': 'ada', 'password': 'password1', 'firstName': 'Ada2', 'lastName': 'Lovelace',
+    })
+    assert response.status_code == 400
+
+
+def test_register_rejects_username_with_spaces(client):
+    response = client.post('/api/v1/auth/register', json={
+        'username': 'ada lovelace', 'password': 'password1',
+        'firstName': 'Ada', 'lastName': 'Lovelace',
+    })
+    assert response.status_code == 400
+
+
+def test_register_accepts_a_hyphenated_name(client):
+    response = client.post('/api/v1/auth/register', json={
+        'username': 'ada', 'password': 'password1',
+        'firstName': "Ada-Marie", 'lastName': "O'Lovelace",
+    })
+    assert response.status_code == 201
+
+
+def test_update_rejects_overlong_username(client):
+    user = register_user(client, username='ada')
+    response = client.patch(f'/api/v1/users/{user["userId"]}', json={'username': 'a' * 33})
+    assert response.status_code == 400
+
+
 def test_register_rejects_duplicate_username(client):
     register_user(client, username='ada')
     response = client.post('/api/v1/auth/register', json={

@@ -12,6 +12,7 @@ import {
   type PricePoint,
   type User,
 } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { useBalance } from '../balance-context'
 import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../realtime'
 import { useIdempotencyKey } from '../idempotency'
@@ -25,8 +26,30 @@ import WatchButton from './WatchButton'
 import './AssetDetail.css'
 
 type Side = 'buy' | 'sell'
-type OrderType = 'market' | 'limit'
+/** What the panel offers, which is the two conditional kinds plus market. */
+type PanelOrderType = 'market' | 'limit' | 'stop'
 type Status = { kind: 'success' | 'error'; text: string }
+
+const ORDER_TABS: { type: PanelOrderType; label: string }[] = [
+  { type: 'market', label: 'Market' },
+  { type: 'limit', label: 'Limit' },
+  { type: 'stop', label: 'Stop' },
+]
+
+/**
+ * What each conditional kind waits for, said in the direction the user is
+ * trading. A stop and a limit on the same side are opposites, and the price
+ * box alone doesn't say which way round this one runs.
+ */
+function triggerHint(orderType: PanelOrderType, isBuy: boolean): string | null {
+  if (orderType === 'limit') {
+    return isBuy ? 'Buys if the price falls to this or lower.' : 'Sells if the price rises to this or higher.'
+  }
+  if (orderType === 'stop') {
+    return isBuy ? 'Buys if the price rises to this or higher.' : 'Sells if the price falls to this or lower.'
+  }
+  return null
+}
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -44,6 +67,8 @@ function AssetDetail({
   onBack: () => void
 }) {
   const { balance, refreshBalance } = useBalance()
+  const { byType } = useAssetTypes()
+  const capabilities = byType[assetType]
   const idempotency = useIdempotencyKey()
   const [detail, setDetail] = useState<AssetDetailType | null>(null)
   const [detailError, setDetailError] = useState('')
@@ -51,7 +76,7 @@ function AssetDetail({
   const [shares, setShares] = useState(0)
   const [side, setSide] = useState<Side>('buy')
   const [quantity, setQuantity] = useState('1')
-  const [orderType, setOrderType] = useState<OrderType>('market')
+  const [orderType, setOrderType] = useState<PanelOrderType>('market')
   const [limitPrice, setLimitPrice] = useState('')
   const [status, setStatus] = useState<Status | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -105,12 +130,14 @@ function AssetDetail({
   const connected = useQuoteConnection()
   const tick = usePriceDirection(quote?.currentPrice)
   const parsedQuantity = Number(quantity)
-  const isLimit = orderType === 'limit'
+  const isConditional = orderType !== 'market'
   const parsedLimitPrice = Number(limitPrice)
-  // A limit order won't fill at the current price - that's the point of it -
-  // so once one is being entered, every downstream figure (max quantity,
-  // total, cash after) is computed off the price the user typed instead.
-  const effectivePrice = isLimit ? (Number.isFinite(parsedLimitPrice) ? parsedLimitPrice : 0) : price
+  // A conditional order won't fill at the current price - that's the point
+  // of it - so once one is being entered, every downstream figure (max
+  // quantity, total, cash after) is computed off the price the user typed.
+  const effectivePrice = isConditional
+    ? (Number.isFinite(parsedLimitPrice) ? parsedLimitPrice : 0)
+    : price
   const maxQuantity =
     side === 'buy'
       ? effectivePrice > 0 && balance !== null
@@ -121,6 +148,10 @@ function AssetDetail({
   const isBuy = side === 'buy'
   const cashAfter = balance !== null ? (isBuy ? balance - total : balance + total) : null
   const sharesAfter = isBuy ? shares + parsedQuantity : shares - parsedQuantity
+  // A stop triggers when the price moves against the position, a limit when
+  // it moves in its favour, so the same side reads the opposite way round.
+  const triggerDirection =
+    (orderType === 'limit') === isBuy ? 'falls to or below' : 'rises to or above'
 
   function switchSide(next: Side) {
     setSide(next)
@@ -140,7 +171,7 @@ function AssetDetail({
       setStatus({ kind: 'error', text: quantityError })
       return
     }
-    if (isLimit) {
+    if (isConditional) {
       const limitPriceError = validateAmountInput(limitPrice)
       if (limitPriceError) {
         setStatus({ kind: 'error', text: limitPriceError })
@@ -165,20 +196,23 @@ function AssetDetail({
     setSubmitting(true)
 
     try {
-      if (isLimit) {
+      if (isConditional) {
         const key = idempotency.keyFor(
-          `limit:${side}:${assetType}:${symbol}:${parsedQuantity}:${parsedLimitPrice}`,
+          `${orderType}:${side}:${assetType}:${symbol}:${parsedQuantity}:${parsedLimitPrice}`,
         )
-        await placeLimitOrder(user.userId, assetType, symbol, side, parsedQuantity, parsedLimitPrice, key)
+        await placeLimitOrder(
+          user.userId, assetType, symbol, side, parsedQuantity, parsedLimitPrice, orderType, key,
+        )
         idempotency.reset()
-        // Nothing has settled yet - a limit order just sits pending until
-        // its price is crossed - so balance and holdings are left alone.
+        // Nothing has settled yet - a conditional order just sits pending
+        // until its trigger is crossed - so balance and holdings are left
+        // alone.
         setQuantity('1')
         setLimitPrice('')
         setOrderType('market')
         setStatus({
           kind: 'success',
-          text: `Limit order placed: ${isBuy ? 'buy' : 'sell'} ${formatNumber(parsedQuantity, 2)} ${symbol} at ${formatCurrency(parsedLimitPrice)} or better.`,
+          text: `${orderType === 'stop' ? 'Stop' : 'Limit'} order placed: ${isBuy ? 'buy' : 'sell'} ${formatNumber(parsedQuantity, 2)} ${symbol} if the price ${triggerDirection} ${formatCurrency(parsedLimitPrice)}.`,
         })
         return
       }
@@ -244,9 +278,10 @@ function AssetDetail({
                     {' '}({formatCurrency(Math.abs(quote.change ?? 0))})
                   </span>
                 </div>
-                {/* Bonds are repriced on a schedule rather than streamed,
-                    so claiming a live feed for one would be a lie. */}
-                {assetType !== 'bond' && (
+                {/* A type repriced on a schedule rather than streamed - a
+                    bond - gets no indicator; claiming a live feed for one
+                    would be a lie. */}
+                {capabilities?.streams && (
                   <div className="quote-feed">
                     <LiveIndicator connected={connected} lastUpdate={lastUpdate} />
                   </div>
@@ -347,24 +382,21 @@ function AssetDetail({
                   </button>
                 </div>
 
-                {/* Limit orders are stocks-only for now, so the toggle only
-                    shows up where placing one is actually possible. */}
-                {assetType === 'stock' && (
+                {/* The toggle only shows up where placing a conditional
+                    order is actually possible, which the server says. */}
+                {capabilities?.supportsLimitOrders && (
                   <div className="order-type-tabs">
-                    <button
-                      type="button"
-                      className={orderType === 'market' ? 'active' : ''}
-                      onClick={() => setOrderType('market')}
-                    >
-                      Market
-                    </button>
-                    <button
-                      type="button"
-                      className={orderType === 'limit' ? 'active' : ''}
-                      onClick={() => setOrderType('limit')}
-                    >
-                      Limit
-                    </button>
+                    {ORDER_TABS.map(({ type, label }) => (
+                      <button
+                        key={type}
+                        type="button"
+                        className={orderType === type ? 'active' : ''}
+                        aria-pressed={orderType === type}
+                        onClick={() => setOrderType(type)}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 )}
 
@@ -385,9 +417,11 @@ function AssetDetail({
                     required
                   />
 
-                  {isLimit && (
+                  {isConditional && (
                     <>
-                      <label htmlFor="limit-price">Limit price</label>
+                      <label htmlFor="limit-price">
+                        {orderType === 'stop' ? 'Stop price' : 'Limit price'}
+                      </label>
                       <input
                         id="limit-price"
                         type="number"
@@ -395,8 +429,15 @@ function AssetDetail({
                         step="0.01"
                         value={limitPrice}
                         onChange={(e) => setLimitPrice(e.target.value)}
+                        aria-describedby="trigger-hint"
                         required
                       />
+                      {/* Which way the trigger runs is the one thing the
+                          price box can't say for itself, and getting it
+                          backwards is the mistake this panel invites. */}
+                      <p id="trigger-hint" className="trade-hint">
+                        {triggerHint(orderType, isBuy)}
+                      </p>
                     </>
                   )}
 
@@ -424,7 +465,11 @@ function AssetDetail({
                   </dl>
 
                   <button type="submit" className="submit-btn" disabled={submitting}>
-                    {submitting ? 'Submitting…' : isLimit ? `Review ${side} order` : `Review ${side}`}
+                    {submitting
+                      ? 'Submitting…'
+                      : isConditional
+                        ? `Review ${orderType} ${side}`
+                        : `Review ${side}`}
                   </button>
                 </form>
 
@@ -437,9 +482,9 @@ function AssetDetail({
             </div>
           </div>
 
-          {confirming && isLimit && (
+          {confirming && isConditional && (
             <ConfirmDialog
-              title={`Place ${side} order for ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
+              title={`Place ${orderType} ${side} for ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
               confirmLabel="Place order"
               cancelLabel="Back"
               onConfirm={handleConfirm}
@@ -448,8 +493,15 @@ function AssetDetail({
                 <dl className="confirm-summary">
                   <dt>{isBuy ? 'Buy' : 'Sell'}</dt>
                   <dd className="figure">
-                    {formatNumber(parsedQuantity, 2)} {symbol} at {formatCurrency(parsedLimitPrice)} or better
+                    {formatNumber(parsedQuantity, 2)} {symbol} if the price {triggerDirection}{' '}
+                    {formatCurrency(parsedLimitPrice)}
                   </dd>
+                  {/* Said plainly, because it is the difference between this
+                      dialog and the market one beside it: a stop fills at
+                      whatever the market is when it triggers, which for a
+                      falling price can be worse than the number typed. */}
+                  <dt>Fills at</dt>
+                  <dd className="figure">The market price when it triggers</dd>
                   <dt className="confirm-summary-total">Status</dt>
                   <dd className="figure confirm-summary-total">
                     Pending until the price is met — nothing is charged yet
@@ -459,7 +511,7 @@ function AssetDetail({
             />
           )}
 
-          {confirming && !isLimit && (
+          {confirming && !isConditional && (
             <ConfirmDialog
               title={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}?`}
               confirmLabel={`${isBuy ? 'Buy' : 'Sell'} ${formatNumber(parsedQuantity, 2)} ${symbol}`}
