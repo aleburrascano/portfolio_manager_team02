@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchBalance } from '../api'
 import { BalanceContext } from './balance-context'
 import { useBondRedemptions, useOrderFills } from '../hooks/realtime'
 
 export function BalanceProvider({ userId, children }: { userId: number; children: ReactNode }) {
-  const [balance, setBalance] = useState<number | null>(null)
+  const [loaded, setLoaded] = useState<{ userId: number; balance: number | null } | null>(null)
 
   const refreshBalance = useCallback(async () => {
     try {
-      setBalance(await fetchBalance(userId))
+      setLoaded({ userId, balance: await fetchBalance(userId) })
     } catch {
-      setBalance(null)
+      setLoaded({ userId, balance: null })
     }
   }, [userId])
 
@@ -25,5 +25,13 @@ export function BalanceProvider({ userId, children }: { userId: number; children
   useOrderFills(refreshBalance)
   useBondRedemptions(refreshBalance)
 
-  return <BalanceContext.Provider value={{ balance, refreshBalance }}>{children}</BalanceContext.Provider>
+  const settled = loaded !== null && loaded.userId === userId
+  const balance = settled ? loaded.balance : null
+
+  const value = useMemo(
+    () => ({ balance, settled, refreshBalance }),
+    [balance, settled, refreshBalance],
+  )
+
+  return <BalanceContext.Provider value={value}>{children}</BalanceContext.Provider>
 }

@@ -52,7 +52,7 @@ const user: User = { userId: 1, username: 'alice', firstName: 'Alice', lastName:
 
 function renderDetail(balance = 1000) {
   return render(
-    <BalanceContext.Provider value={{ balance, refreshBalance: vi.fn() }}>
+    <BalanceContext.Provider value={{ balance, settled: true, refreshBalance: vi.fn() }}>
       <AssetDetail assetType="stock" symbol="AAPL" user={user} onBack={vi.fn()} />
     </BalanceContext.Provider>,
   )
