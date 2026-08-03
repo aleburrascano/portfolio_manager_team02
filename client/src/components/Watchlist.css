@@ -30,11 +30,6 @@
   font-size: var(--fs-sm);
 }
 
-/* Sized off the card, not the viewport, so the row fills whatever width it
-   is given - two tiles on a phone, five or six on a laptop, more on a wide
-   monitor - without reading the screen resolution in JavaScript. Tiles
-   wrap rather than scrolling sideways: a horizontal scroller hides content
-   off-screen, which is the opposite of what a watchlist is for. */
 .watchlist-card {
   container-type: inline-size;
 }
@@ -44,10 +39,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  /* auto-fill rather than auto-fit: empty tracks are kept instead of
-     collapsed, so a one-ticker watchlist is a single tile-sized tile
-     rather than one tile stretched the full width of the card. A full
-     row lays out identically either way. */
+
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 10px;
 }
@@ -136,7 +128,6 @@ button.watch-tile:hover {
   border-radius: var(--radius);
 }
 
-/* Below two comfortable tracks the price starts clipping, so stack. */
 @container (max-width: 290px) {
   .tile-grid {
     grid-template-columns: 1fr;

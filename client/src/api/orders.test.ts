@@ -82,8 +82,6 @@ describe('fetchLimitOrders', () => {
 })
 
 describe('cancelLimitOrder', () => {
-  // The route shape isn't repeated on this side: the server said where the
-  // action lives when it handed the order over.
   it('DELETEs the cancel link the order came with', async () => {
     mockedFollowLink.mockResolvedValue({ status: 'cancelled' })
     const order = { _links: { cancel: '/api/v1/users/1/limit-orders/42' } } as LimitOrder

@@ -29,8 +29,6 @@ export type Asset = {
   symbol: string
   name: string
   currentPrice?: number
-  // Null, not absent, for fields an asset type doesn't have - a bond has
-  // no volume or intraday range.
   volume?: number | null
   change?: number | null
   changePercent?: number | null

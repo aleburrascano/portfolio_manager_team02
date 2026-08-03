@@ -16,9 +16,6 @@
   border-radius: var(--radius);
 }
 
-/* The corners are rounded per row rather than clipped on the list, because
-   `overflow: hidden` here would crop the focus ring off the first and last
-   rows - the two most likely to be tabbed to. */
 .asset-list li:first-child .asset-row {
   border-start-start-radius: var(--radius);
   border-start-end-radius: var(--radius);

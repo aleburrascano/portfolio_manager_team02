@@ -1,7 +1,4 @@
-/* The balance is set as the head of a statement, not as a card: a heavy
-   rule, a quiet label, and the figure itself carrying the weight. Nothing
-   is filled, tinted, or rounded, because a statement earns its authority
-   by refusing ornament. */
+
 .wallet-statement {
   margin-bottom: 4px;
   padding: 14px 0 18px;
@@ -109,7 +106,6 @@
   border-color: var(--accent-ink);
 }
 
-/* Modal contents. The chrome itself lives in Modal.css. */
 .modal-balance {
   margin: 0 0 18px;
   font-size: var(--fs-sm);
@@ -147,8 +143,6 @@
   font-weight: 600;
 }
 
-/* Empty until there is something to say, but always in the tree, so the
-   live region is registered before the message arrives. */
 .modal-status:empty {
   display: none;
 }

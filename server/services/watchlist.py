@@ -17,8 +17,6 @@ from db.models import WatchlistEntry
 from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
 
-# A watchlist is something a person reads at a glance; past this it is a
-# database query with extra steps, and it would cost a quote lookup each.
 MAX_ENTRIES = 24
 
 
@@ -103,9 +101,6 @@ def list_entries(user_id: int) -> List[Dict[str, Any]]:
     comes back carrying its symbol - a row with a dash reads better than a
     silently missing one.
     """
-    # ticker breaks ties within the same addedAt tick (SQLite's
-    # CURRENT_TIMESTAMP only has second resolution), so two tickers saved in
-    # the same second don't reorder between renders.
     entries = get_session().scalars(
         select(WatchlistEntry)
         .where(WatchlistEntry.userId == user_id)
@@ -127,8 +122,6 @@ def list_entries(user_id: int) -> List[Dict[str, Any]]:
         try:
             quotes.update(provider.quote_book(tickers))
         except Exception:
-            # One asset type failing leaves its rows unpriced rather than
-            # taking the other types' rows down with it.
             continue
 
     return [

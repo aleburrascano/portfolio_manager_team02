@@ -34,15 +34,12 @@ asset_transactions = sa.table(
 def upgrade() -> None:
     connection = op.get_bind()
 
-    # --- Assets, backfilled from the tickers already traded ---------------
     op.create_table(
         'Assets',
         sa.Column('ticker', sa.String(12), nullable=False),
         sa.Column('assetType', sa.String(16), nullable=False),
         sa.PrimaryKeyConstraint('ticker'),
     )
-    # DISTINCT on the pair: if a ticker were ever recorded under two types
-    # this would fail the primary key, which is the point of moving it.
     connection.execute(
         sa.text(
             'INSERT INTO Assets (ticker, assetType) '
@@ -78,7 +75,6 @@ def upgrade() -> None:
         batch_op.drop_column('statusCode')
         batch_op.create_index('ixIdempotentCreated', ['createdAt'])
 
-    # --- Users --------------------------------------------------------------
     op.add_column(
         'Users',
         sa.Column('createdAt', sa.DateTime(), server_default=sa.func.now(), nullable=False),
@@ -111,8 +107,6 @@ def downgrade() -> None:
         )
         batch_op.add_column(sa.Column('val', MONEY, nullable=True))
 
-    # Rebuild what the dropped columns held. val comes back as the exact
-    # -qty * price it should always have been, not the drifted values.
     connection.execute(
         sa.text(
             'UPDATE AssetTransactions SET assetType = '

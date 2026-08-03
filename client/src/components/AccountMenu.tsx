@@ -54,8 +54,6 @@ function AccountMenu({
       }
     }
 
-    // A fixed panel doesn't move with the layout, so it closes rather than
-    // drifting away from the button it belongs to.
     function handleReflow() {
       setOpen(false)
     }

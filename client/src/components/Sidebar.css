@@ -32,8 +32,7 @@
   font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-muted);
-  /* These are links now, so the underline has to be turned off explicitly
-     where the button styling used to make the question moot. */
+
   text-decoration: none;
   cursor: pointer;
   text-align: left;
@@ -47,8 +46,6 @@
   color: var(--text-h);
 }
 
-/* The rule marks which page you are on. It is the only place in the app a
-   coloured edge means anything, which is why it is allowed to be here. */
 .sidebar-nav a.active {
   border-left-color: var(--accent);
   background: var(--accent-bg);
@@ -67,11 +64,6 @@
   height: 100%;
 }
 
-/* On a phone the rail becomes a bottom bar. A 60px icon rail costs 16% of
-   a 375px viewport on every screen, and it puts navigation at the top left
-   - the furthest point from a thumb. Along the bottom the targets are where
-   the hand already is, the labels fit, and the content gets the full width,
-   which is what stops tables needing to scroll sideways. */
 @media (max-width: 640px) {
   .sidebar {
     width: 100%;
@@ -81,7 +73,7 @@
     border-right: none;
     border-top: 1px solid var(--border);
     overflow: visible;
-    /* Clear of the home indicator on hardware that has one. */
+
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 
@@ -99,7 +91,7 @@
     flex-direction: column;
     justify-content: center;
     gap: 3px;
-    /* Comfortably past the 44px minimum touch target. */
+
     min-height: 54px;
     padding: 8px 4px;
     border-left: none;

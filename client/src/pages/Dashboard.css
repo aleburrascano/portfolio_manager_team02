@@ -5,9 +5,6 @@
   padding: 20px 24px 28px;
 }
 
-/* Wide panel beside narrow one. The 2:1 split holds until the narrow
-   column would drop under ~300px, at which point both go full width - a
-   chart squeezed into a third of a tablet is worse than a stacked one. */
 .dashboard-row {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
@@ -52,17 +49,10 @@
   flex: 1;
 }
 
-/* On a screen with room for it, the dashboard is fitted to the viewport
-   rather than scrolled: the grid takes the height available and the two
-   list panels scroll inside their own boxes. That keeps every panel on
-   screen at once, which is the point of a dashboard.
-
-   Gated on height as well as width, because below ~780px the rows would
-   be too short to read and an honest scroll beats a crushed one. */
 @media (min-width: 1001px) and (min-height: 780px) {
   #dashboard-content {
     display: grid;
-    /* head · watchlist · performance+composition · holdings */
+
     grid-template-rows: auto auto minmax(0, 1.25fr) minmax(0, 1fr);
     height: 100%;
     overflow: hidden;
@@ -78,14 +68,12 @@
     flex-direction: column;
   }
 
-  /* The chart takes what the row gives it instead of a fixed height. */
   .performance-card .performance-body {
     flex: 1;
     min-height: 150px;
     height: auto;
   }
 
-  /* Long books scroll in the panel, not the page. */
   .holdings-card .holdings-scroll {
     flex: 1;
     overflow-y: auto;

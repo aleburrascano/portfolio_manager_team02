@@ -28,9 +28,6 @@ describe('fetchPortfolioBreakdown', () => {
     await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 0, stock: 50 })
   })
 
-  // The server builds these buckets from its provider registry, so a type
-  // this client has never heard of has to survive the trip rather than
-  // being dropped by a fixed list of keys.
   it('passes through an asset type it does not know about', async () => {
     mockedApiFetch.mockResolvedValue({ cash: 100, commodity: 25 })
     await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 100, commodity: 25 })
@@ -59,8 +56,6 @@ describe('fetchTransactions', () => {
     )
   })
 
-  // The default is what the server does anyway, so saying it would be noise
-  // in the URL.
   it('leaves the default sort out of the query', async () => {
     mockedApiFetch.mockResolvedValue({ transactions: [], total: 0 })
     await fetchTransactions(1, 50)

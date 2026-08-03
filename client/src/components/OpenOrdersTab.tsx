@@ -69,19 +69,11 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
   const [cancellingId, setCancellingId] = useState<number | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
-  // Results are tagged with the request they answer, so switching tabs shows
-  // a skeleton rather than the previous tab's rows without the effect having
-  // to clear state on the way in - which is both a cascading render and a
-  // second flag that could drift out of step with what is actually held.
   const requestKey = `${user.userId}:${assetType}:${status}:${reloadKey}`
   const [state, setState] = useState<{ key: string; orders?: LimitOrder[]; error?: string }>({
     key: '',
   })
 
-  // Fetching and storing are kept apart so the effect can drop a response
-  // that arrives after the user has moved on, while the cancel handler -
-  // which is always acting on the screen in front of someone - just takes
-  // the result.
   const loadOrders = useCallback(
     () => fetchLimitOrders(user.userId, assetType, status, HISTORY_LIMIT),
     [user.userId, assetType, status],
@@ -108,9 +100,6 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
     }
   }, [requestKey, loadOrders])
 
-  // A fill moves an order between two of these lists, and it does so without
-  // anyone here asking - so the arrival of the news is what triggers the
-  // refetch, whichever list is being shown.
   useOrderFills(() => setReloadKey((current) => current + 1))
 
   async function handleCancel(order: LimitOrder) {
@@ -186,8 +175,6 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
                   <td data-label="Side" className={`open-orders-side ${order.side}`}>{order.side}</td>
                   <td data-label="Type" className="open-orders-type">{order.orderType}</td>
                   <td data-label="Quantity" className="numeric figure">{formatNumber(order.quantity, 2)}</td>
-                  {/* A stop and a limit on the same side wait for opposite
-                      moves, so the price is captioned with which one. */}
                   <td data-label="Trigger" className="numeric figure">
                     {triggerLabel(order)} {formatCurrency(order.limitPrice)}
                   </td>

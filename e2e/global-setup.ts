@@ -38,7 +38,6 @@ function sweepOldDatabases(keep: string): void {
     try {
       fs.unlinkSync(path.join(serverDir, name))
     } catch {
-      // Still open somewhere. It is a scratch file; leaving it costs nothing.
     }
   }
 }

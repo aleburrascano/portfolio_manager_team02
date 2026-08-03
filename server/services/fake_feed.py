@@ -26,9 +26,6 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Dict, List, Optional
 
-# The catalog a test can rely on. Small on purpose: these are the tickers
-# the specs name, and a symbol outside it is treated as unknown - which is
-# itself a path worth being able to exercise.
 CATALOG = {
     'AAPL': {'name': 'Apple Inc.', 'quoteType': 'EQUITY', 'exchange': 'NMS'},
     'MSFT': {'name': 'Microsoft Corporation', 'quoteType': 'EQUITY', 'exchange': 'NMS'},

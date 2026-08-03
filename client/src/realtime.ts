@@ -17,15 +17,12 @@ export type QuoteUpdate = {
   volume?: number
 }
 
-// One connection for the whole app, opened lazily so a session that never
-// looks at a price never opens a socket.
+const SAME_ORIGIN = undefined
+
 let socket: Socket | null = null
 
 function getSocket(): Socket {
-  // No argument means "same origin", which is what both the dev proxy and
-  // the deployed rewrites want. API_ORIGIN is the escape hatch for pointing
-  // a local client somewhere else; see config.ts.
-  if (!socket) socket = io(API_ORIGIN || undefined)
+  if (!socket) socket = io(API_ORIGIN || SAME_ORIGIN)
   return socket
 }
 
@@ -59,14 +56,12 @@ export function useLiveFeed(assetType: AssetType, symbols: string[]): LiveFeed {
   const [quotes, setQuotes] = useState<Record<string, QuoteUpdate>>({})
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  // Depend on the contents, not the array identity - callers build a fresh
-  // array every render and it would otherwise resubscribe constantly.
-  const subscription = symbols.join(',')
+  const subscriptionKey = symbols.join(',')
 
   useEffect(() => {
-    if (!subscription) return
+    if (!subscriptionKey) return
 
-    const watched = subscription.split(',')
+    const watched = subscriptionKey.split(',')
     const request = { assetType, symbols: watched }
     const connection = getSocket()
 
@@ -82,7 +77,7 @@ export function useLiveFeed(assetType: AssetType, symbols: string[]): LiveFeed {
       connection.emit('unsubscribe', request)
       connection.off('quote', handleQuote)
     }
-  }, [assetType, subscription])
+  }, [assetType, subscriptionKey])
 
   return { quotes, lastUpdate }
 }
@@ -100,18 +95,16 @@ export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>
   const [quotes, setQuotes] = useState<Record<string, QuoteUpdate>>({})
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
 
-  // Depend on the contents, not the object identity - callers build a fresh
-  // one every render and it would otherwise resubscribe constantly.
-  const subscription = Object.entries(symbolsByType)
+  const subscriptionKey = Object.entries(symbolsByType)
     .filter(([, symbols]) => symbols && symbols.length > 0)
     .map(([assetType, symbols]) => `${assetType}:${symbols!.join(',')}`)
     .sort()
     .join('|')
 
   useEffect(() => {
-    if (!subscription) return
+    if (!subscriptionKey) return
 
-    const requests = subscription.split('|').map((group) => {
+    const requests = subscriptionKey.split('|').map((group) => {
       const [assetType, symbols] = group.split(':')
       return { assetType: assetType as AssetType, symbols: symbols.split(',') }
     })
@@ -129,7 +122,7 @@ export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>
       for (const request of requests) connection.emit('unsubscribe', request)
       connection.off('quote', handleQuote)
     }
-  }, [subscription])
+  }, [subscriptionKey])
 
   return { quotes, lastUpdate }
 }
@@ -227,15 +220,10 @@ function subscribeToConnection(onChange: () => void) {
 }
 
 export function useQuoteConnection(): boolean {
-  // useSyncExternalStore rather than state-plus-effect: the socket already
-  // holds this value, so mirroring it into React state would just be a
-  // second copy to keep in step. The server snapshot is false because
-  // nothing is connected until the client runs.
-  return useSyncExternalStore(
-    subscribeToConnection,
-    () => socket?.connected ?? false,
-    () => false,
-  )
+  const isConnected = () => socket?.connected ?? false
+  const isConnectedOnServer = () => false
+
+  return useSyncExternalStore(subscribeToConnection, isConnected, isConnectedOnServer)
 }
 
 /**

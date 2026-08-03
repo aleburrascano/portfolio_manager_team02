@@ -15,9 +15,6 @@ import WalletCard from '../components/WalletCard'
 import { useAssetTypes } from '../asset-types'
 import { useBalance } from '../balance-context'
 
-// Charting is the single largest thing the client ships, and nothing above
-// the fold needs it. Split out, it loads alongside the data it draws
-// rather than blocking the first paint of the whole app.
 const PortfolioPerformance = lazy(() => import('../components/PortfolioPerformance'))
 
 function ChartFallback() {
@@ -34,8 +31,6 @@ function ChartFallback() {
 
 function Dashboard({ user }: { user: User }) {
   const navigate = useNavigate()
-  // Opening an asset is navigation, so it goes to that asset's address
-  // rather than being handed up as a callback and held as state.
   const onSelectAsset = (assetType: AssetType, symbol: string) =>
     navigate(`/trade/${assetType}/${encodeURIComponent(symbol)}`)
 
@@ -45,9 +40,6 @@ function Dashboard({ user }: { user: User }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Holdings are fetched once, here, and handed to both the statement head
-  // and the table. Fetching them twice would price the book at two
-  // different instants and show two different totals on one screen.
   const holdingsKey = `${user.userId}:${balance}`
   const [book, setBook] = useState<{ key: string; data?: HoldingsResult; error?: string }>({
     key: '',
@@ -62,8 +54,6 @@ function Dashboard({ user }: { user: User }) {
       try {
         const res = await fetchPortfolioBreakdown(user.userId)
         if (cancelled) return
-        // Cash first, then a slice per asset type the server reports, so
-        // the donut gains a slice when the server gains a provider.
         setData([
           { name: 'Cash', value: res.cash },
           ...types.map(({ assetType, label }) => ({
@@ -113,9 +103,6 @@ function Dashboard({ user }: { user: User }) {
     <section id="dashboard-content">
       <WalletCard user={user} totals={bookLoading ? null : book.data?.totals ?? null} />
 
-      {/* The watchlist sits high and spans the width, so it shows as many
-          tiles as the screen allows rather than being squeezed into a
-          column. Below it: performance beside composition, then the book. */}
       <Watchlist user={user} onSelectAsset={onSelectAsset} />
 
       <div className="dashboard-row">
@@ -141,9 +128,6 @@ function Dashboard({ user }: { user: User }) {
             </p>
           </section>
         ) : total === 0 ? (
-          // The first panel a new account ever sees. It says what this is
-          // for and hands over the next step, rather than reporting an
-          // absence and stopping there.
           <section className="dashboard-card dashboard-empty">
             <h3 className="section-title">Portfolio composition</h3>
             <p className="dashboard-empty-body">

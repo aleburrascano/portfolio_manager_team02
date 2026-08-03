@@ -34,8 +34,6 @@ def register_asset(session, provider, ticker: str) -> None:
     """
     existing = session.get(Asset, ticker)
     if existing is None:
-        # Only an outright "no" is rejected here; an undecided answer is
-        # left for the price lookup, which reports it as an upstream failure.
         if provider.owns_ticker(ticker) is False:
             raise InvalidInput(f'{ticker} is not a {provider.asset_type}.')
         session.add(Asset(ticker=ticker, assetType=provider.asset_type))
@@ -110,8 +108,6 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
     session = db_conn.get_session()
 
     try:
-        # Asked before anything is locked or priced, so a bond that has
-        # matured is refused with its own reason rather than a stale price.
         tradable, reason = provider.can_trade(ticker)
         if not tradable:
             raise InvalidInput(reason or 'This asset cannot be bought.')
@@ -123,8 +119,6 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
         price = provider.trade_price(ticker)
         cost = quantity * price
 
-        # Re-checked under the user row lock, so no concurrent request can
-        # spend the same balance twice.
         if ut.get_user_balance(user_id) < cost:
             raise InsufficientFunds('Not enough cash for this purchase.')
 
@@ -164,8 +158,6 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) ->
         register_asset(session, provider, ticker)
         price = provider.trade_price(ticker)
 
-        # Re-checked under the user row lock, so no concurrent request can
-        # sell the same shares twice.
         if get_holding_qty_decimal(user_id, ticker) < quantity:
             raise InsufficientHoldings('Not enough shares to sell.')
 

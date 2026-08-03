@@ -34,10 +34,6 @@ logger = logging.getLogger(__name__)
 
 socketio = SocketIO()
 
-# (asset type, symbol) -> the session ids watching it. The type is carried
-# so the broadcaster can ask the right provider for a price; a symbol alone
-# wouldn't say who owns it. Guarded by _lock because socket handlers and the
-# broadcaster thread both touch it.
 _watchers: Dict[Tuple[str, str], Set[str]] = {}
 _lock = threading.Lock()
 _broadcaster_started = False
@@ -86,15 +82,12 @@ def _quotes_for(watched: List[Tuple[str, str]]) -> Dict[str, dict]:
         try:
             quotes.update(provider.live_quotes(symbols))
         except Exception:
-            # One type failing shouldn't stop the others.
             continue
     return quotes
 
 
 def _broadcast_loop() -> None:
     while True:
-        # Sleeps first: subscribing already sends the current quote back, so
-        # fetching again straight away would just repeat it.
         socketio.sleep(BROADCAST_INTERVAL_SECONDS)
 
         watched = _watched()
@@ -188,7 +181,6 @@ def handle_subscribe(payload: dict) -> None:
 
     _ensure_broadcaster()
 
-    # Answer immediately so a subscriber doesn't wait a whole interval.
     for symbol, quote in _quotes_for(watched).items():
         socketio.emit('quote', quote, to=session_id)
 

@@ -27,11 +27,8 @@ def upgrade() -> None:
         sa.Column('assetType', sa.String(length=16), nullable=False),
         sa.Column('addedAt', sa.DateTime(), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(['userId'], ['Users.userId'], ondelete='CASCADE'),
-        # Composite key: saving the same ticker twice is the same row, which
-        # makes the save/unsave toggle idempotent without extra checks.
         sa.PrimaryKeyConstraint('userId', 'ticker'),
     )
-    # The list is read newest-first for one user at a time.
     op.create_index('ixWatchlistUserAdded', 'WatchlistEntries', ['userId', 'addedAt'])
 
 

@@ -28,8 +28,6 @@ vi.mock('../api', () => ({
   placeLimitOrder: vi.fn(),
 }))
 
-// Recharts measures its container, which jsdom reports as 0x0, so the SVG
-// never renders. These tests don't cover the chart itself.
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   AreaChart: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -100,9 +98,6 @@ describe('AssetDetail order type', () => {
   })
 
   it('blocks review with an empty limit price', async () => {
-    // The input's own min="0.01" stops the browser from ever firing a
-    // submit with 0 or a blank value, so this exercises the same guard
-    // validateAmountInput backs up rather than the JS branch directly.
     const typer = userEvent.setup()
     renderDetail()
     await screen.findByText('AAPL', { selector: '.asset-symbol' })
@@ -133,21 +128,21 @@ describe('AssetDetail order type', () => {
       1, 'stock', 'AAPL', 'buy', 5, 8, 'limit', expect.any(String),
     )
     expect(mockedBuyAsset).not.toHaveBeenCalled()
-    expect(mockedFetchHoldings).toHaveBeenCalledTimes(1) // only the initial load, not a post-order refresh
+    const initialLoadOnly = 1
+    expect(mockedFetchHoldings).toHaveBeenCalledTimes(initialLoadOnly)
     expect(await screen.findByText(/Limit order placed/)).toBeInTheDocument()
   })
 
   it('places a stop order and says which way its trigger runs', async () => {
     const typer = userEvent.setup()
-    mockedFetchHoldings.mockResolvedValue(10) // there has to be something to stop out of
+    const sharesAvailableToStopOutOf = 10
+    mockedFetchHoldings.mockResolvedValue(sharesAvailableToStopOutOf)
     renderDetail()
     await screen.findByText('AAPL', { selector: '.asset-symbol' })
 
     await typer.click(screen.getByRole('button', { name: 'Sell' }))
     await typer.click(screen.getByRole('button', { name: 'Stop' }))
 
-    // A stop sell is a stop loss: it waits for the price to fall, which is
-    // the opposite of what a limit sell waits for.
     expect(screen.getByText('Sells if the price falls to this or lower.')).toBeInTheDocument()
 
     await typer.type(screen.getByLabelText('Stop price'), '8')

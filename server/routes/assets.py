@@ -62,8 +62,6 @@ def search_assets(params: dict, asset_type: str) -> Tuple[dict, int]:
         dict: {'results': list[dict]}, each with 'symbol', 'name',
         'currentPrice', 'change', 'changePercent', 'dayLow', and 'dayHigh'.
     """
-    # The schema insists on `q` being present; a blank one still has to be
-    # rejected here, since "" satisfies "present".
     query = params['q'].strip()
     if not query:
         return error_response('Search query required', 400)

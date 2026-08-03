@@ -32,8 +32,6 @@
   color: var(--text-muted);
 }
 
-/* The one ambient animation in the app. It earns its place: a still dot
-   would say nothing that a static price doesn't already say. */
 @keyframes live-pulse {
   0%,
   100% {

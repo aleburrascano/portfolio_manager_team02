@@ -21,10 +21,6 @@ import services.market_data as market_data
 from services.asset_providers import PROVIDERS
 from services.user_transactions import get_cash_flows, get_user_asset_transactions
 
-# What "the market" means on this chart. A broad US index fund, because the
-# portfolios here are mostly US-listed and a comparison against something
-# narrower would flatter or punish for reasons that have nothing to do with
-# the user's decisions.
 BENCHMARK_TICKER = 'SPY'
 BENCHMARK_LABEL = 'S&P 500'
 
@@ -95,15 +91,12 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
     first_activity = min(_as_date(row['transactionDate']) for row in trades + cash_flows)
     start = max(first_activity, today - timedelta(days=days))
 
-    # One history fetch per ticker the user has ever traded, not per day.
     asset_type_of = {row['ticker']: row['assetType'] for row in trades}
     closes = {
         ticker: _close_by_date(asset_type, ticker)
         for ticker, asset_type in asset_type_of.items()
     }
 
-    # Bucketed by the date each one landed on, so the walk below applies
-    # every trade and every cash flow exactly once.
     trades_on: Dict[date, List[dict]] = defaultdict(list)
     for row in trades:
         trades_on[_as_date(row['transactionDate'])].append(row)
@@ -118,13 +111,9 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
     net_deposits = Decimal('0')
     series: List[dict] = []
 
-    # The replay starts at the first activity, not at the window, otherwise
-    # the earliest point would show a portfolio appearing out of nowhere.
     day = first_activity
     while day <= today:
         for trade in trades_on.get(day, ()):
-            # qty is already signed in this schema: + on a buy, - on a sell,
-            # so a running total needs no sign derived from the type.
             quantity = Decimal(str(trade['qty']))
             shares[trade['ticker']] += quantity
             cash -= quantity * Decimal(str(trade['price']))
@@ -134,8 +123,6 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
             cash += flow
             net_deposits += flow
 
-        # Markets shut at weekends and holidays, so a day with no close
-        # carries the previous one forward rather than valuing at zero.
         for ticker, ticker_closes in closes.items():
             price = ticker_closes.get(day)
             if price is not None:
@@ -157,21 +144,11 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
 
         day += timedelta(days=1)
 
-    # Today is not a historical close. Valued at one, the final point lags
-    # the live price by the whole intraday move, and the chart's headline
-    # disagrees with the holdings table sitting beside it on the dashboard.
-    # Re-stamp it with the same valuation the rest of the app uses, so
-    # every "what am I worth" on the page is one number.
-    #
-    # Only tickers still held are priced, so a closed position costs no
-    # lookup however long ago it was sold.
     held = {ticker: qty for ticker, qty in shares.items() if qty}
     live_price = {
         ticker: PROVIDERS[asset_type_of[ticker]].valuation_price(ticker)
         for ticker in held
     }
-    # valuation_price answers 0.0 for a ticker it can't price; the last
-    # close is a better answer than zero, so it stands in.
     for ticker, price in live_price.items():
         if not price:
             live_price[ticker] = last_price.get(ticker) or 0.0
@@ -182,9 +159,6 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         latest['investedValue'] = round(invested, 2)
         latest['portfolioValue'] = round(invested + latest['cash'], 2)
 
-    # Merged into the same points rather than returned alongside them, so
-    # the chart draws one dataset and a tooltip shows both figures for the
-    # date under the cursor.
     for point, benchmark in zip(series, _benchmark_series(series)):
         point['benchmarkValue'] = benchmark['benchmarkValue']
 
@@ -214,9 +188,6 @@ def _benchmark_series(series: List[dict]) -> List[dict]:
     if not series:
         return []
 
-    # Straight to market_data rather than through a provider: this is a
-    # fixed reference series, not an asset anyone holds, and the window it
-    # needs is the widest the chart offers rather than a provider's default.
     try:
         closes = {
             _as_date(point['date']): float(point['close'])
@@ -238,7 +209,6 @@ def _benchmark_series(series: List[dict]) -> List[dict]:
         if close:
             last_close = close
 
-        # The change in net deposits is what went in (or came out) that day.
         contributed = point['netDeposits'] - previous_deposits
         previous_deposits = point['netDeposits']
         if close and contributed:
@@ -276,8 +246,6 @@ def _summarise(series: List[dict]) -> dict:
         'currentValue': latest['portfolioValue'],
         'netDeposits': net_deposits,
         'gainLoss': round(gain_loss, 2),
-        # Against deposits, not against the first point: a percentage of
-        # zero deposits is undefined rather than infinite.
         'gainLossPercent': round(gain_loss / net_deposits * 100, 2) if net_deposits else 0.0,
     }
 

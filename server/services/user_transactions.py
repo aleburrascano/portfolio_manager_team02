@@ -9,9 +9,6 @@ from sqlalchemy import String, cast, func, literal, select, union_all
 from db.connection import get_session
 from db.models import MONEY, Asset, AssetTransaction, CashTransaction
 
-# The cash effect of a trade: negative when buying (qty is positive),
-# positive when selling (qty is negative). Derived rather than stored, so
-# it can never disagree with the quantity and price it comes from.
 CASH_EFFECT = -AssetTransaction.qty * AssetTransaction.price
 
 
@@ -39,9 +36,6 @@ def get_user_transactions(
         list[dict]: Transaction rows, each with a `signedAmount` field
         (positive = cash in, negative = cash out).
     """
-    # A UNION takes each column's type from its first branch, so the two
-    # transaction-type enums are cast to plain text - otherwise 'buy' comes
-    # back through the cash enum and fails to load.
     cash = select(
         CashTransaction.cashTransactionId.label('transactionId'),
         literal('cash', String).label('type'),

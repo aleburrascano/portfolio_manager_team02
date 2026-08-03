@@ -39,10 +39,6 @@ class _Parsed:
             raise ma.ValidationError(str(error)) from None
 
 
-# Each field says what a *missing* value should read as. marshmallow checks
-# `required` before the value ever reaches the parser, so without this an
-# absent amount would report "Missing data for required field." where it
-# used to say "amount is required." - same rejection, worse sentence.
 class Amount(_Parsed, ma.fields.Decimal):
     _parse = staticmethod(parse_amount)
     default_error_messages = {'required': 'amount is required.'}
@@ -100,8 +96,6 @@ class LimitOrderSchema(ma.Schema):
     side = Side(required=True, metadata={'enum': ['buy', 'sell'], 'example': 'buy'})
     quantity = Quantity(required=True, metadata={'example': 10})
     limitPrice = LimitPrice(required=True, metadata={'example': 120.50})
-    # Defaulted rather than required, so a caller written before stop orders
-    # existed keeps placing limit orders and means it.
     orderType = OrderType(
         load_default='limit',
         metadata={
@@ -132,8 +126,6 @@ class LimitOrderQuerySchema(ma.Schema):
 
 
 class SearchQuerySchema(ma.Schema):
-    # The custom required message keeps the sentence the route used to
-    # return; marshmallow's default would replace it with its own.
     q = ma.fields.String(
         required=True,
         error_messages={'required': 'Search query required'},
@@ -144,8 +136,6 @@ class SearchQuerySchema(ma.Schema):
 class TransactionsQuerySchema(ma.Schema):
     limit = ma.fields.Integer(load_default=None)
     offset = ma.fields.Integer(load_default=0)
-    # Sorting is the database's job, not the caller's: reversing one page in
-    # the client would only reverse the rows that page happens to hold.
     sort = ma.fields.String(
         load_default='newest',
         validate=ma.validate.OneOf(['newest', 'oldest'], error='invalid sort'),
@@ -153,11 +143,6 @@ class TransactionsQuerySchema(ma.Schema):
     )
 
 
-# Credentials are deliberately not marked required here. The rules that
-# apply to them are cross-field ones the routes already make - a password
-# length, a username that is taken - and marshmallow's generic "Missing
-# data for required field." would replace sentences the client shows to
-# people. The schema documents the shape; routes/auth.py still judges it.
 class RegisterSchema(ma.Schema):
     username = ma.fields.String(metadata={'example': 'ada'})
     password = ma.fields.String(metadata={'format': 'password'})

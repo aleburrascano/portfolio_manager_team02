@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type MouseEvent, type ReactNode } from 'react'
 import './Modal.css'
 
 const FOCUSABLE =
@@ -32,9 +32,6 @@ function Modal({ title, role = 'dialog', focusKey, onClose, children, className 
   const titleId = useId()
   const cardRef = useRef<HTMLDivElement>(null)
 
-  // Mount and unmount only. Kept apart from the other two effects because
-  // restoring focus is a once-per-dialog job: folding it in with a handler
-  // that changes identity every render would fire it on every keystroke.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null
     return () => previouslyFocused?.focus?.()
@@ -58,8 +55,6 @@ function Modal({ title, role = 'dialog', focusKey, onClose, children, className 
       }
       if (event.key !== 'Tab' || !card) return
 
-      // Wrap at both ends so Tab can never walk out into the page behind,
-      // which aria-modal has already told the screen reader isn't there.
       const focusable = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE))
       if (focusable.length === 0) {
         event.preventDefault()
@@ -83,9 +78,9 @@ function Modal({ title, role = 'dialog', focusKey, onClose, children, className 
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [onClose])
 
+  const swallowClickInsideTheCard = (event: MouseEvent) => event.stopPropagation()
+
   return (
-    // Clicking the backdrop closes; the stopPropagation keeps clicks inside
-    // the card from counting as backdrop clicks.
     <div className="modal-backdrop" onClick={onClose}>
       <div
         ref={cardRef}
@@ -94,7 +89,7 @@ function Modal({ title, role = 'dialog', focusKey, onClose, children, className 
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        onClick={(event) => event.stopPropagation()}
+        onClick={swallowClickInsideTheCard}
       >
         <h2 id={titleId} className="modal-title">
           {title}

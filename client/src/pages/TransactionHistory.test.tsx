@@ -6,8 +6,6 @@ import { fetchTransactions, type Transaction } from '../api'
 
 vi.mock('../api', () => ({
   fetchTransactions: vi.fn(),
-  // The real one reads the link off the page it was given; the stub does
-  // the same, so a page that lost its links would fail here.
   transactionsExportUrl: (page: { _links: { export: string } }) => page._links.export,
 }))
 
@@ -60,7 +58,6 @@ describe('TransactionHistory', () => {
     mockedFetch.mockResolvedValue(page([purchase, deposit]))
     render(<TransactionHistory user={user} />)
 
-    // Both rows read as something that happened, in the same tense.
     expect(await screen.findByText('Deposited cash')).toBeInTheDocument()
     expect(screen.getByText('+$100.00')).toBeInTheDocument()
     expect(screen.getByText('Bought 5.00 AAPL')).toBeInTheDocument()
@@ -75,8 +72,6 @@ describe('TransactionHistory', () => {
     expect(mockedFetch).toHaveBeenCalledWith(1, expect.any(Number), 0, 'newest')
   })
 
-  // Reversing the rows already fetched would only reorder that page, which
-  // is a different list from the one the user asked to see.
   it('refetches in the other direction rather than reversing what it holds', async () => {
     const typer = userEvent.setup()
     mockedFetch.mockResolvedValue(page([purchase, deposit]))
@@ -149,7 +144,6 @@ describe('TransactionHistory', () => {
     expect(cell).toHaveClass('negative')
   })
 
-  // A buy realises nothing; that is not the same as having made nothing.
   it('leaves the realized column blank on rows that cannot realise anything', async () => {
     mockedFetch.mockResolvedValue(page([deposit]))
     render(<TransactionHistory user={user} />)

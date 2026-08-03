@@ -21,7 +21,6 @@ def test_holdings_requires_authentication(client):
 
 def test_performance_is_scoped_to_the_signed_in_user(client):
     register_user(client, username='alice')
-    # Logged in as alice, asking for somebody else's portfolio.
     assert client.get('/api/v1/users/999/portfolio/performance').status_code == 403
 
 
@@ -76,8 +75,6 @@ def test_days_window_is_validated(client):
     ).status_code == 400
 
 
-# Sorting is the client's job now, so unknown query params are simply
-# ignored rather than being a way to reach the sort machinery.
 def test_unknown_query_params_are_ignored(client, monkeypatch):
     monkeypatch.setattr(holdings_service, 'get_user_asset_transactions', lambda user_id: [])
     user = register_user(client)

@@ -20,8 +20,6 @@
   gap: 8px;
 }
 
-/* The count sits opposite the button so "showing 50 of 214" and the way to
-   change that read as one statement rather than two stacked controls. */
 .history-footer {
   display: flex;
   align-items: center;
@@ -31,8 +29,6 @@
   margin-top: 12px;
 }
 
-/* Tabular so gains line up down the column, and quiet on the percentage -
-   the money figure is the answer, the percentage is context for it. */
 .history-realized {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
@@ -134,11 +130,6 @@
   color: var(--negative);
 }
 
-/* Below 640px a three-column table needs ~435px of min-content against
-   roughly 267px available, so it stops being a table and becomes a stack.
-   The three lines read in their existing order - timestamp, what happened,
-   how much - which is how a statement line reads anyway, so no cell has to
-   be reordered or labelled to make sense on its own. */
 @media (max-width: 640px) {
   #transaction-history-content {
     padding: 20px 14px 32px;
