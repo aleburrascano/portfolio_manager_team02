@@ -5,6 +5,16 @@ Everything above this module deals in plain dicts and Decimals, so
 replacing the market data provider - or stubbing it out in tests - is a
 change to this file alone. The one exception is close_series, which hands
 back the raw pandas Series that bulk historical lookups need.
+
+Being the only door to the feed is also what makes this the only sensible
+place to cache it. Every lookup below goes through a TTL cache sized to how
+fast the thing it holds actually moves: a price for seconds, a year of
+daily closes for minutes, and what kind of asset a ticker is for a day,
+because that never changes at all. Callers are unaware of it - they ask for
+what they need as often as they need it, and the fan-out that used to
+follow (one dashboard load re-fetching a year of history per held ticker,
+the poller re-pricing every pending order's ticker every five seconds)
+collapses onto shared entries.
 """
 from decimal import Decimal
 from typing import Callable, Dict, List, Optional
@@ -12,9 +22,59 @@ from typing import Callable, Dict, List, Optional
 import yfinance as yf
 
 from services.exceptions import MarketDataUnavailable
+from services.ttl_cache import MISS, TTLCache
 
 # A yfinance search quote, as passed to a provider's match predicate.
 QuoteMatcher = Callable[[dict], bool]
+
+# Each window is the longest one that still tells the truth about the thing
+# it holds.
+#
+# Prices sit at the broadcast interval rather than above it, so the quote
+# feed still fetches a genuinely new number on every tick and it is the
+# other surfaces - the dashboard, the watchlist, the holdings table, the
+# limit order poller - that ride along on it for free.
+_quotes = TTLCache(ttl_seconds=5)
+# A year of daily closes changes once a day; minutes of staleness are
+# invisible on a chart and this is the single most expensive call here.
+_history = TTLCache(ttl_seconds=900)
+# A ticker's exchange and quote type are what decide, permanently, which
+# asset type it is filed under. They do not move.
+_classification = TTLCache(ttl_seconds=86400)
+_ratings = TTLCache(ttl_seconds=3600)
+_searches = TTLCache(ttl_seconds=300)
+_screens = TTLCache(ttl_seconds=60)
+
+_CACHES = (_quotes, _history, _classification, _ratings, _searches, _screens)
+
+
+def clear_caches() -> None:
+    """Drop every cached lookup. For tests, and for the seed script."""
+    for cache in _CACHES:
+        cache.clear()
+
+
+def sweep_caches() -> int:
+    """
+    Drop expired entries across every cache. Returns how many went.
+
+    Entries expire on read, so this only matters for keys nobody asks for
+    again - a ticker searched once and never revisited. Called on the
+    poller's tick, which is the one loop already running on a timer.
+    """
+    return sum(cache.sweep() for cache in _CACHES)
+
+
+def cache_sizes() -> Dict[str, int]:
+    """Live entry counts per cache, for the health endpoint."""
+    return {
+        'quotes': len(_quotes),
+        'history': len(_history),
+        'classification': len(_classification),
+        'ratings': len(_ratings),
+        'searches': len(_searches),
+        'screens': len(_screens),
+    }
 
 
 def quote_fields(fast_info) -> dict:
@@ -31,6 +91,43 @@ def quote_fields(fast_info) -> dict:
     }
 
 
+def _price_book(symbols: List[str]) -> Dict[str, Optional[dict]]:
+    """
+    The price fields for these symbols, keyed by symbol, from the cache
+    where possible and one batched upstream call for whatever is left.
+
+    A symbol that couldn't be quoted maps to None, and that answer is cached
+    too - a ticker the feed doesn't know is not worth re-asking about on
+    every tick of a five-second loop.
+
+    This is the single path every current price in the app comes through:
+    the pushed quote feed, the watchlist, the holdings table, the crypto
+    popular list. They share one pool of entries, so a ticker that is both
+    held and on screen is fetched once, not twice.
+    """
+    book: Dict[str, Optional[dict]] = {}
+    missing = []
+    for symbol in symbols:
+        cached = _quotes.get(symbol)
+        if cached is MISS:
+            missing.append(symbol)
+        else:
+            book[symbol] = cached
+
+    if missing:
+        tickers = yf.Tickers(' '.join(missing))
+        for symbol in missing:
+            try:
+                fast_info = tickers.tickers[symbol].fast_info
+                fields = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
+            except Exception:
+                fields = None
+            _quotes.set(symbol, fields)
+            book[symbol] = fields
+
+    return book
+
+
 def quote_summaries(names: Dict[str, str]) -> List[dict]:
     """
     Quote a {symbol: display name} map in one batch.
@@ -41,18 +138,11 @@ def quote_summaries(names: Dict[str, str]) -> List[dict]:
     if not names:
         return []
 
-    tickers = yf.Tickers(' '.join(names))
-    summaries = []
-    for symbol, name in names.items():
-        summary = {'symbol': symbol, 'name': name}
-        try:
-            fast_info = tickers.tickers[symbol].fast_info
-            summary['volume'] = fast_info.get('lastVolume')
-            summary.update(quote_fields(fast_info))
-        except Exception:
-            pass
-        summaries.append(summary)
-    return summaries
+    book = _price_book(list(names))
+    return [
+        {'symbol': symbol, 'name': name, **(book.get(symbol) or {})}
+        for symbol, name in names.items()
+    ]
 
 
 def live_quotes(symbols: List[str]) -> Dict[str, dict]:
@@ -67,16 +157,11 @@ def live_quotes(symbols: List[str]) -> Dict[str, dict]:
     if not symbols:
         return {}
 
-    tickers = yf.Tickers(' '.join(symbols))
-    quotes = {}
-    for symbol in symbols:
-        try:
-            fast_info = tickers.tickers[symbol].fast_info
-            fields = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
-        except Exception:
-            continue
-        quotes[symbol] = {'symbol': symbol, **{k: v for k, v in fields.items() if v is not None}}
-    return quotes
+    return {
+        symbol: {'symbol': symbol, **{k: v for k, v in fields.items() if v is not None}}
+        for symbol, fields in _price_book(symbols).items()
+        if fields is not None
+    }
 
 
 def search_assets(query: str, matches: QuoteMatcher, limit: int = 10) -> List[dict]:
@@ -84,17 +169,32 @@ def search_assets(query: str, matches: QuoteMatcher, limit: int = 10) -> List[di
     Search for assets by ticker or name, keeping only the quotes the
     caller's predicate accepts, then quoting the survivors.
     """
-    results = yf.Search(query, max_results=limit)
-    names = {
-        quote['symbol']: quote.get('longname', quote.get('shortname', 'N/A'))
-        for quote in results.quotes
-        if quote.get('symbol') and matches(quote)
-    }
+    # Only the symbol/name match is cached, not the quotes hung off it -
+    # the debounced search box re-runs the same query as someone finishes
+    # typing, and which tickers match "appl" is stable for far longer than
+    # what they cost. quote_summaries then prices them at quote freshness.
+    def lookup() -> Dict[str, str]:
+        results = yf.Search(query, max_results=limit)
+        return {
+            quote['symbol']: quote.get('longname', quote.get('shortname', 'N/A'))
+            for quote in results.quotes
+            if quote.get('symbol') and matches(quote)
+        }
+
+    # Keyed by the predicate's qualified name, not its identity: callers
+    # pass a bound method, which is a fresh object on every access, so id()
+    # would never hit - and could collide once one is collected.
+    matcher = getattr(matches, '__qualname__', repr(matches))
+    names = _searches.get_or_call((query, limit, matcher), lookup)
     return quote_summaries(names)
 
 
 def screen_most_active(limit: int = 10) -> List[dict]:
     """The most actively traded equities, in the search-result shape."""
+    return _screens.get_or_call(('most_actives', limit), lambda: _screen_most_active(limit))
+
+
+def _screen_most_active(limit: int) -> List[dict]:
     results = yf.screen('most_actives')
     return [
         {
@@ -120,6 +220,22 @@ def quote_classification(ticker: str) -> Optional[dict]:
     whether because the symbol is unknown or because the lookup failed. The
     caller can't tell those apart and shouldn't pretend to.
     """
+    cached = _classification.get(ticker)
+    if cached is not MISS:
+        return cached
+
+    classification = _quote_classification(ticker)
+    # Only a positive answer is kept. None here means "unknown symbol or the
+    # feed is down", and this is the call that decides, permanently, which
+    # asset type a never-before-traded ticker gets filed under - remembering
+    # a transient outage for a day would misfile every trade of it made in
+    # that window.
+    if classification is not None:
+        _classification.set(ticker, classification)
+    return classification
+
+
+def _quote_classification(ticker: str) -> Optional[dict]:
     try:
         info = yf.Ticker(ticker).info or {}
     except Exception:
@@ -141,6 +257,10 @@ def asset_quote(ticker: str) -> Optional[dict]:
     than returning empty, so that counts as "not found" too - the caller
     has no way to tell the two apart, and neither do we.
     """
+    return _quotes.get_or_call(('detail', ticker), lambda: _asset_quote(ticker))
+
+
+def _asset_quote(ticker: str) -> Optional[dict]:
     asset = yf.Ticker(ticker)
     try:
         fast_info = asset.fast_info
@@ -206,6 +326,10 @@ def analyst_ratings(ticker: str) -> Optional[dict]:
     Returns None when the feed has nothing to say - plenty of tickers have
     no coverage at all, and an empty panel is better than a fabricated one.
     """
+    return _ratings.get_or_call(ticker, lambda: _analyst_ratings(ticker))
+
+
+def _analyst_ratings(ticker: str) -> Optional[dict]:
     try:
         asset = yf.Ticker(ticker)
         info = asset.info or {}
@@ -234,7 +358,17 @@ def analyst_ratings(ticker: str) -> Optional[dict]:
 
 
 def price_history(ticker: str, period: str = '1y') -> List[dict]:
-    """Daily closing prices over the given period, oldest first, for charting."""
+    """
+    Daily closing prices over the given period, oldest first, for charting.
+
+    The most expensive call in this module and the one asked for most
+    redundantly: the performance chart fetches a year per ticker the user
+    has ever traded, and re-fetches all of it whenever their balance moves.
+    """
+    return _history.get_or_call((ticker, period), lambda: _price_history(ticker, period))
+
+
+def _price_history(ticker: str, period: str) -> List[dict]:
     prices = yf.Ticker(ticker).history(period=period)
     return [
         {'date': index.strftime('%Y-%m-%d'), 'close': float(row['Close'])}
@@ -259,10 +393,19 @@ def trade_price(ticker: str) -> Decimal:
     """
     The price to execute a trade at, as an exact Decimal.
 
+    Cached for the same few seconds as every other price, which also means
+    the number a trade books at is the one the user was just shown rather
+    than a second, marginally different fetch.
+
     Raises:
         MarketDataUnavailable: if no price could be fetched, so a trade is
-        never booked against a guessed price.
+        never booked against a guessed price. A failure is not cached, so an
+        outage is retried rather than remembered.
     """
+    return _quotes.get_or_call(('trade', ticker), lambda: _trade_price(ticker))
+
+
+def _trade_price(ticker: str) -> Decimal:
     try:
         close = yf.Ticker(ticker).history(period='1d')['Close'].iloc[0]
     except Exception as e:
@@ -275,12 +418,17 @@ def valuation_price(ticker: str) -> float:
     The price to value an existing holding at. Unlike trade_price this is
     best-effort: a portfolio breakdown should still render if one ticker
     can't be quoted, so an unavailable price counts as 0.
+
+    Reads the same cached price book the quote feed fills, so valuing a
+    ticker that is already on someone's screen costs nothing.
     """
+    fields = _price_book([ticker]).get(ticker)
+    if fields and fields.get('currentPrice') is not None:
+        return float(fields['currentPrice'])
+
+    # fast_info had no last price; fall back to the last daily close, which
+    # is what trade_price reads.
     try:
-        asset = yf.Ticker(ticker)
-        last_price = (getattr(asset, 'fast_info', None) or {}).get('lastPrice')
-        if last_price is not None:
-            return float(last_price)
-        return float(asset.history(period='1d')['Close'].iloc[0])
+        return float(trade_price(ticker))
     except Exception:
         return 0.0
