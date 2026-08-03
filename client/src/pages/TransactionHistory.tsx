@@ -8,7 +8,7 @@ import {
   type TransactionSort,
   type User,
 } from '../api'
-import { formatCurrency, formatNumber } from '../format'
+import { formatCurrency, formatNumber } from '../lib/format'
 import './TransactionHistory.css'
 
 /** One screenful and a bit, so the first page always overflows into a scroll. */
@@ -63,13 +63,16 @@ function TransactionHistory({ user }: { user: User }) {
   useEffect(() => {
     let cancelled = false
 
-    fetchTransactions(user.userId, PAGE_SIZE, 0, sort)
-      .then((result) => {
+    async function loadPage() {
+      try {
+        const result = await fetchTransactions(user.userId, PAGE_SIZE, 0, sort)
         if (!cancelled) setPage({ key: requestKey, result })
-      })
-      .catch((err) => {
+      } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch transaction history')
-      })
+      }
+    }
+
+    void loadPage()
 
     return () => {
       cancelled = true

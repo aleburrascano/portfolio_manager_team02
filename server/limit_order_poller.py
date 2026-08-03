@@ -1,6 +1,6 @@
 """
 Background work that has to happen whether or not anyone is watching the
-app - unlike realtime.py's broadcast loop, which only fetches prices while a
+app - unlike api/realtime.py's broadcast loop, which only fetches prices while a
 client is subscribed.
 
 Two things qualify. A limit order has to keep being checked against the
@@ -16,7 +16,7 @@ import logging
 import os
 import threading
 
-from realtime import notify_bond_redeemed, notify_order_filled
+from api.realtime import notify_bond_redeemed, notify_order_filled
 from services.bond_redemption import redeem_matured_bonds
 from services.limit_orders import evaluate_pending_orders
 from services.market_data import sweep_caches

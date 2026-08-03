@@ -1,15 +1,15 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
-import SearchBar from '../components/SearchBar'
-import AssetList from '../components/AssetList'
-import Icon, { type IconName } from './../components/Icon'
-import OpenOrdersTab from '../components/OpenOrdersTab'
+import SearchBar from '../components/ui/SearchBar'
+import AssetList from '../components/trading/AssetList'
+import Icon, { type IconName } from '../components/ui/Icon'
+import OpenOrdersTab from '../components/trading/OpenOrdersTab'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
-import { useAssetTypes } from '../asset-types'
-import { useLiveQuotes } from '../realtime'
+import { useAssetTypes } from '../context/asset-types'
+import { useLiveQuotes } from '../hooks/realtime'
 import './TradeAssets.css'
 
-const AssetDetail = lazy(() => import('../components/AssetDetail'))
+const AssetDetail = lazy(() => import('./AssetDetail'))
 
 const ICONS: Partial<Record<AssetType, IconName>> = {
   stock: 'stock',
@@ -52,18 +52,20 @@ function TradeAssets({ user, showOrders = false }: { user: User; showOrders?: bo
     let cancelled = false
     setPopularLoading(true)
 
-    fetchPopularAssets(assetType)
-      .then((assets) => {
+    async function loadPopular() {
+      try {
+        const assets = await fetchPopularAssets(assetType)
         if (cancelled) return
         popularCache.current[assetType] = assets
         setPopularAssets(assets)
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setPopularAssets([])
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setPopularLoading(false)
-      })
+      }
+    }
+
+    void loadPopular()
 
     return () => {
       cancelled = true

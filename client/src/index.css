@@ -111,6 +111,17 @@ h3 {
   margin: 0 0 12px;
 }
 
+/* The panel every dashboard widget draws itself on. Global because the
+   widgets that wear it live in components/, not on the page that arranges
+   them. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  min-width: 0;
+}
+
 .secondary-btn,
 .submit-btn,
 .danger-btn {
@@ -165,6 +176,23 @@ h3 {
 .danger-btn:hover {
   background: var(--negative);
   color: var(--surface);
+}
+
+/* Shared by every screen that can be backed out of. */
+.back-btn {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  cursor: pointer;
+  padding: 4px 0;
+  transition: color var(--dur-fast) var(--ease);
+}
+
+.back-btn:hover {
+  color: var(--text-h);
 }
 
 :focus-visible {

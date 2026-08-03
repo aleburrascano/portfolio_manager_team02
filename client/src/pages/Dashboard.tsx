@@ -8,18 +8,18 @@ import {
   type HoldingsResult,
   type User,
 } from '../api'
-import PortfolioComposition from '../components/PortfolioComposition'
-import HoldingsTable from '../components/HoldingsTable'
-import Watchlist from '../components/Watchlist'
-import WalletCard from '../components/WalletCard'
-import { useAssetTypes } from '../asset-types'
-import { useBalance } from '../balance-context'
+import PortfolioComposition from '../components/portfolio/PortfolioComposition'
+import HoldingsTable from '../components/portfolio/HoldingsTable'
+import Watchlist from '../components/portfolio/Watchlist'
+import WalletCard from '../components/portfolio/WalletCard'
+import { useAssetTypes } from '../context/asset-types'
+import { useBalance } from '../context/balance-context'
 
-const PortfolioPerformance = lazy(() => import('../components/PortfolioPerformance'))
+const PortfolioPerformance = lazy(() => import('../components/portfolio/PortfolioPerformance'))
 
 function ChartFallback() {
   return (
-    <section className="dashboard-card performance-card" aria-busy="true">
+    <section className="card performance-card" aria-busy="true">
       <h3 className="section-title">Portfolio performance</h3>
       <span className="visually-hidden">Loading portfolio performance</span>
       <div className="performance-body">
@@ -77,18 +77,21 @@ function Dashboard({ user }: { user: User }) {
   useEffect(() => {
     let cancelled = false
 
-    fetchPortfolioHoldings(user.userId)
-      .then((result) => {
+    async function loadHoldings() {
+      try {
+        const result = await fetchPortfolioHoldings(user.userId)
         if (!cancelled) setBook({ key: holdingsKey, data: result })
-      })
-      .catch((e) => {
+      } catch (e) {
         if (!cancelled) {
           setBook({
             key: holdingsKey,
             error: e instanceof Error ? e.message : 'Failed to load holdings.',
           })
         }
-      })
+      }
+    }
+
+    void loadHoldings()
 
     return () => {
       cancelled = true
@@ -111,7 +114,7 @@ function Dashboard({ user }: { user: User }) {
         </Suspense>
 
         {loading ? (
-          <section className="dashboard-card" aria-busy="true">
+          <section className="card" aria-busy="true">
             <h3 className="section-title">Portfolio composition</h3>
             <span className="visually-hidden">Loading your portfolio</span>
             <div className="composition-skeleton">
@@ -120,7 +123,7 @@ function Dashboard({ user }: { user: User }) {
             </div>
           </section>
         ) : error || !data ? (
-          <section className="dashboard-card">
+          <section className="card">
             <h3 className="section-title">Portfolio composition</h3>
             <p className="dashboard-empty-body">
               {error ?? 'We could not load your portfolio just now.'} Refresh the page to try
@@ -128,7 +131,7 @@ function Dashboard({ user }: { user: User }) {
             </p>
           </section>
         ) : total === 0 ? (
-          <section className="dashboard-card dashboard-empty">
+          <section className="card dashboard-empty">
             <h3 className="section-title">Portfolio composition</h3>
             <p className="dashboard-empty-body">
               {hasCash
