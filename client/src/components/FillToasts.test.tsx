@@ -50,8 +50,6 @@ describe('FillToasts', () => {
     expect(container).toBeEmptyDOMElement()
   })
 
-  // The executed price, not the trigger: for a stop those differ, and only
-  // one of them is what the user actually paid.
   it('reports what filled at the price it executed at', () => {
     render(<FillToasts />)
     act(() => announce(fill({ price: 9.5 })))
@@ -85,7 +83,6 @@ describe('FillToasts', () => {
     expect(screen.queryByText(/order filled/)).not.toBeInTheDocument()
   })
 
-  // A bond matures on a date, so its owner is told the same way.
   it('announces a bond paying out at maturity', () => {
     render(<FillToasts />)
     act(() =>
@@ -117,7 +114,6 @@ describe('FillToasts', () => {
     expect(screen.queryByText(/order filled/)).not.toBeInTheDocument()
   })
 
-  // Worth knowing, not worth interrupting for.
   it('announces politely rather than as an alert', () => {
     render(<FillToasts />)
     act(() => announce(fill()))

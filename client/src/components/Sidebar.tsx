@@ -2,10 +2,6 @@ import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import './Sidebar.css'
 
-// Three destinations, not five: account settings and logging out moved to
-// the account menu in the header, which is where people reach for them.
-// That leaves the rail (and the phone's bottom bar) with only the places
-// you actually navigate between.
 const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   {
     to: '/',
@@ -40,20 +36,17 @@ const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   },
 ]
 
+const DASHBOARD_PATH = '/'
+
 function Sidebar() {
   return (
     <nav className="sidebar" aria-label="Main">
       <ul className="sidebar-nav">
         {NAV_ITEMS.map((item) => (
           <li key={item.to}>
-            {/* Links, not buttons: these are places, and a place should be
-                openable in a new tab, bookmarkable, and reachable with the
-                browser's own back button. */}
             <NavLink
               to={item.to}
-              // Only the dashboard matches exactly - /trade should stay lit
-              // while looking at an asset underneath it.
-              end={item.to === '/'}
+              end={item.to === DASHBOARD_PATH}
               className={({ isActive }) => (isActive ? 'active' : '')}
               title={item.label}
             >

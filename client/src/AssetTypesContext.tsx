@@ -13,7 +13,7 @@ export function AssetTypesProvider({ children }: { children: ReactNode }) {
         if (!cancelled && result.length > 0) setTypes(result)
       })
       .catch(() => {
-        // The shipped defaults are already in place; nothing to report.
+        if (!cancelled) setTypes(DEFAULT_ASSET_TYPES)
       })
 
     return () => {

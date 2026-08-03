@@ -40,8 +40,6 @@ def test_a_value_expires(clock):
     assert cache.get('AAPL') is MISS
 
 
-# None is a meaningful answer from asset_quote and analyst_ratings, so it
-# has to be distinguishable from nothing being cached at all.
 def test_a_cached_none_is_not_a_miss(clock):
     cache = TTLCache(ttl_seconds=10)
     cache.set('AAPL', None)
@@ -72,7 +70,6 @@ def test_get_or_call_produces_again_after_expiry(clock):
     assert len(calls) == 2
 
 
-# An outage must be retried, not remembered.
 def test_a_raising_producer_is_not_cached(clock):
     cache = TTLCache(ttl_seconds=10)
 
@@ -90,7 +87,7 @@ def test_sweep_drops_only_expired(clock):
     clock[0] += 6
     cache.set('new', 2)
 
-    clock[0] += 6  # 'old' is 12s in, 'new' is 6s in
+    clock[0] += 6
     assert cache.sweep() == 1
     assert cache.get('new') == 2
 
@@ -101,9 +98,6 @@ def test_clear_empties_the_cache(clock):
     cache.clear()
     assert len(cache) == 0
 
-
-# The lookups below are what the cache exists for: each asserts that a
-# second identical call costs no second upstream call.
 
 def test_price_history_is_fetched_once(monkeypatch):
     calls = []
@@ -134,7 +128,6 @@ def test_live_quotes_only_fetches_the_uncached_symbols(monkeypatch):
     market_data.live_quotes(['AAPL', 'MSFT'])
     assert sorted(fetched) == ['AAPL', 'MSFT']
 
-    # NVDA is the only miss the second time round.
     fetched.clear()
     market_data.live_quotes(['AAPL', 'MSFT', 'NVDA'])
     assert fetched == ['NVDA']
@@ -152,7 +145,6 @@ def test_an_unquotable_symbol_is_remembered_as_absent(monkeypatch):
 
     assert market_data.live_quotes(['NOPE']) == {}
     market_data.live_quotes(['NOPE'])
-    # Asked once, not once per five-second tick.
     assert fetched == ['NOPE']
 
 
@@ -184,8 +176,6 @@ def test_a_failed_trade_price_is_retried(monkeypatch):
     assert calls == ['AAPL', 'AAPL']
 
 
-# A ticker's asset type is decided once and for good by this answer, so a
-# feed outage must not be remembered as "unknown symbol".
 def test_an_undecided_classification_is_not_cached(monkeypatch):
     calls = []
     monkeypatch.setattr(

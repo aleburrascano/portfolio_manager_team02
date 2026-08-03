@@ -17,6 +17,8 @@ const RANGES = [
   { days: 1825, label: 'All' },
 ] as const
 
+const AXIS_PADDING_FRACTION = 0.08
+
 function formatAxisDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
@@ -42,10 +44,6 @@ function Signed({ value, percent }: { value: number; percent: number }) {
 function PortfolioPerformance({ user, balance }: { user: User; balance: number | null }) {
   const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
-  // Results are tagged with the request they answer, so "still loading" is
-  // derived from what we hold rather than tracked in a separate flag that
-  // could drift out of sync with it. Balance is in the key because a trade
-  // or a deposit changes the answer.
   const requestKey = `${user.userId}:${days}:${balance}`
   const [state, setState] = useState<{ key: string; data?: Performance; error?: string }>({
     key: '',
@@ -76,8 +74,6 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
   const data = state.data ?? null
   const error = state.error ?? null
 
-  // Recharts needs a plain number for the axis domain; padding it keeps the
-  // line off the frame instead of running along the bottom edge.
   const domain = useMemo(() => {
     const values = (data?.series ?? []).flatMap((point) => [
       point.portfolioValue,
@@ -87,19 +83,15 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
     if (values.length === 0) return undefined
     const low = Math.min(...values)
     const high = Math.max(...values)
-    const pad = (high - low || high || 1) * 0.08
+    const pad = (high - low || high || 1) * AXIS_PADDING_FRACTION
     return [Math.max(0, low - pad), high + pad] as [number, number]
   }, [data])
 
   const summary = data?.summary
   const hasSeries = (data?.series.length ?? 0) > 1
-  // Absent when the index couldn't be priced - best-effort, like every
-  // other price on this chart.
   const hasBenchmark = (data?.series ?? []).some((point) => point.benchmarkValue != null)
   const benchmarkLabel = data?.benchmark?.label ?? 'Benchmark'
 
-  // The comparison that actually answers "was this worth doing": the same
-  // deposits, on the same days, left in an index fund instead.
   const beatBenchmark = useMemo(() => {
     const last = data?.series.at(-1)
     if (!last || last.benchmarkValue == null) return null
@@ -113,9 +105,6 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
           <h3 id="performance-title" className="section-title">
             Portfolio performance
           </h3>
-          {/* Change, not level: the statement head above owns "what am I
-              worth", so this says how it got there rather than repeating a
-              figure that two fetches could disagree on. */}
           {summary && hasSeries && (
             <p className="performance-headline">
               <Signed value={summary.gainLoss} percent={summary.gainLossPercent} />
@@ -205,9 +194,6 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
                   strokeWidth={2}
                   fill="url(#performanceFill)"
                 />
-                {/* The line the area is judged against: money paid in. Above
-                    it is gain, below it is loss, and it makes a portfolio
-                    that only grew because of deposits obvious at a glance. */}
                 <Line
                   type="stepAfter"
                   dataKey="netDeposits"
@@ -217,10 +203,6 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
                   strokeDasharray="4 4"
                   dot={false}
                 />
-                {/* The harder question. Beating your own deposits only means
-                    you didn't lose money; beating this means the picking was
-                    worth doing. Solid, so it reads as a real alternative
-                    rather than another reference line. */}
                 {hasBenchmark && (
                   <Line
                     type="monotone"

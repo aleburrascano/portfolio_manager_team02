@@ -46,9 +46,6 @@ describe('Watchlist', () => {
     expect(mockedFeeds).toHaveBeenLastCalledWith({ stock: ['AAPL'], crypto: ['BTC-USD'] })
   })
 
-  // The bug this replaced: a crypto-only list counted as streamed and drew
-  // a "Live" indicator, while the subscription was hardcoded to stocks and
-  // no quote for it could ever arrive.
   it('subscribes to a crypto-only list', async () => {
     mockedWatchlist.mockResolvedValue([entry('BTC-USD', 'crypto')])
     render(<Watchlist user={user} />)

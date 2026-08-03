@@ -17,8 +17,6 @@ function fillNotice(fill: OrderFill): Notice {
   return {
     id: `fill:${fill.limitOrderId}`,
     title: `${fill.orderType === 'stop' ? 'Stop' : 'Limit'} order filled`,
-    // The executed price, not the trigger: for a stop especially those are
-    // different numbers and only one is what the user actually paid.
     body: `${fill.side === 'buy' ? 'Bought' : 'Sold'} ${formatNumber(fill.quantity, 2)} ${fill.ticker} at ${formatCurrency(fill.price)}.`,
     subject: fill.ticker,
   }

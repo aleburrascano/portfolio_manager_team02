@@ -23,9 +23,6 @@ from routes.limit_orders import limit_orders_bp
 
 load_dotenv()
 
-# Gunicorn owns the handlers in production and Flask's own logger inherits
-# from the root, so configuring it here is what makes anything below WARNING
-# actually reach the log at all.
 logging.basicConfig(
     level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
     format='%(asctime)s %(levelname)s %(name)s %(message)s',
@@ -41,16 +38,10 @@ CORS(app, origins=cors_origins, supports_credentials=True)
 init_realtime(app, cors_origins)
 
 API_PREFIX = '/api/v1'
-# Through the Api rather than Flask directly: that is what puts a
-# blueprint's routes and schemas into the spec.
 api = init_apidocs(app)
 
-# After the Api, deliberately. flask-smorest installs its own handler for
-# HTTPException, which answers a rejected request with its own envelope
-# ({'code', 'errors', 'status'}). Registering ours second puts this API's
-# single error shape back in front of it - the client reads
-# error.message and knows nothing about smorest's.
 register_error_handlers(app)
+
 api.register_blueprint(wallet_bp, url_prefix=API_PREFIX)
 api.register_blueprint(assets_bp, url_prefix=API_PREFIX)
 api.register_blueprint(history_bp, url_prefix=API_PREFIX)
@@ -101,8 +92,4 @@ def index() -> Tuple[dict, int]:
     return health(app), 200
 
 if __name__ == '__main__':
-    # socketio.run rather than app.run, so the WebSocket endpoint is served
-    # alongside the REST routes on the same port. allow_unsafe_werkzeug is
-    # needed to start this dev server at all under CI/e2e, which run it
-    # without a tty attached to stdin.
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True)

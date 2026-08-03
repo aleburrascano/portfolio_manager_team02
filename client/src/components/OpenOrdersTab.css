@@ -69,8 +69,6 @@
   color: var(--negative);
 }
 
-/* Same weight as the trade screen's order-type row: this picks which slice
-   of the same list is shown, not what kind of thing is being looked at. */
 .open-orders-filters {
   display: flex;
   gap: 6px;
@@ -97,8 +95,6 @@
   color: var(--accent-ink);
 }
 
-/* Capitalised but not coloured: which kind an order is matters, but it is
-   not the buy/sell distinction and shouldn't compete with it. */
 .open-orders-type {
   text-transform: capitalize;
   color: var(--text-muted);

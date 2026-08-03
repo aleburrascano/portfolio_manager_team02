@@ -19,11 +19,6 @@ from services.ttl_cache import TTLCache
 PERIODS_PER_YEAR = {'annual': 1, 'semiannual': 2}
 CENTS = Decimal('0.00000001')
 
-# A year of bond prices is 366 present-value computations, and get_quote
-# builds the whole series just to read the last two points off it. The
-# result is a pure function of the bond's terms and the date, so it is the
-# same series for every caller until the date rolls over; the window only
-# has to be shorter than a day for that to hold.
 _history = TTLCache(ttl_seconds=3600)
 
 

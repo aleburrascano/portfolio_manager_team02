@@ -30,8 +30,6 @@ describe('Header', () => {
     expect(screen.getByText('AL')).toBeInTheDocument()
   })
 
-  // The corner used to be a greeting and an avatar that looked interactive
-  // and did nothing; it is now the account menu people reach for there.
   it('opens a menu with the account actions', async () => {
     const typer = userEvent.setup()
     renderHeader()

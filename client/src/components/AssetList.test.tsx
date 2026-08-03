@@ -46,8 +46,6 @@ describe('AssetList', () => {
     expect(onSelect).toHaveBeenCalledWith('AAPL')
   })
 
-  // Rows are the only route into the buy/sell ticket, so a keyboard user
-  // who cannot activate them cannot trade at all.
   it('opens a row from the keyboard with Enter', async () => {
     const onSelect = vi.fn()
     const typer = userEvent.setup()

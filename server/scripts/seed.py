@@ -38,26 +38,18 @@ from services.auth import normalize_username
 STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA']
 CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD']
 MARKET_TICKERS = {t: 'stock' for t in STOCKS} | {t: 'crypto' for t in CRYPTOS}
-# How many bonds from the catalog to trade, so the demo portfolio has a
-# bond bucket - the composition donut and the per-class gain/loss both have
-# one, and without any holdings they render a hole.
 BOND_COUNT = 3
 
 INITIAL_DEPOSIT_RANGE = (30_000, 60_000)
-EVENT_SPACING_DAYS = (4, 12)  # roughly one transaction every 4-12 days
+EVENT_SPACING_DAYS = (4, 12)
 DEPOSIT_RANGE = (500, 8_000)
 WITHDRAW_RANGE = (200, 3_000)
 BUY_DOLLAR_RANGE = (500, 6_000)
 SELL_FRACTION_RANGE = (0.1, 0.6)
-CASH_RESERVE = Decimal('2000')  # keep a cash cushion so buys don't drain the wallet to zero
+CASH_RESERVE = Decimal('2000')
 EVENT_WEIGHTS = {'buy': 0.45, 'deposit': 0.30, 'sell': 0.15, 'withdraw': 0.10}
 
-# How many tickers to leave on the watchlist. Enough to fill the dashboard
-# panel, well under services.watchlist.MAX_ENTRIES.
 WATCHLIST_COUNT = 6
-# A pending order is seeded far enough from the market that the poller
-# leaves it alone: a demo whose open orders vanish thirty seconds in is
-# worse than no demo orders at all.
 FAR_FROM_MARKET = Decimal('0.5')
 
 
@@ -128,8 +120,6 @@ def register_assets(session, tickers):
 
 
 def clear_user_transactions(session, user_id):
-    # Orders first: a filled one points at an AssetTransaction, so deleting
-    # the trades out from under it would leave a dangling reference.
     session.execute(delete(LimitOrder).where(LimitOrder.userId == user_id))
     session.execute(delete(WatchlistEntry).where(WatchlistEntry.userId == user_id))
     session.execute(delete(CashTransaction).where(CashTransaction.userId == user_id))
@@ -169,9 +159,6 @@ def seed_orders(session, user_id, last_prices, now):
     linked to a real trade of the user's, which is what makes its realised
     gain line up with the transaction history.
     """
-    # Asked of the provider registry rather than assumed from the ticker
-    # list, so this follows whatever the server currently allows conditional
-    # orders on instead of carrying its own idea of it.
     tradable = [
         ticker for ticker, asset_type in MARKET_TICKERS.items()
         if ticker in last_prices and PROVIDERS[asset_type].supports_limit_orders
@@ -179,8 +166,6 @@ def seed_orders(session, user_id, last_prices, now):
     if not tradable:
         return 0
 
-    # The most recent buy, so the filled order points at a trade that
-    # actually happened rather than at a fabricated one.
     filled_trade = session.scalar(
         select(AssetTransaction)
         .where(
@@ -201,8 +186,6 @@ def seed_orders(session, user_id, last_prices, now):
     ))
 
     if len(tradable) > 1:
-        # A stop sell triggers on the way down, so one well below the market
-        # is the mirror of the limit buy above and stays pending too.
         stop_sell = tradable[1]
         orders.append(LimitOrder(
             userId=user_id, ticker=stop_sell, side='sell', orderType='stop',
@@ -274,7 +257,6 @@ def run(username, password, first_name, last_name, days):
 
     user_id, username = find_or_create_user(session, username, password, first_name, last_name)
 
-    # UTC, to match the clock the database writes its own defaults on.
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     start = now - timedelta(days=days)
 
@@ -363,9 +345,6 @@ def run(username, password, first_name, last_name, days):
     ])
     session.commit()
 
-    # Saved tickers, chosen so the panel shows a mix of what is held and
-    # what is only being followed - which is the distinction a watchlist
-    # exists to draw.
     watched = {t: tickers[t] for t in available_tickers[:WATCHLIST_COUNT]}
     seed_watchlist(session, user_id, watched, now)
 

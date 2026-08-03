@@ -72,9 +72,6 @@ def redeem_matured_bonds(as_of: date = None) -> List[dict]:
         bond = bond_pricing.get_bond(ticker)
         if bond is None:
             continue
-        # At or past maturity price_bond returns face value, which is what a
-        # bond pays at redemption - so this is the same figure the holdings
-        # table has been showing.
         price = bond_pricing.price_bond(bond, as_of)
 
         for user_id, quantity in _holders_of(session, ticker):
@@ -91,8 +88,6 @@ def _redeem_one(session, user_id: int, ticker: str, quantity, price) -> dict:
         if not db_conn.lock_user(session, user_id):
             return None
 
-        # Re-read under the lock: the holder may have sold it between the
-        # unlocked scan above and here.
         held = session.scalar(
             select(func.coalesce(func.sum(AssetTransaction.qty), 0))
             .where(AssetTransaction.userId == user_id, AssetTransaction.ticker == ticker)
@@ -110,9 +105,6 @@ def _redeem_one(session, user_id: int, ticker: str, quantity, price) -> dict:
             'proceeds': float(held * price),
         }
     except Exception:
-        # Same reasoning as a limit order fill: this runs with no request to
-        # report into, so a failure that isn't logged is a failure nobody
-        # ever learns about.
         logger.exception('Could not redeem %s for user %s', ticker, user_id)
         session.rollback()
         return None

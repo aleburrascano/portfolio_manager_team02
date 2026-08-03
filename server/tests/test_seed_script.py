@@ -30,9 +30,6 @@ def session(ctx):
     return get_session()
 
 
-# The bug this file exists for: services.auth lowercases on the way in, and
-# the seeder inserted the raw string - so `--username Demo` stored "Demo"
-# while every login looked for "demo".
 def test_the_username_is_stored_in_the_form_login_looks_for(session):
     user_id, username = seed.find_or_create_user(session, 'Demo', 'password1', 'Ada', 'Lovelace')
 
@@ -70,8 +67,6 @@ def test_pick_bonds_returns_priceable_terms(session):
 
     chosen = seed.pick_bonds(session, date.today())
 
-    # The dict has to be the shape bond_pricing takes, or the seeded price
-    # series would differ from what the app shows for the same bond.
     assert bond_pricing.price_bond(chosen['UST1']) > 0
 
 
@@ -90,7 +85,6 @@ def test_the_watchlist_is_ordered_newest_first(session):
 
     entries = session.query(WatchlistEntry).all()
     by_ticker = {e.ticker: e.addedAt for e in entries}
-    # Staggered, so two rows written in the same second still order.
     assert by_ticker['AAPL'] > by_ticker['MSFT']
 
 
@@ -109,8 +103,6 @@ def test_orders_are_seeded_in_every_status(session):
     assert statuses == {'pending', 'cancelled'} or statuses == {'pending', 'filled', 'cancelled'}
 
 
-# A demo whose open orders fill as soon as the poller notices them shows an
-# empty tab to anyone who looks a minute later.
 def test_pending_orders_are_placed_far_from_the_market(session):
     user_id, _ = seed.find_or_create_user(session, 'demo', 'password1', 'Ada', 'Lovelace')
     session.add(Asset(ticker='AAPL', assetType='stock'))
@@ -142,6 +134,4 @@ def test_bonds_get_no_conditional_orders(session):
     user_id, _ = seed.find_or_create_user(session, 'demo', 'password1', 'Ada', 'Lovelace')
     add_bond(session, 'UST1', matures_in_days=400)
 
-    # A bond is priced from its own terms on a schedule, so it takes no
-    # conditional order - the seeder asks the registry rather than assuming.
     assert seed.seed_orders(session, user_id, {'UST1': Decimal('980')}, datetime.now()) == 0

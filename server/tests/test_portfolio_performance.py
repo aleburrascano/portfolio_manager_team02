@@ -53,9 +53,6 @@ def history(monkeypatch):
             closes = _p.get(ticker) or {}
             return float(closes[max(closes)]) if closes else 0.0
 
-        # The holdings service reads the batched quote path, so it is pinned
-        # to the same prices - these tests cross-check the two services and
-        # would be meaningless if one of them reached the real feed.
         def live_quotes(tickers):
             return {
                 ticker: {
@@ -71,11 +68,6 @@ def history(monkeypatch):
             monkeypatch.setattr(provider, 'valuation_price', valuation_price)
             monkeypatch.setattr(provider, 'live_quotes', live_quotes)
 
-        # The benchmark goes straight to market_data rather than through a
-        # provider, so it needs pinning separately or every test here would
-        # reach the real feed for it. Driven by the same dict: a test that
-        # cares about the comparison puts SPY in `prices`, and one that
-        # doesn't gets no benchmark at all.
         monkeypatch.setattr(
             perf.market_data, 'price_history',
             lambda ticker, period='1y', _p=prices: [
@@ -111,7 +103,6 @@ def test_cash_only_portfolio_tracks_the_deposit(user_id, history):
     assert result['series'][-1]['portfolioValue'] == 1000.0
     assert result['series'][-1]['cash'] == 1000.0
     assert result['series'][-1]['investedValue'] == 0.0
-    # Money moved in is not a gain.
     assert result['summary']['gainLoss'] == 0.0
 
 
@@ -124,10 +115,8 @@ def test_a_holding_is_valued_at_each_days_close(user_id, history):
     series = perf.get_portfolio_performance(user_id, days=3650)['series']
     by_date = {point['date']: point for point in series}
 
-    # 5 shares at 100 = 500 invested, 500 cash left over.
     assert by_date['2026-01-01']['investedValue'] == 500.0
     assert by_date['2026-01-01']['portfolioValue'] == 1000.0
-    # The next day the price moves; the cash does not.
     assert by_date['2026-01-02']['investedValue'] == 600.0
     assert by_date['2026-01-02']['portfolioValue'] == 1100.0
 
@@ -136,11 +125,9 @@ def test_the_last_close_carries_across_a_market_closure(user_id, history):
     bought = date(2026, 1, 1)
     deposit(user_id, 1000, bought)
     record_trade(user_id, 'AAPL', qty=5, price=100, day=1)
-    # Only one close, on the day of purchase - every later day has none.
     history({'AAPL': {bought: 100.0}})
 
     series = perf.get_portfolio_performance(user_id, days=3650)['series']
-    # A day with no close holds its value rather than collapsing to cash.
     assert series[-1]['investedValue'] == 500.0
 
 
@@ -151,7 +138,6 @@ def test_gain_is_measured_against_deposits_not_the_first_point(user_id, history)
     history({'AAPL': {bought: 100.0, bought + timedelta(days=1): 200.0}})
 
     summary = perf.get_portfolio_performance(user_id, days=3650)['summary']
-    # 5 shares now worth 200 each = 1000, plus 500 cash = 1500 against 1000 in.
     assert summary['netDeposits'] == 1000.0
     assert summary['currentValue'] == 1500.0
     assert summary['gainLoss'] == 500.0
@@ -168,7 +154,6 @@ def test_a_sale_reduces_the_position_and_returns_the_cash(user_id, history):
     series = perf.get_portfolio_performance(user_id, days=3650)['series']
     final = series[-1]
     assert final['investedValue'] == 0.0
-    # 1000 deposited - 500 spent + 1000 returned.
     assert final['cash'] == 1500.0
 
 
@@ -190,9 +175,6 @@ def test_breakdown_by_asset_type(user_id, history):
     assert by_type['crypto']['gainLossPercent'] == -10.0
 
 
-# The strongest check available: the cash the replay arrives at must equal
-# the balance the wallet computes independently in SQL. If the replay ever
-# mishandles a sign, double-counts a trade, or drops one, these diverge.
 def test_replayed_cash_matches_the_wallet_balance(user_id, history):
     bought = date(2026, 1, 1)
     deposit(user_id, 10_000, bought)
@@ -209,16 +191,11 @@ def test_replayed_cash_matches_the_wallet_balance(user_id, history):
     assert round(series[-1]['cash'], 2) == round(float(get_user_balance(user_id)), 2)
 
 
-# The dashboard shows the performance headline directly above the holdings
-# table. If they disagree the app is telling one user two different things
-# about how much money they have, so the two services are pinned together.
 def test_the_headline_matches_the_holdings_table(user_id, history):
     bought = date(2026, 1, 1)
     deposit(user_id, 10_000, bought)
     record_trade(user_id, 'AAPL', qty=10, price=100, day=1)
     record_trade(user_id, 'BTC-USD', qty=2, price=500, asset_type='crypto', day=1)
-    # The closes are stale on purpose: the final point must follow the live
-    # valuation, not the last close it was replayed with.
     history(
         {'AAPL': {bought: 100.0}, 'BTC-USD': {bought: 500.0}},
         live={'AAPL': 175.0, 'BTC-USD': 610.0},
@@ -252,11 +229,9 @@ def test_a_ticker_that_cannot_be_priced_falls_back_to_its_last_close(user_id, hi
     bought = date(2026, 1, 1)
     deposit(user_id, 10_000, bought)
     record_trade(user_id, 'AAPL', qty=10, price=100, day=1)
-    # 0.0 is how valuation_price reports "no price available".
     history({'AAPL': {bought: 120.0}}, live={'AAPL': 0.0})
 
     result = perf.get_portfolio_performance(user_id, days=3650)
-    # The last close, not zero - a blank chart is worse than a stale one.
     assert result['series'][-1]['investedValue'] == 1200.0
 
 
@@ -269,7 +244,6 @@ def test_a_position_bought_and_sold_leaves_no_value_behind(user_id, history):
 
     result = perf.get_portfolio_performance(user_id, days=3650)
     assert result['series'][-1]['investedValue'] == 0.0
-    # A closed position contributes no bucket to the class breakdown.
     assert result['byAssetType'] == []
 
 
@@ -294,12 +268,8 @@ def test_window_limits_the_series_without_losing_earlier_trades(user_id, history
 
     result = perf.get_portfolio_performance(user_id, days=30)
     assert len(result['series']) <= 31
-    # The position was opened before the window and still shows up in it.
     assert result['series'][0]['investedValue'] == 500.0
 
-
-# The chart's only comparison was "did I beat my own deposits", which a
-# portfolio that merely held cash passes. This is the other one.
 
 def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
     today = date.today()
@@ -309,13 +279,10 @@ def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
 
     result = perf.get_portfolio_performance(user_id)
 
-    # $1000 in at 100 buys 10 units, worth 1100 then 1200 as it rises.
     assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 1100.0, 1200.0]
     assert result['benchmark'] == {'ticker': 'SPY', 'label': 'S&P 500'}
 
 
-# A later top-up has to go into the benchmark too, or the comparison
-# flatters the portfolio for money the benchmark never received.
 def test_benchmark_matches_a_later_deposit(user_id, history):
     today = date.today()
     days = [today - timedelta(days=n) for n in (2, 1, 0)]
@@ -325,14 +292,12 @@ def test_benchmark_matches_a_later_deposit(user_id, history):
 
     result = perf.get_portfolio_performance(user_id)
 
-    # 10 units, then 20, then those 20 double.
     assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 2000.0, 4000.0]
 
 
 def test_benchmark_carries_the_last_close_over_a_closed_market(user_id, history):
     today = date.today()
     days = [today - timedelta(days=n) for n in (2, 1, 0)]
-    # No close on the middle day, as at a weekend.
     history({'SPY': {days[0]: 100.0, days[2]: 150.0}})
     deposit(user_id, 1000, days[0])
 
@@ -341,13 +306,11 @@ def test_benchmark_carries_the_last_close_over_a_closed_market(user_id, history)
 
 
 def test_an_unpriceable_benchmark_leaves_the_comparison_out(user_id, history):
-    history({})  # nothing for SPY
+    history({})
     deposit(user_id, 1000, date.today() - timedelta(days=1))
 
     result = perf.get_portfolio_performance(user_id)
 
-    # Best-effort like the rest of the chart: no comparison rather than no
-    # chart at all.
     assert all('benchmarkValue' not in point for point in result['series'])
     assert result['series']
 

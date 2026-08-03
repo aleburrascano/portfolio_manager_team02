@@ -64,8 +64,6 @@ function AnalystRatings({
         if (!cancelled) setState({ key: requestKey, ratings })
       })
       .catch(() => {
-        // Coverage is supplementary; a failure hides the panel rather than
-        // interrupting the page someone came here to trade on.
         if (!cancelled) setState({ key: requestKey, failed: true })
       })
 
@@ -86,8 +84,6 @@ function AnalystRatings({
     )
   }
 
-  // Nobody covers this ticker, or the lookup failed. Either way there is
-  // nothing truthful to show, so the panel isn't rendered at all.
   if (state.failed || !state.ratings) return null
 
   const ratings = state.ratings
@@ -141,8 +137,6 @@ function AnalystRatings({
 
           {marker != null && (
             <>
-              {/* The scale is decorative: the three figures beneath it say
-                  the same thing in text. */}
               <span className="ratings-scale" aria-hidden="true">
                 <span className="ratings-scale-marker" style={{ left: `${marker}%` }} />
               </span>

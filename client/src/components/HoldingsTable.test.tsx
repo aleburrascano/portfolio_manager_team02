@@ -83,14 +83,10 @@ describe('HoldingsTable', () => {
       book([holding({ value: 800, costBasis: 1000, gainLoss: -200, gainLossPercent: -20 })]),
     )
 
-    // Scoped to the position: with one holding the totals row carries the
-    // same figure, and an unscoped query would match both.
     const row = within(screen.getByRole('row', { name: /AAPL/ }))
     expect(row.getByText(/▼ \$200.00/)).toBeInTheDocument()
   })
 
-  // Sorting is local: the payload is already here, so a column click must
-  // reorder in place without any further data fetching.
   it('sorts in memory', async () => {
     const typer = userEvent.setup()
     renderTable(
@@ -111,11 +107,9 @@ describe('HoldingsTable', () => {
       book([holding({ ticker: 'MSFT', value: 1500 }), holding({ ticker: 'AAPL', value: 900 })]),
     )
 
-    // Names read A-Z on the first click...
     await typer.click(screen.getByRole('button', { name: /Asset/ }))
     expect(rowOrder()).toEqual(['AAPL', 'MSFT'])
 
-    // ...money reads largest-first.
     await typer.click(screen.getByRole('button', { name: /Value/ }))
     expect(rowOrder()).toEqual(['MSFT', 'AAPL'])
   })

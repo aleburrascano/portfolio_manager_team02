@@ -1,7 +1,4 @@
-/* Layout of the app shell itself: header, sidebar, and the page slot.
-   The shell is pinned to the viewport height and never scrolls itself -
-   only .app-page does, so the header and sidebar stay in view no matter
-   how long a page's content runs. */
+
 
 .app-shell {
   display: flex;
@@ -17,10 +14,6 @@
   align-items: stretch;
 }
 
-/* Full width, so the scrollbar sits at the window edge rather than floating
-   at a centred column's boundary. The reading column is constrained on the
-   page inside instead, which also gives every page the same left edge on
-   every screen width. */
 .app-page {
   flex: 1;
   min-width: 0;
@@ -28,8 +21,6 @@
   overflow-y: auto;
 }
 
-/* Wide enough for the dashboard's 2:1 rows to keep a readable chart beside
-   a readable legend; the text-heavy pages set their own narrower measure. */
 .app-page > * {
   width: 100%;
   max-width: 1240px;
@@ -39,9 +30,6 @@
   outline: none;
 }
 
-/* column-reverse, not a reordered DOM: the nav stays first in source (and
-   so first in the tab order, behind the skip link) while rendering below
-   the page it navigates. */
 @media (max-width: 640px) {
   .app-body {
     flex-direction: column-reverse;

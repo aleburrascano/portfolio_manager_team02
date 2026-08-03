@@ -31,8 +31,6 @@
   color: var(--text-h);
 }
 
-/* Saved is a state, so it is marked by fill and colour rather than by the
-   label alone - the icon is filled in, not just relabelled. */
 .watch-button.watching {
   background: var(--accent-bg);
   border-color: var(--accent);

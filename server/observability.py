@@ -23,16 +23,9 @@ from sqlalchemy import text
 
 logger = logging.getLogger('treetop.request')
 
-# Paths that would otherwise dominate the log without saying anything. The
-# health check is matched exactly rather than by prefix, since every path
-# starts with a slash; the socket transport is a prefix because its polling
-# carries a session id.
 QUIET_EXACT = ('/',)
 QUIET_PREFIXES = ('/socket.io',)
 
-# Above this a request is worth noticing even though it succeeded. Set where
-# it is because a request that prices several tickers upstream lands around
-# a second, so this catches the ones doing materially more than that.
 SLOW_REQUEST_MS = 2000
 
 
@@ -54,8 +47,6 @@ def init_app(app: Flask) -> None:
             return response
 
         duration = _duration_ms()
-        # A slow success is the interesting case and would otherwise be
-        # indistinguishable from a fast one at the same level.
         level = logging.WARNING if duration >= SLOW_REQUEST_MS else logging.INFO
         if response.status_code >= 500:
             level = logging.ERROR
@@ -91,7 +82,5 @@ def health(app: Flask) -> Dict[str, Any]:
         status['status'] = 'degraded'
         status['database'] = f'unavailable: {type(error).__name__}'
 
-    # How much market data is being served from memory, which is the one
-    # number that says whether the cache is doing anything.
     status['marketDataCache'] = cache_sizes()
     return status

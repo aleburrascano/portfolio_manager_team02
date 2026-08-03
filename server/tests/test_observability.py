@@ -26,15 +26,13 @@ def test_health_reports_the_cache(client):
 
 def test_health_counts_cache_hits(client, monkeypatch):
     monkeypatch.setattr(market_data, '_price_history', lambda ticker, period: [])
-    market_data.price_history('AAPL')  # miss
-    market_data.price_history('AAPL')  # hit
+    market_data.price_history('AAPL')
+    market_data.price_history('AAPL')
 
     history = client.get('/').get_json()['marketDataCache']['history']
     assert history == {'entries': 1, 'hits': 1, 'misses': 1}
 
 
-# The case a health check exists for: the process is answering, but the
-# thing it needs is not there.
 def test_health_reports_an_unreachable_database(client, monkeypatch):
     def boom():
         raise RuntimeError('connection pool is gone')
@@ -44,8 +42,6 @@ def test_health_reports_an_unreachable_database(client, monkeypatch):
     response = client.get('/')
     body = response.get_json()
 
-    # Still 200: "replace this container" is the wrong instruction for a
-    # process that is merely waiting on its database.
     assert response.status_code == 200
     assert body['status'] == 'degraded'
     assert 'unavailable' in body['database']
@@ -55,11 +51,9 @@ def test_health_never_raises(client, monkeypatch):
     monkeypatch.setattr(
         'services.market_data.cache_sizes', lambda: (_ for _ in ()).throw(RuntimeError()),
     )
-    # cache_sizes is read inside health(), so a failure there would surface
-    # as a 500 from the one endpoint that must always answer.
     try:
         response = client.get('/')
-    except Exception:  # pragma: no cover - the assertion below is the point
+    except Exception:
         raise AssertionError('the health endpoint raised')
     assert response.status_code in (200, 500)
 
@@ -74,8 +68,6 @@ def test_a_request_is_logged_with_its_status(client, caplog):
     assert '200' in record.getMessage()
 
 
-# The health check runs on a timer and the socket transport polls
-# continuously; logging either would bury everything else.
 def test_the_health_check_is_not_logged(client, caplog):
     with caplog.at_level(logging.INFO, logger='treetop.request'):
         client.get('/')

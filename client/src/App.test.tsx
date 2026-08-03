@@ -33,8 +33,6 @@ describe('App', () => {
     expect(await screen.findByRole('heading', { name: 'Welcome back' })).toBeInTheDocument()
   })
 
-  // A server that couldn't answer must not be reported as "you're logged
-  // out": the user still has a session and retrying is the right advice.
   it('offers a retry rather than the login form when the session check fails', async () => {
     mockedFetchCurrentUser.mockResolvedValue({ status: 'unavailable', message: 'Server exploded' })
     render(<App />)
@@ -70,7 +68,6 @@ describe('App', () => {
     render(<App />)
     await screen.findByRole('button', { name: /Ada Lovelace/ })
 
-    // Account menu -> Log Out -> confirm.
     await typer.click(screen.getByRole('button', { name: /Ada Lovelace/ }))
     await typer.click(screen.getByRole('menuitem', { name: 'Log Out' }))
     await typer.click(screen.getByRole('alertdialog').querySelector('.danger-btn') as HTMLElement)

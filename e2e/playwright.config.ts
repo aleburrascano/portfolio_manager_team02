@@ -25,10 +25,6 @@ const databaseUrl = `sqlite:///${dbPath.replace(/\\/g, '/')}`
 
 export default defineConfig({
   testDir: './tests',
-  // Serialized rather than parallel: every test shares one SQLite file
-  // through one Flask process, and SQLite has no statement busy-timeout
-  // configured, so concurrent writers would intermittently hit "database
-  // is locked" instead of a real failure.
   workers: 1,
   reporter: 'list',
   globalSetup: './global-setup.ts',
@@ -41,23 +37,13 @@ export default defineConfig({
       command: 'python app.py',
       cwd: serverDir,
       url: 'http://localhost:5000/',
-      // Never reused: a leftover server from a previous run is bound to
-      // that run's database file, so every test would then be writing
-      // somewhere this run never migrated.
       reuseExistingServer: false,
       env: {
         ...process.env,
         DATABASE_URL: databaseUrl,
         SECRET_KEY: 'e2e-test-secret',
         CORS_ORIGINS: 'http://localhost:5173',
-        // Deterministic prices from services.fake_feed instead of live
-        // Yahoo. Without it this suite could only trade bonds, asserted on
-        // a real company's name ("Apple Inc.") staying put, and could never
-        // watch a conditional order actually fill - which is the one thing
-        // about them worth testing end to end.
         MARKET_DATA: 'fake',
-        // Prices are a pure function of the date here, so a tick is cheap
-        // and a test shouldn't wait five seconds to see a fill.
         POLL_INTERVAL_SECONDS: '1',
       },
     },

@@ -48,8 +48,6 @@ def withdraw_cash(user_id: int, amount: Decimal) -> None:
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        # Re-checked under the user row lock, so no concurrent request can
-        # withdraw the same balance twice.
         if ut.get_user_balance(user_id) < amount:
             raise InsufficientFunds('Not enough cash for this withdrawal.')
 

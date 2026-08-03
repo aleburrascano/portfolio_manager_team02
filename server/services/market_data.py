@@ -26,29 +26,22 @@ import yfinance as yf
 from services.exceptions import MarketDataUnavailable
 from services.ttl_cache import MISS, TTLCache
 
-# A yfinance search quote, as passed to a provider's match predicate.
 QuoteMatcher = Callable[[dict], bool]
 
-# Each window is the longest one that still tells the truth about the thing
-# it holds.
-#
-# Prices sit at the broadcast interval rather than above it, so the quote
-# feed still fetches a genuinely new number on every tick and it is the
-# other surfaces - the dashboard, the watchlist, the holdings table, the
-# limit order poller - that ride along on it for free.
-_quotes = TTLCache(ttl_seconds=5)
-# A year of daily closes changes once a day; minutes of staleness are
-# invisible on a chart and this is the single most expensive call here.
-_history = TTLCache(ttl_seconds=900)
-# A ticker's exchange and quote type are what decide, permanently, which
-# asset type it is filed under. They do not move.
-_classification = TTLCache(ttl_seconds=86400)
-_ratings = TTLCache(ttl_seconds=3600)
-_searches = TTLCache(ttl_seconds=300)
-_screens = TTLCache(ttl_seconds=60)
-# A ticker's display name is as stable as its classification, and costs the
-# same expensive .info call to learn.
-_names = TTLCache(ttl_seconds=86400)
+QUOTE_FRESHNESS_SECONDS = 5
+DAILY_CLOSE_FRESHNESS_SECONDS = 900
+RATINGS_FRESHNESS_SECONDS = 3600
+SEARCH_FRESHNESS_SECONDS = 300
+SCREEN_FRESHNESS_SECONDS = 60
+NEVER_CHANGES_SECONDS = 86400
+
+_quotes = TTLCache(ttl_seconds=QUOTE_FRESHNESS_SECONDS)
+_history = TTLCache(ttl_seconds=DAILY_CLOSE_FRESHNESS_SECONDS)
+_classification = TTLCache(ttl_seconds=NEVER_CHANGES_SECONDS)
+_ratings = TTLCache(ttl_seconds=RATINGS_FRESHNESS_SECONDS)
+_searches = TTLCache(ttl_seconds=SEARCH_FRESHNESS_SECONDS)
+_screens = TTLCache(ttl_seconds=SCREEN_FRESHNESS_SECONDS)
+_names = TTLCache(ttl_seconds=NEVER_CHANGES_SECONDS)
 
 _CACHES = (_quotes, _history, _classification, _ratings, _searches, _screens, _names)
 
@@ -172,8 +165,6 @@ def display_names(symbols: List[str]) -> Dict[str, str]:
         try:
             name = _fetch_display_name(symbol)
         except Exception:
-            # Not cached: an outage should not name a ticker after itself
-            # for the next day.
             known[symbol] = symbol
             continue
         _names.set(symbol, name)
@@ -227,13 +218,6 @@ def search_assets(query: str, matches: QuoteMatcher, limit: int = 10) -> List[di
     Search for assets by ticker or name, keeping only the quotes the
     caller's predicate accepts, then quoting the survivors.
     """
-    # Only the symbol/name match is cached, not the quotes hung off it -
-    # the debounced search box re-runs the same query as someone finishes
-    # typing, and which tickers match "appl" is stable for far longer than
-    # what they cost. quote_summaries then prices them at quote freshness.
-    # Keyed by the predicate's qualified name, not its identity: callers
-    # pass a bound method, which is a fresh object on every access, so id()
-    # would never hit - and could collide once one is collected.
     matcher = getattr(matches, '__qualname__', repr(matches))
     names = _searches.get_or_call(
         (query, limit, matcher), lambda: _search_names(query, matches, limit)
@@ -287,11 +271,6 @@ def quote_classification(ticker: str) -> Optional[dict]:
         return cached
 
     classification = _quote_classification(ticker)
-    # Only a positive answer is kept. None here means "unknown symbol or the
-    # feed is down", and this is the call that decides, permanently, which
-    # asset type a never-before-traded ticker gets filed under - remembering
-    # a transient outage for a day would misfile every trade of it made in
-    # that window.
     if classification is not None:
         _classification.set(ticker, classification)
     return classification
@@ -304,8 +283,6 @@ def _quote_classification(ticker: str) -> Optional[dict]:
         return None
 
     classification = {'quoteType': info.get('quoteType'), 'exchange': info.get('exchange')}
-    # An unknown symbol comes back as a dict with these fields empty rather
-    # than as an error, so an answer of "nothing" is still no answer.
     if not any(classification.values()):
         return None
     return classification
@@ -342,8 +319,6 @@ def _asset_quote(ticker: str) -> Optional[dict]:
     }
 
 
-# yfinance's recommendation columns, weakest to strongest, with the label
-# each maps to in the UI.
 RECOMMENDATION_BUCKETS = [
     ('strongBuy', 'Strong buy'),
     ('buy', 'Buy'),
@@ -406,9 +381,7 @@ def _analyst_ratings(ticker: str) -> Optional[dict]:
         return None
 
     return {
-        # e.g. 'buy', 'strong_buy', 'hold' - the feed's own summary word.
         'consensus': info.get('recommendationKey'),
-        # 1.0 (strong buy) to 5.0 (strong sell).
         'score': info.get('recommendationMean'),
         'analystCount': analyst_count,
         'targetLow': info.get('targetLowPrice'),
@@ -488,18 +461,12 @@ def valuation_price(ticker: str) -> float:
     if fields and fields.get('currentPrice') is not None:
         return float(fields['currentPrice'])
 
-    # fast_info had no last price; fall back to the last daily close, which
-    # is what trade_price reads.
     try:
         return float(trade_price(ticker))
     except Exception:
         return 0.0
 
 
-# Last, so every primitive above exists to be replaced. Swapping the fetch
-# functions rather than the whole module means the caching, batching,
-# classification and error handling around them stay the ones under test -
-# only the calls that would have left the process are stubbed.
 if os.environ.get('MARKET_DATA', '').lower() == 'fake':
     from services import fake_feed
 
