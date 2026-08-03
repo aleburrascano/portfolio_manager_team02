@@ -139,6 +139,13 @@ is retiring. Pointed straight at Railway, signing in worked and then every
 following request came back 401, in Safari and in any browser with third-party
 cookies turned off.
 
+The last rewrite in that file is the one client-side routing needs: anything
+that isn't `/api`, `/socket.io`, or a real file is an address this app resolves
+itself, so it has to be served `index.html`. Without it, opening
+`/trade/stock/NVDA` directly — or reloading on it — 404s at the edge before the
+app ever loads. (`vercel.json` is schema-validated and JSON has no comments, so
+this note lives here rather than beside the rule.)
+
 The one cost is that Vercel's rewrites don't carry a WebSocket upgrade, so the
 quote feed settles on Socket.IO's long-polling transport. It was already
 falling back to polling before this, so nothing was lost. A custom domain
