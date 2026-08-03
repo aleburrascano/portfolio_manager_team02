@@ -1,5 +1,6 @@
 import csv
 import io
+from decimal import Decimal
 
 from helpers import register_user
 
@@ -41,6 +42,38 @@ def test_history_caps_an_outsized_limit(client):
     assert response.status_code == 200
 
 
+def test_history_reports_what_a_sale_realised(client, monkeypatch):
+    import services.market_data as market_data
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'NMS', 'quoteType': 'EQUITY'},
+    )
+
+    user = register_user(client)
+    _deposit(client, user['userId'], 1000)
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
+    client.post(f'/api/v1/users/{user["userId"]}/assets/stock/buy',
+                json={'ticker': 'AAPL', 'quantity': 10})
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('15.00'))
+    client.post(f'/api/v1/users/{user["userId"]}/assets/stock/sell',
+                json={'ticker': 'AAPL', 'quantity': 4})
+
+    rows = client.get(f'/api/v1/users/{user["userId"]}/transactions').get_json()['transactions']
+    sale = next(row for row in rows if row['transactionType'] == 'sell')
+
+    # 4 units bought at 10, sold at 15.
+    assert sale['realized'] == {
+        'costBasis': 40.0, 'proceeds': 60.0, 'gainLoss': 20.0, 'gainLossPercent': 50.0,
+    }
+
+    # A buy realises nothing, and a deposit isn't a trade at all - so the
+    # field is absent rather than zero, which would read as "made nothing".
+    assert 'realized' not in next(row for row in rows if row['transactionType'] == 'buy')
+    assert 'realized' not in next(row for row in rows if row['type'] == 'cash')
+
+
 def test_export_returns_csv_of_every_row(client):
     user = register_user(client)
     for _ in range(2):
@@ -52,7 +85,10 @@ def test_export_returns_csv_of_every_row(client):
     assert 'attachment' in response.headers['Content-Disposition']
 
     rows = list(csv.reader(io.StringIO(response.get_data(as_text=True))))
-    assert rows[0] == ['Date', 'Type', 'Action', 'Ticker', 'Quantity', 'Price', 'Amount']
+    assert rows[0] == [
+        'Date', 'Type', 'Action', 'Ticker', 'Quantity', 'Price', 'Amount',
+        'Cost basis', 'Realized gain/loss',
+    ]
     assert len(rows) == 3  # header plus both deposits
 
 
@@ -72,8 +108,9 @@ def test_export_defuses_a_formula_in_a_cell(client, monkeypatch):
     import routes.history as history
 
     monkeypatch.setattr(history, 'get_user_transactions', lambda *args, **kwargs: [{
-        'transactionDate': '2026-01-01', 'type': 'stock', 'transactionType': 'buy',
-        'ticker': '=cmd|calc', 'qty': 1, 'price': 1, 'signedAmount': -1,
+        'transactionId': 1, 'transactionDate': '2026-01-01', 'type': 'stock',
+        'transactionType': 'buy', 'ticker': '=cmd|calc', 'qty': 1, 'price': 1,
+        'signedAmount': -1,
     }])
 
     user = register_user(client)
