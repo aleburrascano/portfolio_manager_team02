@@ -12,6 +12,7 @@ import {
   type PricePoint,
   type User,
 } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { useBalance } from '../balance-context'
 import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../realtime'
 import { useIdempotencyKey } from '../idempotency'
@@ -44,6 +45,8 @@ function AssetDetail({
   onBack: () => void
 }) {
   const { balance, refreshBalance } = useBalance()
+  const { byType } = useAssetTypes()
+  const capabilities = byType[assetType]
   const idempotency = useIdempotencyKey()
   const [detail, setDetail] = useState<AssetDetailType | null>(null)
   const [detailError, setDetailError] = useState('')
@@ -244,9 +247,10 @@ function AssetDetail({
                     {' '}({formatCurrency(Math.abs(quote.change ?? 0))})
                   </span>
                 </div>
-                {/* Bonds are repriced on a schedule rather than streamed,
-                    so claiming a live feed for one would be a lie. */}
-                {assetType !== 'bond' && (
+                {/* A type repriced on a schedule rather than streamed - a
+                    bond - gets no indicator; claiming a live feed for one
+                    would be a lie. */}
+                {capabilities?.streams && (
                   <div className="quote-feed">
                     <LiveIndicator connected={connected} lastUpdate={lastUpdate} />
                   </div>
@@ -347,9 +351,9 @@ function AssetDetail({
                   </button>
                 </div>
 
-                {/* Limit orders are stocks-only for now, so the toggle only
-                    shows up where placing one is actually possible. */}
-                {assetType === 'stock' && (
+                {/* The toggle only shows up where placing a conditional
+                    order is actually possible, which the server says. */}
+                {capabilities?.supportsLimitOrders && (
                   <div className="order-type-tabs">
                     <button
                       type="button"

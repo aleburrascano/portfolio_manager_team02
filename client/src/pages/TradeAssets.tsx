@@ -4,6 +4,7 @@ import AssetList from '../components/AssetList'
 import Icon, { type IconName } from './../components/Icon'
 import OpenOrdersTab from '../components/OpenOrdersTab'
 import { fetchPopularAssets, searchAssets, type Asset, type AssetType, type User } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { useLiveQuotes } from '../realtime'
 import './TradeAssets.css'
 
@@ -11,16 +12,14 @@ import './TradeAssets.css'
 // rather than being paid for by everyone who only browses the list.
 const AssetDetail = lazy(() => import('../components/AssetDetail'))
 
-const ASSET_TYPES: { type: AssetType; label: string; icon: IconName }[] = [
-  { type: 'stock', label: 'Stocks', icon: 'stock' },
-  { type: 'crypto', label: 'Crypto', icon: 'crypto' },
-  { type: 'bond', label: 'Bonds', icon: 'bond' },
-]
-
-// Derived from the tab list so a new asset type only has to be added once.
-const ASSET_TYPE_LABELS = Object.fromEntries(
-  ASSET_TYPES.map(({ type, label }) => [type, label]),
-) as Record<AssetType, string>
+// The tabs, their order, and their labels all come from the server's
+// provider registry; only the icon is a client-side decision, and a type
+// with no icon of its own gets a neutral one rather than no tab.
+const ICONS: Partial<Record<AssetType, IconName>> = {
+  stock: 'stock',
+  crypto: 'crypto',
+  bond: 'bond',
+}
 
 function TradeAssets({
   user,
@@ -30,6 +29,7 @@ function TradeAssets({
   /** An asset picked elsewhere - a holdings row, a watchlist tile. */
   openAsset?: { assetType: AssetType; symbol: string } | null
 }) {
+  const { types, byType } = useAssetTypes()
   const [assetType, setAssetType] = useState<AssetType>(openAsset?.assetType ?? 'stock')
   const [query, setQuery] = useState('')
   const [popularAssets, setPopularAssets] = useState<Asset[]>([])
@@ -39,9 +39,9 @@ function TradeAssets({
   // could drift out of sync with it.
   const [search, setSearch] = useState<{ key: string; assets: Asset[] }>({ key: '', assets: [] })
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(openAsset?.symbol ?? null)
-  // Limit orders are stocks-only, so this only ever shows for that tab -
-  // switching away from Stocks drops back to browsing rather than leaving
-  // a dead-end view up for an asset type that doesn't support it.
+  // Only shown for a type that takes conditional orders - switching away
+  // drops back to browsing rather than leaving a dead-end view up for an
+  // asset type that doesn't support them.
   const [showOpenOrders, setShowOpenOrders] = useState(false)
   const popularCache = useRef<Partial<Record<AssetType, Asset[]>>>({})
 
@@ -104,6 +104,7 @@ function TradeAssets({
   const listed = isSearching ? search.assets : popularAssets
   const live = useLiveQuotes(assetType, listed.map((asset) => asset.symbol))
   const assets = listed.map((asset) => ({ ...asset, ...live[asset.symbol] }))
+  const typeLabel = byType[assetType]?.label ?? assetType
 
   function switchAssetType(next: AssetType) {
     if (next === assetType) return
@@ -120,7 +121,7 @@ function TradeAssets({
           <button type="button" className="back-btn" onClick={() => setShowOpenOrders(false)}>
             ← Back
           </button>
-          <OpenOrdersTab user={user} />
+          <OpenOrdersTab user={user} assetType={assetType} />
         </>
       ) : selectedSymbol ? (
         <Suspense
@@ -149,7 +150,7 @@ function TradeAssets({
               list starts higher up the page instead of below two bands. */}
           <div className="trade-controls">
             <div className="asset-type-tabs">
-              {ASSET_TYPES.map(({ type, label, icon }) => (
+              {types.map(({ assetType: type, label }) => (
                 <button
                   key={type}
                   type="button"
@@ -157,12 +158,12 @@ function TradeAssets({
                   aria-pressed={assetType === type}
                   onClick={() => switchAssetType(type)}
                 >
-                  <Icon name={icon} />
+                  <Icon name={ICONS[type] ?? 'stock'} />
                   {label}
                 </button>
               ))}
             </div>
-            {assetType === 'stock' && (
+            {byType[assetType]?.supportsLimitOrders && (
               <button
                 type="button"
                 className="secondary-btn open-orders-toggle"
@@ -177,15 +178,15 @@ function TradeAssets({
             title={
               isSearching
                 ? 'Search results'
-                : `Most active ${ASSET_TYPE_LABELS[assetType].toLowerCase()}`
+                : `Most active ${typeLabel.toLowerCase()}`
             }
             assetType={assetType}
             assets={assets}
             loading={isSearching ? searchLoading : popularLoading}
             emptyMessage={
               isSearching
-                ? `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} match "${trimmedQuery}". Check the spelling, or try another asset type above.`
-                : `No ${ASSET_TYPE_LABELS[assetType].toLowerCase()} are available right now.`
+                ? `No ${typeLabel.toLowerCase()} match "${trimmedQuery}". Check the spelling, or try another asset type above.`
+                : `No ${typeLabel.toLowerCase()} are available right now.`
             }
             onSelect={setSelectedSymbol}
           />

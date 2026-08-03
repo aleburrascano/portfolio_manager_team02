@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { cancelLimitOrder, fetchLimitOrders, type LimitOrder, type User } from '../api'
+import {
+  cancelLimitOrder,
+  fetchLimitOrders,
+  type AssetType,
+  type LimitOrder,
+  type User,
+} from '../api'
 import { formatCurrency, formatNumber } from '../format'
 import './OpenOrdersTab.css'
 
@@ -12,12 +18,12 @@ function formatPlaced(value: string) {
 }
 
 /**
- * Pending GTC limit orders for stocks, with a cancel action per row.
+ * Pending GTC limit orders for one asset type, with a cancel action per row.
  *
- * Scoped to 'stock' since that's the only asset type limit orders support
- * right now - see services.limit_orders on the server.
+ * Scoped to whichever type the trade screen is showing; only the types the
+ * server reports as supporting conditional orders ever get here.
  */
-function OpenOrdersTab({ user }: { user: User }) {
+function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }) {
   const [orders, setOrders] = useState<LimitOrder[] | null>(null)
   const [error, setError] = useState('')
   const [cancellingId, setCancellingId] = useState<number | null>(null)
@@ -28,8 +34,8 @@ function OpenOrdersTab({ user }: { user: User }) {
   // the result. Reaching for state inside the effect body is what the
   // hooks lint objects to.
   const loadOrders = useCallback(
-    () => fetchLimitOrders(user.userId, 'stock', 'pending'),
-    [user.userId],
+    () => fetchLimitOrders(user.userId, assetType, 'pending'),
+    [user.userId, assetType],
   )
 
   useEffect(() => {

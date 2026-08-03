@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 import services.market_data as market_data
+from services.asset_providers import PROVIDERS
 from db.connection import get_session
 from db.models import Asset, Bond
 from helpers import register_user
@@ -39,6 +40,24 @@ def _add_bond(app, ticker='TBOND'):
 
 def test_unknown_asset_type_is_404(client):
     assert client.get('/api/v1/assets/nope/popular').status_code == 404
+
+
+def test_asset_types_lists_every_registered_provider(client):
+    body = client.get('/api/v1/assets/types').get_json()
+    by_type = {row['assetType']: row for row in body['assetTypes']}
+
+    assert set(by_type) == set(PROVIDERS)
+    assert by_type['stock'] == {
+        'assetType': 'stock', 'label': 'Stocks', 'streams': True, 'supportsLimitOrders': True,
+    }
+    # A bond is priced from its own terms on a schedule, so it neither
+    # streams nor takes a conditional order.
+    assert by_type['bond']['streams'] is False
+    assert by_type['bond']['supportsLimitOrders'] is False
+
+
+def test_asset_types_is_public(client):
+    assert client.get('/api/v1/assets/types').status_code == 200
 
 
 def test_search_requires_a_query(client):

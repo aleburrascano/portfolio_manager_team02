@@ -6,6 +6,7 @@ import Account from './pages/Account'
 import Header from './components/Header'
 import Sidebar, { type Page } from './components/Sidebar'
 import Login from './components/Login'
+import { AssetTypesProvider } from './AssetTypesContext'
 import { BalanceProvider } from './BalanceContext'
 import { fetchCurrentUser, logout, type AssetType, type SessionResult, type User } from './api'
 import './App.css'
@@ -90,39 +91,41 @@ function App() {
   const user = session.user
 
   return (
-    <BalanceProvider userId={user.userId}>
-      <a className="skip-link" href="#app-page">
-        Skip to main content
-      </a>
-      <div className="app-shell">
-        <Header
-          user={user}
-          onOpenAccount={() => setPage('account')}
-          onLogout={handleLogout}
-        />
-        <div className="app-body">
-          <Sidebar page={page} onNavigate={setPage} />
-          <main className="app-page" id="app-page" tabIndex={-1}>
-            {page === 'dashboard' && (
-              <Dashboard
-                user={user}
-                onBrowseAssets={() => {
-                  setOpenAsset(null)
-                  setPage('trade-assets')
-                }}
-                onSelectAsset={(assetType, symbol) => {
-                  setOpenAsset({ assetType, symbol })
-                  setPage('trade-assets')
-                }}
-              />
-            )}
-            {page === 'trade-assets' && <TradeAssets user={user} openAsset={openAsset} />}
-            {page === 'transaction-history' && <TransactionHistory user={user} />}
-            {page === 'account' && <Account user={user} onUpdate={handleLogin} />}
-          </main>
+    <AssetTypesProvider>
+      <BalanceProvider userId={user.userId}>
+        <a className="skip-link" href="#app-page">
+          Skip to main content
+        </a>
+        <div className="app-shell">
+          <Header
+            user={user}
+            onOpenAccount={() => setPage('account')}
+            onLogout={handleLogout}
+          />
+          <div className="app-body">
+            <Sidebar page={page} onNavigate={setPage} />
+            <main className="app-page" id="app-page" tabIndex={-1}>
+              {page === 'dashboard' && (
+                <Dashboard
+                  user={user}
+                  onBrowseAssets={() => {
+                    setOpenAsset(null)
+                    setPage('trade-assets')
+                  }}
+                  onSelectAsset={(assetType, symbol) => {
+                    setOpenAsset({ assetType, symbol })
+                    setPage('trade-assets')
+                  }}
+                />
+              )}
+              {page === 'trade-assets' && <TradeAssets user={user} openAsset={openAsset} />}
+              {page === 'transaction-history' && <TransactionHistory user={user} />}
+              {page === 'account' && <Account user={user} onUpdate={handleLogin} />}
+            </main>
+          </div>
         </div>
-      </div>
-    </BalanceProvider>
+      </BalanceProvider>
+    </AssetTypesProvider>
   )
 }
 

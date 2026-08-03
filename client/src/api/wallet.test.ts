@@ -23,9 +23,17 @@ describe('fetchBalance', () => {
 })
 
 describe('fetchPortfolioBreakdown', () => {
-  it('defaults missing fields to zero', async () => {
-    mockedApiFetch.mockResolvedValue({ cash: 100 })
-    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 100, stock: 0, crypto: 0, bond: 0 })
+  it('defaults a missing cash figure to zero', async () => {
+    mockedApiFetch.mockResolvedValue({ stock: 50 })
+    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 0, stock: 50 })
+  })
+
+  // The server builds these buckets from its provider registry, so a type
+  // this client has never heard of has to survive the trip rather than
+  // being dropped by a fixed list of keys.
+  it('passes through an asset type it does not know about', async () => {
+    mockedApiFetch.mockResolvedValue({ cash: 100, commodity: 25 })
+    await expect(fetchPortfolioBreakdown(1)).resolves.toEqual({ cash: 100, commodity: 25 })
   })
 })
 

@@ -1,7 +1,14 @@
 import { apiFetch, post } from './client'
 import type { AssetType } from './assets'
 
-export type PortfolioBreakdown = { cash: number; stock: number; crypto: number; bond: number }
+/**
+ * How much of the portfolio sits in cash and in each asset type.
+ *
+ * Open-ended rather than a fixed set of keys: the server builds these
+ * buckets from its provider registry, so a new asset type appears here on
+ * its own and a client that enumerated three of them would silently drop it.
+ */
+export type PortfolioBreakdown = { cash: number } & Partial<Record<AssetType, number>>
 
 export type Transaction = {
   transactionId: number
@@ -87,7 +94,7 @@ export async function fetchPortfolioBreakdown(userId: number): Promise<Portfolio
     `/users/${userId}/portfolio`,
     'Failed to fetch portfolio breakdown',
   )
-  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0, bond: data.bond || 0 }
+  return { ...data, cash: data.cash || 0 }
 }
 
 export async function fetchPortfolioPerformance(
