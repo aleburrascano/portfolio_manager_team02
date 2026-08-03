@@ -14,6 +14,7 @@ import logging
 import threading
 
 from services.limit_orders import evaluate_pending_orders
+from services.market_data import sweep_caches
 
 POLL_INTERVAL_SECONDS = 5
 
@@ -24,6 +25,10 @@ def run_once(app) -> int:
     """One tick: evaluate all pending orders under a fresh app context."""
     with app.app_context():
         try:
+            # Piggybacked here rather than given its own thread: market data
+            # entries expire on read, so this only clears out tickers nobody
+            # asked about again, and this is the one loop already on a timer.
+            sweep_caches()
             return evaluate_pending_orders()
         except Exception:
             # One bad tick (a DB hiccup, an upstream outage) must not kill
