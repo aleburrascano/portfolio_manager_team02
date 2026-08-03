@@ -18,7 +18,6 @@
       "destination": "https://api-production-bf98.up.railway.app/socket.io/:path*"
     },
     {
-      "comment": "Client-side routing: any path that isn't the API, the socket, or a real file is a route this app resolves itself. Without this, opening /trade/stock/NVDA directly - or reloading on it - would 404 at the edge before the app ever loaded.",
       "source": "/((?!api/|socket.io).*)",
       "destination": "/index.html"
     }
