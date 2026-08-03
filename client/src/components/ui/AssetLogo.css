@@ -1,5 +1,6 @@
 
 .asset-logo {
+  position: relative;
   width: 2.4em;
   height: 2.4em;
   flex-shrink: 0;
@@ -14,6 +15,29 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text);
+  overflow: hidden;
+}
+
+.asset-logo-mark {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 0.28em;
+  background: inherit;
+  opacity: 0;
+  transition: opacity 140ms ease-out;
+}
+
+.asset-logo-mark.is-loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .asset-logo-mark {
+    transition: none;
+  }
 }
 
 .asset-logo-stock {

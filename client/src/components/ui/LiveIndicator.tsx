@@ -8,6 +8,10 @@ import './LiveIndicator.css'
  * moves, and a working feed is indistinguishable from a broken one. The
  * timestamp ticks on every received update whether or not the number
  * changed, which is the evidence a still price can't provide.
+ *
+ * It also carries whether there has ever been a connection to lose, since
+ * announcing a reconnection to someone who has only just arrived reads as
+ * a fault rather than as the socket still opening.
  */
 function LiveIndicator({
   connected,
@@ -17,10 +21,13 @@ function LiveIndicator({
   lastUpdate: Date | null
 }) {
   if (!connected) {
+    const hasConnectedBefore = lastUpdate !== null
     return (
       <p className="live-indicator offline" role="status">
         <span className="live-dot" aria-hidden="true" />
-        Reconnecting — prices may be out of date
+        {hasConnectedBefore
+          ? 'Reconnecting — prices may be out of date'
+          : 'Connecting to the live price feed'}
       </p>
     )
   }
