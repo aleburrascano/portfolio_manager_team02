@@ -1,6 +1,7 @@
 from typing import Tuple
 from flask import Blueprint, request
 from services.user_transactions import get_user_transactions
+from apidocs import documents
 from authorization import require_user
 from links import transactions_links
 
@@ -10,6 +11,23 @@ MAX_PAGE_SIZE = 500
 
 @history_bp.route('/users/<int:user_id>/transactions', methods=['GET'])
 @require_user
+@documents(params=[
+    {
+        'name': 'limit',
+        'in': 'query',
+        'required': False,
+        'type': 'integer',
+        'description': f'Maximum rows to return, capped at {MAX_PAGE_SIZE}. Omitted returns everything.',
+    },
+    {
+        'name': 'offset',
+        'in': 'query',
+        'required': False,
+        'type': 'integer',
+        'default': 0,
+        'description': 'Rows to skip, for paging.',
+    },
+])
 def get_transaction_history(user_id: int) -> Tuple[dict, int]:
     """
     Get a user's chronological transaction history (cash and asset).

@@ -8,12 +8,16 @@ import services.cash_transactions as ct
 import services.asset_transactions as at
 import services.holdings as holdings
 import services.portfolio_performance as pp
+from apidocs import IDEMPOTENCY_KEY, documents
 from authorization import require_user
 from idempotency import idempotent
 from links import balance_links, portfolio_links
 from validation import parse_amount, parse_days
 
 wallet_bp = Blueprint('wallet', __name__)
+
+#: Both cash routes take the same body.
+_AMOUNT_BODY = {'amount': {'type': 'number', 'example': 500.00}}
 
 @wallet_bp.route('/users/<int:user_id>/balance', methods=['GET'])
 @require_user
@@ -44,6 +48,7 @@ def get_portfolio_breakdown(user_id: int) -> Tuple[dict, int]:
 @wallet_bp.route('/users/<int:user_id>/deposit', methods=['POST'])
 @require_user
 @idempotent
+@documents(body=_AMOUNT_BODY, required=['amount'], params=[IDEMPOTENCY_KEY])
 def deposit_cash(user_id: int) -> Tuple[dict, int]:
     """
     Deposit cash into the user's account.
@@ -61,6 +66,7 @@ def deposit_cash(user_id: int) -> Tuple[dict, int]:
 @wallet_bp.route('/users/<int:user_id>/withdraw', methods=['POST'])
 @require_user
 @idempotent
+@documents(body=_AMOUNT_BODY, required=['amount'], params=[IDEMPOTENCY_KEY])
 def withdraw_cash(user_id: int) -> Tuple[dict, int]:
     """
     Withdraw cash from the user's account.
@@ -77,6 +83,14 @@ def withdraw_cash(user_id: int) -> Tuple[dict, int]:
 
 @wallet_bp.route('/users/<int:user_id>/portfolio/performance', methods=['GET'])
 @require_user
+@documents(params=[{
+    'name': 'days',
+    'in': 'query',
+    'required': False,
+    'type': 'integer',
+    'default': 365,
+    'description': 'How far back to chart.',
+}])
 def get_portfolio_performance(user_id: int) -> Tuple[dict, int]:
     """
     Get a user's portfolio value over time, against what they paid in.
