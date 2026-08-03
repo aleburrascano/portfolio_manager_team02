@@ -68,16 +68,28 @@ def sweep_caches() -> int:
     return sum(cache.sweep() for cache in _CACHES)
 
 
-def cache_sizes() -> Dict[str, int]:
-    """Live entry counts per cache, for the health endpoint."""
+_BY_NAME = {
+    'quotes': _quotes,
+    'history': _history,
+    'classification': _classification,
+    'ratings': _ratings,
+    'searches': _searches,
+    'screens': _screens,
+    'names': _names,
+}
+
+
+def cache_sizes() -> Dict[str, dict]:
+    """
+    Entries held and how often each cache answered, for the health endpoint.
+
+    The hit rate is the number that says whether a window is doing anything:
+    a cache that only ever misses is pure overhead, and one that only ever
+    hits is probably holding data for longer than it is true.
+    """
     return {
-        'quotes': len(_quotes),
-        'history': len(_history),
-        'classification': len(_classification),
-        'ratings': len(_ratings),
-        'searches': len(_searches),
-        'screens': len(_screens),
-        'names': len(_names),
+        name: {'entries': len(cache), 'hits': cache.hits, 'misses': cache.misses}
+        for name, cache in _BY_NAME.items()
     }
 
 

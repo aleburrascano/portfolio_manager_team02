@@ -2,7 +2,9 @@
 Flask application entry point: loads config, wires up the database and the
 Socket.IO server, and registers all route blueprints.
 """
+import logging
 import os
+from typing import Tuple
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -11,6 +13,7 @@ from authorization import init_app as init_sessions
 from db.connection import init_app as init_db
 from errors import register_error_handlers
 from limit_order_poller import start as start_limit_order_poller
+from observability import health, init_app as init_observability
 from realtime import init_app as init_realtime, socketio
 from routes.wallet import wallet_bp
 from routes.assets import assets_bp
@@ -20,9 +23,18 @@ from routes.limit_orders import limit_orders_bp
 
 load_dotenv()
 
+# Gunicorn owns the handlers in production and Flask's own logger inherits
+# from the root, so configuring it here is what makes anything below WARNING
+# actually reach the log at all.
+logging.basicConfig(
+    level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
+    format='%(asctime)s %(levelname)s %(name)s %(message)s',
+)
+
 app = Flask(__name__)
 init_db(app)
 init_sessions(app)
+init_observability(app)
 
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
 CORS(app, origins=cors_origins, supports_credentials=True)
@@ -51,9 +63,18 @@ if os.environ.get('START_LIMIT_ORDER_POLLER', 'true').lower() != 'false':
     start_limit_order_poller(app)
 
 @app.route('/')
-def index() -> dict:
-    """Health check endpoint."""
-    return {'status': 'ok'}
+def index() -> Tuple[dict, int]:
+    """
+    Health check.
+
+    Answers 200 while the process can serve at all, and says separately
+    whether the database is reachable - a 503 here would tell a platform to
+    replace a container that is merely waiting on its database.
+
+    Returns:
+        dict: {'status', 'database', 'marketDataCache'}
+    """
+    return health(app), 200
 
 if __name__ == '__main__':
     # socketio.run rather than app.run, so the WebSocket endpoint is served

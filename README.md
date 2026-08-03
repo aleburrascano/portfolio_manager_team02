@@ -43,6 +43,8 @@ Everything lives in `server/.env` (not committed):
 | `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
 | `CORS_ORIGINS` | Comma-separated. Defaults to `http://localhost:5173`. |
 | `CROSS_SITE_COOKIE` | Set to `1` only where the client is on a different domain than the server. Sends the session cookie as `SameSite=None; Secure`, which needs HTTPS — so it breaks local sign-in. |
+| `LOG_LEVEL` | Defaults to `INFO`, which logs one line per request with its status and duration. `WARNING` keeps only the slow ones, the 500s, and background work that failed. |
+| `START_LIMIT_ORDER_POLLER` | Set to `false` to stop the background thread that fills conditional orders and redeems matured bonds. The only switch that keeps this process off the market data feed on a timer, which is why the test suite sets it — leave it alone otherwise, or nothing ever fills. |
 
 MySQL needs its (empty) database to exist first; SQLite doesn't.
 
