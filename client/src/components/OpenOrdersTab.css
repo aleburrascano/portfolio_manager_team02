@@ -1,0 +1,125 @@
+.open-orders-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.open-orders-empty {
+  margin: 0;
+  padding: 36px 24px;
+  text-align: center;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-width: 52ch;
+  margin-inline: auto;
+  text-wrap: pretty;
+}
+
+.open-orders-scroll {
+  overflow-x: auto;
+}
+
+.open-orders-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.open-orders-table th,
+.open-orders-table td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.open-orders-table th.numeric,
+.open-orders-table td.numeric {
+  text-align: right;
+}
+
+.open-orders-table thead th {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.open-orders-table tbody tr:hover {
+  background: var(--paper-band);
+}
+
+.open-orders-ticker {
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.open-orders-side {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+
+.open-orders-side.buy {
+  color: var(--positive);
+}
+
+.open-orders-side.sell {
+  color: var(--negative);
+}
+
+.open-orders-cancel {
+  padding: 5px 12px;
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 700px) {
+  .open-orders-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .open-orders-table,
+  .open-orders-table tbody,
+  .open-orders-table tr,
+  .open-orders-table td {
+    display: block;
+  }
+
+  .open-orders-table tr {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .open-orders-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 3px 0;
+    border-bottom: none;
+    white-space: normal;
+  }
+
+  .open-orders-table td[data-label]:not([data-label='']):not(:empty)::before {
+    content: attr(data-label);
+    font-family: var(--sans);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  .open-orders-table td[data-label='Ticker'] {
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  .open-orders-table td[data-label='Ticker']::before {
+    content: none;
+  }
+}

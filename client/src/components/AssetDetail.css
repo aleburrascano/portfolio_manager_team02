@@ -118,6 +118,34 @@
   color: var(--accent-ink);
 }
 
+/* A second, smaller tab row for market vs. limit - subordinate to the
+   buy/sell tabs above it, not another primary choice. */
+.order-type-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.order-type-tabs button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  padding: 5px 10px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.order-type-tabs button.active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
 .trade-price {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;

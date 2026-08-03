@@ -1,0 +1,235 @@
+"""
+Place, cancel, list, and fill GTC limit orders for stocks.
+
+Placing and cancelling are request-scoped, exactly like buy/sell. Filling
+is different: it isn't triggered by a request at all, it's driven by
+evaluate_pending_orders(), which limit_order_poller calls on a timer from
+its own DB session. Keeping that function here (not in the poller module)
+is what makes it directly unit-testable the same way purchase_asset/
+sell_asset already are - construct an app context, call it, assert on the
+database - with the sleep loop itself as a thin, separately tested wrapper.
+"""
+import collections
+from datetime import datetime, timezone
+from decimal import Decimal
+from typing import List, Optional
+
+from sqlalchemy import select
+
+import db.connection as db_conn
+import services.market_data as market_data
+import services.user_transactions as ut
+from db.models import LimitOrder
+from services.asset_providers import PROVIDERS
+from services.asset_transactions import get_holding_qty_decimal, record_trade, register_asset
+from services.exceptions import (
+    InsufficientFunds, InsufficientHoldings, InvalidInput, MarketDataUnavailable,
+    OrderNotFound, UnknownUser,
+)
+
+SIDES = ('buy', 'sell')
+
+
+def _now() -> datetime:
+    # Naive UTC, matching how every DateTime column in this schema is
+    # written and compared (see db.connection's session-timezone pin).
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _require_limit_order_support(asset_type: str) -> None:
+    if not PROVIDERS[asset_type].supports_limit_orders:
+        raise InvalidInput('Limit orders are only supported for stocks right now.')
+
+
+def place_limit_order(
+    user_id: int, asset_type: str, ticker: str, side: str, quantity: Decimal, limit_price: Decimal,
+) -> LimitOrder:
+    """
+    Queue a GTC limit order.
+
+    A quick, point-in-time affordability check runs now under the user row
+    lock - the same check purchase_asset/sell_asset make - so an order that
+    obviously can't be covered is rejected immediately, the same experience
+    as a market order. It is NOT a reservation: nothing is escrowed, so it
+    is re-checked for real at fill time (evaluate_pending_orders), because
+    the user's balance or holdings can legitimately move between now and
+    then.
+
+    Raises:
+        UnknownUser: no such user.
+        InvalidInput: asset_type isn't stock, side isn't buy/sell, or (for
+            a buy) the stock can't currently be bought.
+        MarketDataUnavailable: the asset can't be priced (from registering
+            a never-before-traded ticker).
+        InsufficientFunds / InsufficientHoldings: as of right now, the
+            order couldn't be covered if it filled immediately.
+    """
+    if side not in SIDES:
+        raise InvalidInput("side must be 'buy' or 'sell'.")
+    _require_limit_order_support(asset_type)
+
+    provider = PROVIDERS[asset_type]
+    session = db_conn.get_session()
+    try:
+        if side == 'buy':
+            tradable, reason = provider.can_trade(ticker)
+            if not tradable:
+                raise InvalidInput(reason or 'This asset cannot be bought.')
+
+        if not db_conn.lock_user(session, user_id):
+            raise UnknownUser('No such user.')
+
+        register_asset(session, provider, ticker)
+
+        if side == 'buy':
+            if ut.get_user_balance(user_id) < quantity * limit_price:
+                raise InsufficientFunds('Not enough cash to cover this order if it fills right now.')
+        else:
+            if get_holding_qty_decimal(user_id, ticker) < quantity:
+                raise InsufficientHoldings('Not enough shares to cover this order if it fills right now.')
+
+        order = LimitOrder(
+            userId=user_id, ticker=ticker, side=side,
+            quantity=quantity, limitPrice=limit_price, status='pending',
+        )
+        session.add(order)
+        session.commit()
+        return order
+    except Exception:
+        session.rollback()
+        raise
+
+
+def _lock_order(session, limit_order_id: int) -> Optional[LimitOrder]:
+    """
+    Row-lock one order by ID, the same SQLite-skipping way db_conn.lock_user
+    locks a user - so a cancel and a poller fill of the same order can't
+    both act on it: whichever gets here first wins, and the other sees the
+    resolved status and no-ops (the poller) or reports it (cancel).
+    """
+    statement = select(LimitOrder).where(LimitOrder.limitOrderId == limit_order_id)
+    if session.get_bind().dialect.name != 'sqlite':
+        statement = statement.with_for_update()
+    return session.scalar(statement)
+
+
+def cancel_limit_order(user_id: int, limit_order_id: int) -> None:
+    """
+    Cancel a pending order. Safe to call twice: the second call finds the
+    order already resolved and raises rather than double-cancelling, so a
+    client retry after a dropped response can't do anything harmful.
+
+    Raises:
+        OrderNotFound: no such order, or it belongs to another user.
+        InvalidInput: the order isn't pending any more (filled/cancelled).
+    """
+    session = db_conn.get_session()
+    try:
+        order = _lock_order(session, limit_order_id)
+        if order is None or order.userId != user_id:
+            raise OrderNotFound('No such order.')
+        if order.status != 'pending':
+            raise InvalidInput('This order is no longer pending.')
+
+        order.status = 'cancelled'
+        order.resolvedAt = _now()
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+
+
+def list_limit_orders(user_id: int, status: Optional[str] = None) -> List[LimitOrder]:
+    """A user's limit orders, newest first, optionally filtered by status."""
+    statement = select(LimitOrder).where(LimitOrder.userId == user_id)
+    if status is not None:
+        statement = statement.where(LimitOrder.status == status)
+    # limitOrderId breaks ties within the same createdAt tick (SQLite's
+    # CURRENT_TIMESTAMP only has second resolution), keeping the list
+    # deterministically newest-first.
+    statement = statement.order_by(LimitOrder.createdAt.desc(), LimitOrder.limitOrderId.desc())
+    return db_conn.get_session().scalars(statement).all()
+
+
+def evaluate_pending_orders() -> int:
+    """
+    Fill every pending order whose condition is met right now, at the
+    market price prevailing at the moment of the fill (not the price that
+    was true when the condition was first noticed) - all-or-nothing, one
+    AssetTransaction per fill.
+
+    Orders are grouped by ticker so each ticker's price costs one
+    market_data call no matter how many orders are waiting on it. Each
+    candidate is then locked and resolved independently: a user (or order)
+    row lock means one fill can't race a manual trade, a manual cancel, or
+    another fill for the same user, but a stuck or slow fill for one user
+    never blocks another user's.
+
+    If a buy's cost (or a sell's quantity) can no longer be covered at fill
+    time - the user spent the cash or sold the shares elsewhere since
+    placing the order - the order is left pending rather than cancelled.
+    There is no reservation system, so "temporarily can't afford it" and
+    "will never be able to afford it" look identical from here; the safer
+    default for a GTC order is to keep trying rather than to guess.
+
+    Returns:
+        int: how many orders were filled this pass.
+    """
+    session = db_conn.get_session()
+    pending = session.scalars(
+        select(LimitOrder).where(LimitOrder.status == 'pending')
+        # Oldest-first (limitOrderId breaks createdAt ties), so when two
+        # orders on the same ticker can't both be covered, the one placed
+        # first wins - the same FIFO priority a real order book gives.
+        .order_by(LimitOrder.createdAt, LimitOrder.limitOrderId)
+    ).all()
+    if not pending:
+        return 0
+
+    by_ticker = collections.defaultdict(list)
+    for order in pending:
+        by_ticker[order.ticker].append(order)
+
+    filled = 0
+    for ticker, orders in by_ticker.items():
+        try:
+            price = market_data.trade_price(ticker)
+        except MarketDataUnavailable:
+            continue  # try this ticker again next tick
+
+        for order in orders:
+            if _try_fill(session, order.limitOrderId, price):
+                filled += 1
+    return filled
+
+
+def _try_fill(session, limit_order_id: int, price: Decimal) -> bool:
+    """Fill one order under its own lock, if its condition still holds."""
+    try:
+        order = _lock_order(session, limit_order_id)
+        if order is None or order.status != 'pending':
+            return False
+
+        met = price <= order.limitPrice if order.side == 'buy' else price >= order.limitPrice
+        if not met:
+            return False
+
+        if not db_conn.lock_user(session, order.userId):
+            return False  # user no longer exists; leave the order pending
+
+        if order.side == 'buy':
+            if ut.get_user_balance(order.userId) < order.quantity * price:
+                return False
+        else:
+            if get_holding_qty_decimal(order.userId, order.ticker) < order.quantity:
+                return False
+
+        tx = record_trade(session, order.userId, order.ticker, order.quantity, price, order.side)
+        order.status = 'filled'
+        order.assetTransactionId = tx.assetTransactionId
+        order.resolvedAt = _now()
+        session.commit()
+        return True
+    except Exception:
+        session.rollback()
+        return False
