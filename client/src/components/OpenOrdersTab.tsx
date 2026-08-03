@@ -22,23 +22,39 @@ function OpenOrdersTab({ user }: { user: User }) {
   const [error, setError] = useState('')
   const [cancellingId, setCancellingId] = useState<number | null>(null)
 
-  const load = useCallback(async () => {
-    try {
-      setOrders(await fetchLimitOrders(user.userId, 'stock', 'pending'))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load open orders.')
-    }
-  }, [user.userId])
+  // Fetching and storing are kept apart so the effect can drop a response
+  // that arrives after the user has moved on, while the cancel handler -
+  // which is always acting on the screen in front of someone - just takes
+  // the result. Reaching for state inside the effect body is what the
+  // hooks lint objects to.
+  const loadOrders = useCallback(
+    () => fetchLimitOrders(user.userId, 'stock', 'pending'),
+    [user.userId],
+  )
 
   useEffect(() => {
-    load()
-  }, [load])
+    let cancelled = false
+
+    loadOrders()
+      .then((rows) => {
+        if (!cancelled) setOrders(rows)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to load open orders.')
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [loadOrders])
 
   async function handleCancel(orderId: number) {
     setCancellingId(orderId)
     try {
       await cancelLimitOrder(user.userId, orderId)
-      await load()
+      setOrders(await loadOrders())
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to cancel order.')
     } finally {
