@@ -118,10 +118,10 @@ function Watchlist({
           <h3 id="watchlist-title" className="section-title">
             {showingSuggestions ? 'Most active today' : 'Watchlist'}
           </h3>
-          {showingSuggestions && !loading && (
+          {showingSuggestions && !loading && tiles.length > 0 && (
             <p className="watchlist-hint">
-              Nothing saved yet — open any asset and choose <strong>Save for later</strong> to
-              build your own list.
+              Today's most traded stocks. Open any asset and choose{' '}
+              <strong>Save for later</strong> to build a watchlist of your own.
             </p>
           )}
         </div>

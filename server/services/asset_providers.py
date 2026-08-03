@@ -84,6 +84,20 @@ class AssetProvider(ABC):
         except Exception:
             return 0.0
 
+    def valuation_prices(self, tickers: List[str]) -> Dict[str, float]:
+        """
+        Valuation prices for many tickers at once, keyed by ticker.
+
+        The list counterpart of valuation_price, for callers holding a whole
+        book - the portfolio breakdown. The default walks valuation_price,
+        which is right for a type priced from its own local terms; the
+        market-traded types override it with one batched quote call, so
+        valuing a dozen holdings costs one upstream lookup rather than a
+        dozen. Best-effort in the same way: a ticker that can't be priced
+        counts as 0 rather than failing the book.
+        """
+        return {ticker: self.valuation_price(ticker) for ticker in tickers}
+
     def can_trade(self, ticker: str) -> Tuple[bool, Optional[str]]:
         """Whether a new purchase of this ticker should be allowed. Defaults to yes."""
         return True, None
@@ -163,6 +177,22 @@ class _MarketTradedProvider(AssetProvider):
 
     def valuation_price(self, ticker: str) -> float:
         return market_data.valuation_price(ticker)
+
+    def valuation_prices(self, tickers: List[str]) -> Dict[str, float]:
+        """
+        One batched quote call for the whole list, falling back to the
+        single-ticker path only for whatever it didn't come back with.
+        """
+        try:
+            quotes = self.live_quotes(tickers)
+        except Exception:
+            quotes = {}
+
+        prices = {}
+        for ticker in tickers:
+            price = (quotes.get(ticker) or {}).get('currentPrice')
+            prices[ticker] = float(price) if price is not None else self.valuation_price(ticker)
+        return prices
 
     def live_quotes(self, symbols: List[str]) -> Dict[str, dict]:
         return market_data.live_quotes(symbols)
