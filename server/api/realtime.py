@@ -202,6 +202,12 @@ def handle_disconnect(reason: str = None) -> None:
     _forget(request.sid, _watched())
 
 
-def init_app(app, cors_origins) -> None:
-    """Attach the Socket.IO server to the Flask app."""
-    socketio.init_app(app, cors_allowed_origins=cors_origins, async_mode='threading')
+def init_app(app, cors_allowed_origins) -> None:
+    """
+    Attach the Socket.IO server to the Flask app.
+
+    `cors_allowed_origins` is whatever Engine.IO accepts - a list of exact
+    origins, or a predicate taking one, which is what lets a deployment
+    whose frontend hostname changes every release be expressed as a pattern.
+    """
+    socketio.init_app(app, cors_allowed_origins=cors_allowed_origins, async_mode='threading')

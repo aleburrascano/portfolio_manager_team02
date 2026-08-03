@@ -41,7 +41,7 @@ Everything lives in `server/.env` (not committed):
 | --- | --- |
 | `DATABASE_URL` | `sqlite:///dev.db`, or `mysql+mysqlconnector://user:pass@host/db`. Falls back to the `DB_*` variables if unset. |
 | `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
-| `CORS_ORIGINS` | Comma-separated. Defaults to `http://localhost:5173`. |
+| `CORS_ORIGINS` | Comma-separated browser origins. Defaults to `http://localhost:5173`. Deployed, it must name the **frontend's** origin (the Vercel domain), not this server's — see below. |
 | `CROSS_SITE_COOKIE` | Set to `1` only where the client is on a different domain than the server. Sends the session cookie as `SameSite=None; Secure`, which needs HTTPS — so it breaks local sign-in. |
 | `LOG_LEVEL` | Defaults to `INFO`, which logs one line per request with its status and duration. `WARNING` keeps only the slow ones, the 500s, and background work that failed. |
 | `START_LIMIT_ORDER_POLLER` | Set to `false` to stop the background thread that fills conditional orders and redeems matured bonds. The only switch that keeps this process off the market data feed on a timer, which is why the test suite sets it — leave it alone otherwise, or nothing ever fills. |
@@ -162,6 +162,30 @@ quote feed settles on Socket.IO's long-polling transport. It was already
 falling back to polling before this, so nothing was lost. A custom domain
 (`app.example.com` and `api.example.com`) would make both first-party and keep
 the upgrade, if the project ever gets one.
+
+`CORS_ORIGINS` on Railway has to name the **Vercel** origins. The proxy forwards
+the browser's `Origin` header unchanged, so what arrives is the domain the page
+was loaded from, not the one serving the request. Getting this wrong breaks the
+quote feed and very little else, in a way that reads as a network fault rather
+than a config one: Engine.IO checks `Origin` only when the browser sends one,
+which it does on long-polling's POSTs and not on its GETs — so exactly half the
+`/socket.io` requests answer `400 Not an accepted origin`, the feed reconnects
+forever, and every price tile sits under "Reconnecting". The boot log prints the
+parsed list, so `railway logs` says what the server will actually accept.
+
+Listing origins one by one is not enough, which is how this last went wrong.
+Vercel serves each deployment on its own hostname
+(`<project>-<hash>-<team>.vercel.app`) and each branch on another, so a list
+that is right today is stale on the next push — opening the app from the
+dashboard's Visit button, which uses the per-deployment URL, hit the 400 every
+time. Entries therefore accept `*`:
+
+```
+CORS_ORIGINS=https://treetop.vercel.app,https://treetop-*.vercel.app
+```
+
+Scoped to the project's own prefix rather than `*.vercel.app`, so it doesn't
+admit every site on the platform.
 
 Migrations run on boot: the server starts with `alembic upgrade head`, so a
 merged migration reaches the deployed database without anyone remembering to
