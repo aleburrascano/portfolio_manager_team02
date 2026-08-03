@@ -84,7 +84,11 @@ cd client && npm test            # components and API layer
 cd e2e    && npx playwright test # full stack, real browser
 ```
 
-The e2e suite starts its own server and client against a throwaway database.
+The e2e suite starts its own server and client against a throwaway database,
+with `MARKET_DATA=fake` so prices come from `services/fake_feed.py` rather
+than from Yahoo. That is what lets it trade stocks and crypto, and watch a
+conditional order actually fill, without depending on a third party being up
+or on a company keeping its name.
 
 ## Layout
 

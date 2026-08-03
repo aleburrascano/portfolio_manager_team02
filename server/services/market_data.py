@@ -16,6 +16,8 @@ follow (one dashboard load re-fetching a year of history per held ticker,
 the poller re-pricing every pending order's ticker every five seconds)
 collapses onto shared entries.
 """
+import os
+import sys
 from decimal import Decimal
 from typing import Callable, Dict, List, Optional
 
@@ -131,17 +133,24 @@ def _price_book(symbols: List[str]) -> Dict[str, Optional[dict]]:
             book[symbol] = cached
 
     if missing:
-        tickers = yf.Tickers(' '.join(missing))
-        for symbol in missing:
-            try:
-                fast_info = tickers.tickers[symbol].fast_info
-                fields = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
-            except Exception:
-                fields = None
+        for symbol, fields in _fetch_prices(missing).items():
             _quotes.set(symbol, fields)
             book[symbol] = fields
 
     return book
+
+
+def _fetch_prices(symbols: List[str]) -> Dict[str, Optional[dict]]:
+    """One batched upstream call. A symbol that can't be quoted maps to None."""
+    tickers = yf.Tickers(' '.join(symbols))
+    fetched: Dict[str, Optional[dict]] = {}
+    for symbol in symbols:
+        try:
+            fast_info = tickers.tickers[symbol].fast_info
+            fetched[symbol] = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
+        except Exception:
+            fetched[symbol] = None
+    return fetched
 
 
 def display_names(symbols: List[str]) -> Dict[str, str]:
@@ -161,8 +170,7 @@ def display_names(symbols: List[str]) -> Dict[str, str]:
             known[symbol] = cached
             continue
         try:
-            info = yf.Ticker(symbol).info or {}
-            name = info.get('longName') or info.get('shortName') or symbol
+            name = _fetch_display_name(symbol)
         except Exception:
             # Not cached: an outage should not name a ticker after itself
             # for the next day.
@@ -171,6 +179,11 @@ def display_names(symbols: List[str]) -> Dict[str, str]:
         _names.set(symbol, name)
         known[symbol] = name
     return known
+
+
+def _fetch_display_name(symbol: str) -> str:
+    info = yf.Ticker(symbol).info or {}
+    return info.get('longName') or info.get('shortName') or symbol
 
 
 def quote_summaries(names: Dict[str, str]) -> List[dict]:
@@ -218,20 +231,24 @@ def search_assets(query: str, matches: QuoteMatcher, limit: int = 10) -> List[di
     # the debounced search box re-runs the same query as someone finishes
     # typing, and which tickers match "appl" is stable for far longer than
     # what they cost. quote_summaries then prices them at quote freshness.
-    def lookup() -> Dict[str, str]:
-        results = yf.Search(query, max_results=limit)
-        return {
-            quote['symbol']: quote.get('longname', quote.get('shortname', 'N/A'))
-            for quote in results.quotes
-            if quote.get('symbol') and matches(quote)
-        }
-
     # Keyed by the predicate's qualified name, not its identity: callers
     # pass a bound method, which is a fresh object on every access, so id()
     # would never hit - and could collide once one is collected.
     matcher = getattr(matches, '__qualname__', repr(matches))
-    names = _searches.get_or_call((query, limit, matcher), lookup)
+    names = _searches.get_or_call(
+        (query, limit, matcher), lambda: _search_names(query, matches, limit)
+    )
     return quote_summaries(names)
+
+
+def _search_names(query: str, matches: QuoteMatcher, limit: int) -> Dict[str, str]:
+    """The {symbol: name} the feed matches for this query, filtered by type."""
+    results = yf.Search(query, max_results=limit)
+    return {
+        quote['symbol']: quote.get('longname', quote.get('shortname', 'N/A'))
+        for quote in results.quotes
+        if quote.get('symbol') and matches(quote)
+    }
 
 
 def screen_most_active(limit: int = 10) -> List[dict]:
@@ -477,3 +494,13 @@ def valuation_price(ticker: str) -> float:
         return float(trade_price(ticker))
     except Exception:
         return 0.0
+
+
+# Last, so every primitive above exists to be replaced. Swapping the fetch
+# functions rather than the whole module means the caching, batching,
+# classification and error handling around them stay the ones under test -
+# only the calls that would have left the process are stubbed.
+if os.environ.get('MARKET_DATA', '').lower() == 'fake':
+    from services import fake_feed
+
+    fake_feed.install(sys.modules[__name__])
