@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 import {
@@ -6,6 +6,7 @@ import {
   fetchPortfolioHoldings,
   type AssetType,
   type HoldingsResult,
+  type PortfolioBreakdown,
   type User,
 } from '../api'
 import PortfolioComposition from '../components/portfolio/PortfolioComposition'
@@ -34,9 +35,9 @@ function Dashboard({ user }: { user: User }) {
   const onSelectAsset = (assetType: AssetType, symbol: string) =>
     navigate(`/trade/${assetType}/${encodeURIComponent(symbol)}`)
 
-  const { balance } = useBalance()
+  const { balance, settled } = useBalance()
   const { types } = useAssetTypes()
-  const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
+  const [breakdown, setBreakdown] = useState<PortfolioBreakdown | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -46,6 +47,7 @@ function Dashboard({ user }: { user: User }) {
   })
 
   useEffect(() => {
+    if (!settled) return
     let cancelled = false
 
     async function load() {
@@ -53,14 +55,7 @@ function Dashboard({ user }: { user: User }) {
       setError(null)
       try {
         const res = await fetchPortfolioBreakdown(user.userId)
-        if (cancelled) return
-        setData([
-          { name: 'Cash', value: res.cash },
-          ...types.map(({ assetType, label }) => ({
-            name: label,
-            value: res[assetType] ?? 0,
-          })),
-        ])
+        if (!cancelled) setBreakdown(res)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load portfolio')
       } finally {
@@ -72,9 +67,10 @@ function Dashboard({ user }: { user: User }) {
     return () => {
       cancelled = true
     }
-  }, [user.userId, balance, types])
+  }, [user.userId, balance, settled])
 
   useEffect(() => {
+    if (!settled) return
     let cancelled = false
 
     async function loadHoldings() {
@@ -96,7 +92,15 @@ function Dashboard({ user }: { user: User }) {
     return () => {
       cancelled = true
     }
-  }, [user.userId, holdingsKey])
+  }, [user.userId, holdingsKey, settled])
+
+  const data = useMemo(() => {
+    if (!breakdown) return null
+    return [
+      { name: 'Cash', value: breakdown.cash },
+      ...types.map(({ assetType, label }) => ({ name: label, value: breakdown[assetType] ?? 0 })),
+    ]
+  }, [breakdown, types])
 
   const total = data?.reduce((sum, entry) => sum + (entry.value || 0), 0) ?? 0
   const hasCash = (balance ?? 0) > 0
@@ -110,7 +114,7 @@ function Dashboard({ user }: { user: User }) {
 
       <div className="dashboard-row">
         <Suspense fallback={<ChartFallback />}>
-          <PortfolioPerformance user={user} balance={balance} />
+          <PortfolioPerformance user={user} balance={balance} balanceSettled={settled} />
         </Suspense>
 
         {loading ? (

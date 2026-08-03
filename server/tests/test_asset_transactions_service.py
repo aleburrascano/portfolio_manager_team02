@@ -28,6 +28,10 @@ def stub_market_data(monkeypatch):
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
     monkeypatch.setattr(market_data, 'valuation_price', lambda ticker: 10.00)
     monkeypatch.setattr(
+        market_data, 'live_quotes',
+        lambda symbols: {symbol: {'symbol': symbol, 'currentPrice': 10.00} for symbol in symbols},
+    )
+    monkeypatch.setattr(
         market_data, 'quote_classification',
         lambda ticker: {'exchange': 'NMS', 'quoteType': 'EQUITY'},
     )

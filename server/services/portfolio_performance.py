@@ -145,10 +145,14 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         day += timedelta(days=1)
 
     held = {ticker: qty for ticker, qty in shares.items() if qty}
-    live_price = {
-        ticker: PROVIDERS[asset_type_of[ticker]].valuation_price(ticker)
-        for ticker in held
-    }
+    still_held_by_type: Dict[str, List[str]] = defaultdict(list)
+    for ticker in held:
+        still_held_by_type[asset_type_of[ticker]].append(ticker)
+
+    live_price: Dict[str, float] = {}
+    for asset_type, tickers in still_held_by_type.items():
+        live_price.update(PROVIDERS[asset_type].valuation_prices(tickers))
+
     for ticker, price in live_price.items():
         if not price:
             live_price[ticker] = last_price.get(ticker) or 0.0

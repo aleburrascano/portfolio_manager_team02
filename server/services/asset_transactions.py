@@ -2,7 +2,9 @@
 Buy and sell assets (stocks, crypto, or bonds) for a user, priced through
 each asset type's AssetProvider.
 """
+from collections import defaultdict
 from decimal import Decimal
+from typing import Dict
 
 from sqlalchemy import func, select
 
@@ -187,9 +189,15 @@ def get_portfolio_values(user_id: int) -> dict:
         .group_by(Asset.assetType, AssetTransaction.ticker)
     ).all()
 
-    totals = {asset_type: 0.0 for asset_type in PROVIDERS}
+    held: Dict[str, Dict[str, float]] = defaultdict(dict)
     for asset_type, ticker, qty in holdings:
-        if qty and asset_type in totals:
-            totals[asset_type] += float(qty) * PROVIDERS[asset_type].valuation_price(ticker)
+        if qty and asset_type in PROVIDERS:
+            held[asset_type][ticker] = float(qty)
+
+    totals = {asset_type: 0.0 for asset_type in PROVIDERS}
+    for asset_type, quantities in held.items():
+        prices = PROVIDERS[asset_type].valuation_prices(list(quantities))
+        for ticker, qty in quantities.items():
+            totals[asset_type] += qty * prices.get(ticker, 0.0)
 
     return {'cash': float(ut.get_user_balance(user_id)), **totals}

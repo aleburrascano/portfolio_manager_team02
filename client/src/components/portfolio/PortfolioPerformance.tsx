@@ -41,7 +41,15 @@ function Signed({ value, percent }: { value: number; percent: number }) {
   )
 }
 
-function PortfolioPerformance({ user, balance }: { user: User; balance: number | null }) {
+function PortfolioPerformance({
+  user,
+  balance,
+  balanceSettled = true,
+}: {
+  user: User
+  balance: number | null
+  balanceSettled?: boolean
+}) {
   const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
   const requestKey = `${user.userId}:${days}:${balance}`
@@ -50,6 +58,7 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
   })
 
   useEffect(() => {
+    if (!balanceSettled) return
     let cancelled = false
 
     async function loadPerformance() {
@@ -71,7 +80,7 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
     return () => {
       cancelled = true
     }
-  }, [user.userId, days, requestKey])
+  }, [user.userId, days, requestKey, balanceSettled])
 
   const loading = state.key !== requestKey
   const data = state.data ?? null
