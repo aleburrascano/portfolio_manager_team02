@@ -41,7 +41,7 @@ async function reachReview(typer: ReturnType<typeof userEvent.setup>, action: st
 
 beforeEach(() => {
   mockedSubmit.mockReset()
-  mockedUseBalance.mockReturnValue({ balance: 500, refreshBalance: vi.fn().mockResolvedValue(undefined) })
+  mockedUseBalance.mockReturnValue({ balance: 500, settled: true, refreshBalance: vi.fn().mockResolvedValue(undefined) })
 })
 
 describe('WalletCard', () => {
@@ -75,7 +75,7 @@ describe('WalletCard', () => {
   })
 
   it('announces that the value is loading rather than showing a placeholder figure', () => {
-    mockedUseBalance.mockReturnValue({ balance: null, refreshBalance: vi.fn() })
+    mockedUseBalance.mockReturnValue({ balance: null, settled: false, refreshBalance: vi.fn() })
     render(<WalletCard user={user} totals={TOTALS} />)
     expect(screen.getByText('Loading your portfolio value')).toBeInTheDocument()
   })

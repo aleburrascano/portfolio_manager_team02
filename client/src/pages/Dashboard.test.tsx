@@ -54,7 +54,7 @@ const user = { userId: 1, username: 'ada', firstName: 'Ada', lastName: 'Lovelace
 
 beforeEach(() => {
   mockedFetch.mockReset()
-  mockedUseBalance.mockReturnValue({ balance: 500, refreshBalance: vi.fn().mockResolvedValue(undefined) })
+  mockedUseBalance.mockReturnValue({ balance: 500, settled: true, refreshBalance: vi.fn().mockResolvedValue(undefined) })
 })
 
 /**
@@ -82,7 +82,7 @@ describe('Dashboard', () => {
 
   it('teaches the panel and offers a next step when the portfolio is empty', async () => {
     mockedFetch.mockResolvedValue({ cash: 0, stock: 0, crypto: 0, bond: 0 })
-    mockedUseBalance.mockReturnValue({ balance: 0, refreshBalance: vi.fn() })
+    mockedUseBalance.mockReturnValue({ balance: 0, settled: true, refreshBalance: vi.fn() })
     const typer = userEvent.setup()
     renderDashboard()
 
