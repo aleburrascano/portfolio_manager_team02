@@ -110,6 +110,28 @@ def test_list_limit_orders_filters_by_status(client):
     assert len(cancelled.get_json()['orders']) == 1
 
 
+def test_list_limit_orders_honours_a_limit(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    for _ in range(3):
+        _place(client, user['userId'])
+
+    response = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders?limit=2')
+    assert len(response.get_json()['orders']) == 2
+
+
+def test_list_limit_orders_serializes_the_order_type(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    order = _place(client, user['userId']).get_json()['order']
+
+    assert order['orderType'] == 'limit'
+    # The fields an order history needs, which the client had typed all
+    # along and no route had ever been asked for.
+    assert order['resolvedAt'] is None
+    assert order['assetTransactionId'] is None
+
+
 def test_list_limit_orders_rejects_invalid_status(client):
     user = register_user(client)
     response = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders?status=nope')

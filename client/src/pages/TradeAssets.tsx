@@ -169,7 +169,7 @@ function TradeAssets({
                 className="secondary-btn open-orders-toggle"
                 onClick={() => setShowOpenOrders(true)}
               >
-                Open orders
+                Orders
               </button>
             )}
             <SearchBar value={query} onChange={setQuery} />
