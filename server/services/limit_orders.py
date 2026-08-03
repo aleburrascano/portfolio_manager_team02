@@ -10,6 +10,7 @@ sell_asset already are - construct an app context, call it, assert on the
 database - with the sleep loop itself as a thin, separately tested wrapper.
 """
 import collections
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
@@ -28,6 +29,8 @@ from services.exceptions import (
 )
 
 SIDES = ('buy', 'sell')
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -231,5 +234,10 @@ def _try_fill(session, limit_order_id: int, price: Decimal) -> bool:
         session.commit()
         return True
     except Exception:
+        # Logged, not just swallowed: this is the one place a money-moving
+        # failure has no request to report into, and an unfilled order that
+        # hit a constraint violation is otherwise indistinguishable from one
+        # whose price simply hasn't been met yet.
+        logger.exception('Limit order %s failed to fill', limit_order_id)
         session.rollback()
         return False

@@ -22,8 +22,9 @@ export type QuoteUpdate = {
 let socket: Socket | null = null
 
 function getSocket(): Socket {
-  // No argument means "same origin", which is what the dev proxy wants;
-  // deployed, the backend is elsewhere and has to be named.
+  // No argument means "same origin", which is what both the dev proxy and
+  // the deployed rewrites want. API_ORIGIN is the escape hatch for pointing
+  // a local client somewhere else; see config.ts.
   if (!socket) socket = io(API_ORIGIN || undefined)
   return socket
 }

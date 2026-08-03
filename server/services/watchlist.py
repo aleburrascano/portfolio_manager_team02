@@ -7,6 +7,7 @@ the same providers everything else uses, so a saved bond is priced from the
 catalog and a saved stock from the market feed without this module knowing
 the difference.
 """
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from sqlalchemy import delete, select
@@ -19,6 +20,21 @@ from services.exceptions import InvalidInput
 # A watchlist is something a person reads at a glance; past this it is a
 # database query with extra steps, and it would cost a quote lookup each.
 MAX_ENTRIES = 24
+
+
+def _now() -> datetime:
+    """
+    Naive UTC, matching every other DateTime this schema writes.
+
+    Written from Python rather than left to the column's server default:
+    SQLite's CURRENT_TIMESTAMP only has second resolution, so two tickers
+    saved in the same second would carry identical timestamps and "newest
+    first" would come down to whatever order the rows happened to come back
+    in. There is no autoincrement column here to break the tie with - the
+    primary key is (userId, ticker) - so the timestamp has to carry the
+    ordering itself.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 def _normalise(ticker: str) -> str:
@@ -60,7 +76,9 @@ def add(user_id: int, asset_type: str, ticker: str) -> None:
             f'Your watchlist is full ({MAX_ENTRIES} assets). Remove one to save another.'
         )
 
-    session.add(WatchlistEntry(userId=user_id, ticker=ticker, assetType=asset_type))
+    session.add(
+        WatchlistEntry(userId=user_id, ticker=ticker, assetType=asset_type, addedAt=_now())
+    )
     session.commit()
 
 
@@ -85,10 +103,13 @@ def list_entries(user_id: int) -> List[Dict[str, Any]]:
     comes back carrying its symbol - a row with a dash reads better than a
     silently missing one.
     """
+    # ticker breaks ties within the same addedAt tick (SQLite's
+    # CURRENT_TIMESTAMP only has second resolution), so two tickers saved in
+    # the same second don't reorder between renders.
     entries = get_session().scalars(
         select(WatchlistEntry)
         .where(WatchlistEntry.userId == user_id)
-        .order_by(WatchlistEntry.addedAt.desc())
+        .order_by(WatchlistEntry.addedAt.desc(), WatchlistEntry.ticker.asc())
     ).all()
 
     if not entries:
