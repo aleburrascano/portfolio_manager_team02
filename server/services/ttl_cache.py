@@ -32,17 +32,25 @@ class TTLCache:
         self.ttl_seconds = ttl_seconds
         self._entries: dict[Hashable, tuple[float, Any]] = {}
         self._lock = threading.Lock()
+        # Counted because "how much upstream traffic is this saving" is the
+        # only number that says whether the cache is worth its window, and
+        # it is not answerable from the outside.
+        self.hits = 0
+        self.misses = 0
 
     def get(self, key: Hashable) -> Any:
         """The cached value, or MISS if it is absent or has expired."""
         with self._lock:
             entry = self._entries.get(key)
             if entry is None:
+                self.misses += 1
                 return MISS
             expires_at, value = entry
             if expires_at <= time.monotonic():
                 del self._entries[key]
+                self.misses += 1
                 return MISS
+            self.hits += 1
             return value
 
     def set(self, key: Hashable, value: Any) -> None:
@@ -82,6 +90,8 @@ class TTLCache:
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
+            self.hits = 0
+            self.misses = 0
 
     def __len__(self) -> int:
         with self._lock:
