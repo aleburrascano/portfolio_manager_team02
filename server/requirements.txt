@@ -1,6 +1,10 @@
 Flask>=3.0.0
 flasgger>=0.9.7
 flask-cors>=4.0.0
+# Serves the app in deployment; the dev server in app.py is not used there.
+# Threaded workers rather than eventlet/gevent: simple-websocket below
+# carries the WebSocket upgrade, so no green threads are involved.
+gunicorn>=21.2.0
 flask-socketio>=5.3.0
 simple-websocket>=1.0.0
 SQLAlchemy>=2.0.0

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { io, type Socket } from 'socket.io-client'
 import type { AssetType } from './api'
+import { API_ORIGIN } from './config'
 
 /**
  * A pushed price update. Only the fields that changed hands are present,
@@ -21,7 +22,9 @@ export type QuoteUpdate = {
 let socket: Socket | null = null
 
 function getSocket(): Socket {
-  if (!socket) socket = io()
+  // No argument means "same origin", which is what the dev proxy wants;
+  // deployed, the backend is elsewhere and has to be named.
+  if (!socket) socket = io(API_ORIGIN || undefined)
   return socket
 }
 
