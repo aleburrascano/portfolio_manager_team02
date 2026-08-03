@@ -14,16 +14,31 @@ from sqlalchemy import or_, select
 from db.connection import get_session
 from db.models import Bond
 from services.exceptions import MarketDataUnavailable
+from services.ttl_cache import TTLCache
 
 PERIODS_PER_YEAR = {'annual': 1, 'semiannual': 2}
 CENTS = Decimal('0.00000001')
+
+# A year of bond prices is 366 present-value computations, and get_quote
+# builds the whole series just to read the last two points off it. The
+# result is a pure function of the bond's terms and the date, so it is the
+# same series for every caller until the date rolls over; the window only
+# has to be shorter than a day for that to hold.
+_history = TTLCache(ttl_seconds=3600)
 
 
 def _as_date(value) -> date:
     return value.date() if hasattr(value, 'date') else value
 
 
-def _serialize(bond: Bond) -> dict:
+def serialize_bond(bond: Bond) -> dict:
+    """
+    A Bond row as the plain dict every function here takes.
+
+    Public because a caller holding its own Session - the seed script, which
+    runs outside a request and so has no get_session() - still needs to turn
+    a row into terms this module can price.
+    """
     return {
         'ticker': bond.ticker,
         'name': bond.name,
@@ -39,13 +54,13 @@ def _serialize(bond: Bond) -> dict:
 def get_bond(ticker: str) -> Optional[dict]:
     """Look up one bond's catalog row by ticker."""
     bond = get_session().get(Bond, ticker)
-    return _serialize(bond) if bond else None
+    return serialize_bond(bond) if bond else None
 
 
 def list_bonds() -> List[dict]:
     """The full bond catalog."""
     bonds = get_session().scalars(select(Bond).order_by(Bond.maturityDate))
-    return [_serialize(bond) for bond in bonds]
+    return [serialize_bond(bond) for bond in bonds]
 
 
 def search_bonds(query: str) -> List[dict]:
@@ -56,7 +71,7 @@ def search_bonds(query: str) -> List[dict]:
         .where(or_(Bond.ticker.like(like), Bond.name.like(like)))
         .order_by(Bond.maturityDate)
     )
-    return [_serialize(bond) for bond in bonds]
+    return [serialize_bond(bond) for bond in bonds]
 
 
 def is_matured(bond: dict, as_of: Optional[date] = None) -> bool:
@@ -98,8 +113,14 @@ def price_bond(bond: dict, as_of: Optional[date] = None) -> Decimal:
 
 
 def price_history(bond: dict, days: int = 365) -> List[dict]:
-    """Daily closing prices for the trailing 365 days."""
+    """Daily closing prices for the trailing `days` days, oldest first."""
     today = date.today()
+    return _history.get_or_call(
+        (bond['ticker'], days, today), lambda: _price_history(bond, days, today)
+    )
+
+
+def _price_history(bond: dict, days: int, today: date) -> List[dict]:
     return [
         {
             'date': (today - timedelta(days=offset)).strftime('%Y-%m-%d'),
@@ -107,6 +128,11 @@ def price_history(bond: dict, days: int = 365) -> List[dict]:
         }
         for offset in range(days, -1, -1)
     ]
+
+
+def clear_cache() -> None:
+    """Drop cached price series. For tests."""
+    _history.clear()
 
 
 def trade_price(ticker: str) -> Decimal:

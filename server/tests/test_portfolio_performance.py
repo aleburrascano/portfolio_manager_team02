@@ -70,6 +70,19 @@ def history(monkeypatch):
             monkeypatch.setattr(provider, 'get_history', get_history)
             monkeypatch.setattr(provider, 'valuation_price', valuation_price)
             monkeypatch.setattr(provider, 'live_quotes', live_quotes)
+
+        # The benchmark goes straight to market_data rather than through a
+        # provider, so it needs pinning separately or every test here would
+        # reach the real feed for it. Driven by the same dict: a test that
+        # cares about the comparison puts SPY in `prices`, and one that
+        # doesn't gets no benchmark at all.
+        monkeypatch.setattr(
+            perf.market_data, 'price_history',
+            lambda ticker, period='1y', _p=prices: [
+                {'date': day.isoformat(), 'close': close}
+                for day, close in sorted(_p.get(ticker, {}).items())
+            ],
+        )
     return _apply
 
 
@@ -283,3 +296,70 @@ def test_window_limits_the_series_without_losing_earlier_trades(user_id, history
     assert len(result['series']) <= 31
     # The position was opened before the window and still shows up in it.
     assert result['series'][0]['investedValue'] == 500.0
+
+
+# The chart's only comparison was "did I beat my own deposits", which a
+# portfolio that merely held cash passes. This is the other one.
+
+def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
+    today = date.today()
+    days = [today - timedelta(days=n) for n in (2, 1, 0)]
+    history({'SPY': dict(zip(days, (100.0, 110.0, 120.0)))})
+    deposit(user_id, 1000, days[0])
+
+    result = perf.get_portfolio_performance(user_id)
+
+    # $1000 in at 100 buys 10 units, worth 1100 then 1200 as it rises.
+    assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 1100.0, 1200.0]
+    assert result['benchmark'] == {'ticker': 'SPY', 'label': 'S&P 500'}
+
+
+# A later top-up has to go into the benchmark too, or the comparison
+# flatters the portfolio for money the benchmark never received.
+def test_benchmark_matches_a_later_deposit(user_id, history):
+    today = date.today()
+    days = [today - timedelta(days=n) for n in (2, 1, 0)]
+    history({'SPY': dict(zip(days, (100.0, 100.0, 200.0)))})
+    deposit(user_id, 1000, days[0])
+    deposit(user_id, 1000, days[1])
+
+    result = perf.get_portfolio_performance(user_id)
+
+    # 10 units, then 20, then those 20 double.
+    assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 2000.0, 4000.0]
+
+
+def test_benchmark_carries_the_last_close_over_a_closed_market(user_id, history):
+    today = date.today()
+    days = [today - timedelta(days=n) for n in (2, 1, 0)]
+    # No close on the middle day, as at a weekend.
+    history({'SPY': {days[0]: 100.0, days[2]: 150.0}})
+    deposit(user_id, 1000, days[0])
+
+    result = perf.get_portfolio_performance(user_id)
+    assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 1000.0, 1500.0]
+
+
+def test_an_unpriceable_benchmark_leaves_the_comparison_out(user_id, history):
+    history({})  # nothing for SPY
+    deposit(user_id, 1000, date.today() - timedelta(days=1))
+
+    result = perf.get_portfolio_performance(user_id)
+
+    # Best-effort like the rest of the chart: no comparison rather than no
+    # chart at all.
+    assert all('benchmarkValue' not in point for point in result['series'])
+    assert result['series']
+
+
+def test_a_failing_benchmark_lookup_does_not_fail_the_request(user_id, history, monkeypatch):
+    history({})
+    deposit(user_id, 1000, date.today() - timedelta(days=1))
+
+    def boom(ticker, period='1y'):
+        raise RuntimeError('feed down')
+
+    monkeypatch.setattr(perf.market_data, 'price_history', boom)
+
+    result = perf.get_portfolio_performance(user_id)
+    assert result['series']

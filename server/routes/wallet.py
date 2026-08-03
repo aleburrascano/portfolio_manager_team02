@@ -77,11 +77,13 @@ def withdraw_cash(body: dict, user_id: int) -> Tuple[dict, int]:
 @wallet_bp.arguments(PerformanceQuerySchema, location='query')
 def get_portfolio_performance(query: dict, user_id: int) -> Tuple[dict, int]:
     """
-    Get a user's portfolio value over time, against what they paid in.
+    Get a user's portfolio value over time, against what they paid in and
+    against what the same deposits would have made in a broad index fund.
 
     Returns:
         dict: {'series': [{'date', 'portfolioValue', 'investedValue', 'cash',
-        'netDeposits'}], 'summary': {...}, '_links': dict}
+        'netDeposits', 'benchmarkValue'}], 'summary': {...}, 'byAssetType':
+        [...], 'benchmark': {'ticker', 'label'}, '_links': dict}
     """
     # The schema leaves an absent `days` as None; parse_days turns that
     # into the default, so the window is decided in one place.

@@ -69,6 +69,41 @@
   color: var(--negative);
 }
 
+/* Same weight as the trade screen's order-type row: this picks which slice
+   of the same list is shown, not what kind of thing is being looked at. */
+.open-orders-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.open-orders-filters button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  padding: 5px 12px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  color: var(--text-muted);
+  transition:
+    color var(--dur-fast) var(--ease),
+    border-color var(--dur-fast) var(--ease);
+}
+
+.open-orders-filters button.active {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* Capitalised but not coloured: which kind an order is matters, but it is
+   not the buy/sell distinction and shouldn't compete with it. */
+.open-orders-type {
+  text-transform: capitalize;
+  color: var(--text-muted);
+}
+
 .open-orders-cancel {
   padding: 5px 12px;
   font-size: var(--fs-sm);

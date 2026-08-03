@@ -7,18 +7,30 @@ client used to do. Only symbols with at least one subscriber are fetched,
 so an idle server does no work at all.
 
 Quotes are public, matching the REST asset routes - no session required.
+
+The one thing here that isn't public is `orderFilled`. A conditional order
+resolves in the poller's own thread, minutes or days after the request that
+placed it, so there is no response left to carry the news: without this the
+owner's open orders list would sit there showing a pending row that has
+already filled. Each session is put in a room named for its logged-in user
+on connect, from the same signed cookie the REST routes trust, so a fill
+reaches its owner's tabs and nobody else's.
 """
 import collections
+import logging
 import threading
 from typing import Dict, List, Set, Tuple
 
-from flask import request
+from flask import request, session
 from flask_socketio import SocketIO, join_room, leave_room
 
+from authorization import SESSION_USER_KEY
 from services.asset_providers import PROVIDERS
 
 BROADCAST_INTERVAL_SECONDS = 5
 MAX_SYMBOLS_PER_CLIENT = 50
+
+logger = logging.getLogger(__name__)
 
 socketio = SocketIO()
 
@@ -33,6 +45,10 @@ _broadcaster_started = False
 
 def _room(symbol: str) -> str:
     return f'quote:{symbol}'
+
+
+def _user_room(user_id: int) -> str:
+    return f'user:{user_id}'
 
 
 def _watched() -> List[Tuple[str, str]]:
@@ -96,6 +112,52 @@ def _ensure_broadcaster() -> None:
             return
         _broadcaster_started = True
     socketio.start_background_task(_broadcast_loop)
+
+
+@socketio.on('connect')
+def handle_connect(auth=None) -> None:
+    """
+    Put a logged-in session in its own room, so anything addressed to that
+    user reaches every tab they have open and no one else's.
+
+    Identity comes from the signed session cookie, exactly as it does for
+    the REST routes - the client never says who it is. An anonymous
+    connection simply joins nothing and still gets public quotes.
+    """
+    user_id = session.get(SESSION_USER_KEY)
+    if user_id is not None:
+        join_room(_user_room(user_id))
+
+
+def notify_order_filled(fill: dict) -> None:
+    """
+    Tell one user that a conditional order of theirs has just filled.
+
+    Called from the poller's thread rather than from a request, and best
+    effort by design: the fill is already committed, so a socket that can't
+    be reached costs the user a refresh, not a trade.
+    """
+    _notify_user('orderFilled', fill, fill.get('limitOrderId'))
+
+
+def notify_bond_redeemed(payout: dict) -> None:
+    """
+    Tell one user that a bond of theirs has matured and been paid out.
+
+    Same shape of event as a fill and for the same reason: it happens on a
+    date rather than in response to anything they did.
+    """
+    _notify_user('bondRedeemed', payout, payout.get('ticker'))
+
+
+def _notify_user(event: str, payload: dict, subject) -> None:
+    user_id = payload.get('userId')
+    if user_id is None:
+        return
+    try:
+        socketio.emit(event, payload, to=_user_room(user_id))
+    except Exception:
+        logger.exception('Could not announce %s for %s', event, subject)
 
 
 @socketio.on('subscribe')

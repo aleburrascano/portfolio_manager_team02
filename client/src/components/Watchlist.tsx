@@ -6,7 +6,8 @@ import {
   type User,
   type WatchlistEntry,
 } from '../api'
-import { useLiveFeed, useQuoteConnection } from '../realtime'
+import { useAssetTypes } from '../asset-types'
+import { useLiveFeeds, useQuoteConnection } from '../realtime'
 import { formatCurrency, formatNumber } from '../format'
 import AssetLogo from './AssetLogo'
 import LiveIndicator from './LiveIndicator'
@@ -39,6 +40,7 @@ function Watchlist({
   /** Opens the asset in the trade screen, so a tile is a way in. */
   onSelectAsset?: (assetType: AssetType, symbol: string) => void
 }) {
+  const { types } = useAssetTypes()
   const [saved, setSaved] = useState<WatchlistEntry[] | null>(null)
   const [suggested, setSuggested] = useState<Tile[]>([])
   const [loading, setLoading] = useState(true)
@@ -94,16 +96,20 @@ function Watchlist({
         changePercent: entry.changePercent,
       }))
 
-  // Only the market-traded tiles are streamed; bonds are repriced daily.
-  const streamed = tiles.filter((tile) => tile.assetType !== 'bond')
-  const { quotes: live, lastUpdate } = useLiveFeed(
-    'stock',
-    streamed.filter((tile) => tile.assetType === 'stock').map((tile) => tile.symbol),
-  )
+  // A subscription is per asset type, so the tiles are split by type and
+  // each streaming type gets its own feed. Previously this counted every
+  // non-bond tile as streamed but only ever subscribed to the stocks, so a
+  // watchlist of crypto showed a "Live" indicator that could never tick.
+  const streamedTypes = types.filter((info) => info.streams).map((info) => info.assetType)
+  const symbolsByType = Object.fromEntries(
+    streamedTypes.map((type) => [type, tiles.filter((t) => t.assetType === type).map((t) => t.symbol)]),
+  ) as Record<AssetType, string[]>
+  const feeds = useLiveFeeds(symbolsByType)
+  const streamed = tiles.filter((tile) => streamedTypes.includes(tile.assetType))
   const connected = useQuoteConnection()
 
   const items = tiles.map((tile) => {
-    const update = live[tile.symbol]
+    const update = feeds.quotes[tile.symbol]
     return {
       ...tile,
       currentPrice: update?.currentPrice ?? tile.currentPrice,
@@ -126,7 +132,7 @@ function Watchlist({
           )}
         </div>
         {items.length > 0 && streamed.length > 0 && (
-          <LiveIndicator connected={connected} lastUpdate={lastUpdate} />
+          <LiveIndicator connected={connected} lastUpdate={feeds.lastUpdate} />
         )}
       </div>
 

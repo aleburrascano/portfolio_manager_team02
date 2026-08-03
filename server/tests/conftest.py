@@ -23,6 +23,8 @@ os.environ.setdefault('START_LIMIT_ORDER_POLLER', 'false')
 import pytest
 
 import app as app_module
+import services.bond_pricing as bond_pricing
+import services.market_data as market_data
 from db.connection import get_engine
 from db.models import Base
 
@@ -46,3 +48,20 @@ def _clean_tables():
     with engine.begin() as conn:
         for table in reversed(Base.metadata.sorted_tables):
             conn.execute(table.delete())
+
+
+@pytest.fixture(autouse=True)
+def _clear_market_data_cache():
+    """
+    Drop cached market data around every test.
+
+    The caches are process-wide and outlive a test the way the engine does,
+    so without this a stubbed price set by one test would still be answering
+    in the next one - and a test that stubs the feed after a real lookup has
+    already been cached would never see its own stub.
+    """
+    market_data.clear_caches()
+    bond_pricing.clear_cache()
+    yield
+    market_data.clear_caches()
+    bond_pricing.clear_cache()

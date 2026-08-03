@@ -1,7 +1,22 @@
-import { apiFetch, post } from './client'
+import { apiFetch, linkUrl, post } from './client'
 import type { AssetType } from './assets'
 
-export type PortfolioBreakdown = { cash: number; stock: number; crypto: number; bond: number }
+/**
+ * How much of the portfolio sits in cash and in each asset type.
+ *
+ * Open-ended rather than a fixed set of keys: the server builds these
+ * buckets from its provider registry, so a new asset type appears here on
+ * its own and a client that enumerated three of them would silently drop it.
+ */
+export type PortfolioBreakdown = { cash: number } & Partial<Record<AssetType, number>>
+
+/** What a sale made against the average cost of what it came out of. */
+export type RealizedGain = {
+  costBasis: number
+  proceeds: number
+  gainLoss: number
+  gainLossPercent: number
+}
 
 export type Transaction = {
   transactionId: number
@@ -12,6 +27,12 @@ export type Transaction = {
   ticker?: string
   qty?: number
   price?: number
+  /**
+   * Present on sells only. Absent - not zero - on everything else, because
+   * a buy realising nothing is a different statement from one that made
+   * nothing.
+   */
+  realized?: RealizedGain
 }
 
 export type TransactionType = 'deposit' | 'withdraw'
@@ -23,6 +44,11 @@ export type PerformancePoint = {
   investedValue: number
   cash: number
   netDeposits: number
+  /**
+   * What the same deposits, made on the same days, would be worth in the
+   * benchmark instead. Absent when the index couldn't be priced.
+   */
+  benchmarkValue?: number
 }
 
 export type PerformanceSummary = {
@@ -45,6 +71,8 @@ export type PortfolioPerformance = {
   series: PerformancePoint[]
   summary: PerformanceSummary
   byAssetType: AssetTypePerformance[]
+  /** What the comparison line is, so the chart can name it. */
+  benchmark: { ticker: string; label: string }
 }
 
 export type Holding = {
@@ -87,7 +115,7 @@ export async function fetchPortfolioBreakdown(userId: number): Promise<Portfolio
     `/users/${userId}/portfolio`,
     'Failed to fetch portfolio breakdown',
   )
-  return { cash: data.cash || 0, stock: data.stock || 0, crypto: data.crypto || 0, bond: data.bond || 0 }
+  return { ...data, cash: data.cash || 0 }
 }
 
 export async function fetchPortfolioPerformance(
@@ -110,12 +138,48 @@ export async function fetchPortfolioHoldings(userId: number): Promise<HoldingsRe
   return apiFetch(`/users/${userId}/portfolio/holdings`, 'Failed to fetch holdings')
 }
 
-export async function fetchTransactions(userId: number): Promise<Transaction[]> {
-  const data = await apiFetch<{ transactions: Transaction[] }>(
-    `/users/${userId}/transactions`,
-    'Failed to fetch transaction history',
-  )
-  return data.transactions
+export type TransactionPage = {
+  transactions: Transaction[]
+  /** The count before paging, so a caller knows whether more exist. */
+  total: number
+  /** Where the server says the related resources and actions live. */
+  _links: { self: string; export: string }
+}
+
+/**
+ * One page of history, newest first.
+ *
+ * Paged in the database against an index rather than fetched whole and
+ * sorted here: a seeded account is already a couple of hundred rows and
+ * only grows.
+ */
+export type TransactionSort = 'newest' | 'oldest'
+
+export async function fetchTransactions(
+  userId: number,
+  limit?: number,
+  offset = 0,
+  sort: TransactionSort = 'newest',
+): Promise<TransactionPage> {
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', String(limit))
+  if (offset) params.set('offset', String(offset))
+  if (sort !== 'newest') params.set('sort', sort)
+  const query = params.size > 0 ? `?${params}` : ''
+
+  return apiFetch(`/users/${userId}/transactions${query}`, 'Failed to fetch transaction history')
+}
+
+/**
+ * Where the browser should point to download the history as CSV.
+ *
+ * Built from the link the page came with rather than from the route shape,
+ * so the download and the list it belongs to can't drift apart. A URL
+ * rather than a fetch because the browser has to navigate to it itself to
+ * get a file instead of a string in memory.
+ */
+export function transactionsExportUrl(page: TransactionPage): string {
+  return linkUrl(page._links.export)
 }
 
 export async function submitCashTransaction(

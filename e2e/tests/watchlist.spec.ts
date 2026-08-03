@@ -6,7 +6,7 @@ import { registerNewUser, uniqueUsername } from './fixtures'
 
 /** Open the bond used throughout these tests. */
 async function openBond(page: Page) {
-  await page.getByRole('button', { name: 'Trade' }).click()
+  await page.getByRole('link', { name: 'Trade' }).click()
   await page.getByRole('button', { name: 'Bonds' }).click()
   await page.getByRole('button', { name: /US Treasury Note 2Y/ }).click()
 }
@@ -46,7 +46,7 @@ test('saving an asset moves it onto the dashboard watchlist', async ({ page }) =
   await toggleSave(page, 'Save for later')
   await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page.getByRole('heading', { name: 'Watchlist' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Most active today' })).not.toBeVisible()
   await expect(page.getByRole('button', { name: /UST2Y/ })).toBeVisible()
@@ -56,8 +56,11 @@ test('the saved state survives a reload', async ({ page }) => {
   await openBond(page)
   await toggleSave(page, 'Save for later')
 
+  // Reloading now stays on the asset's own address rather than dropping
+  // back to the dashboard, so this asserts the save on the page it was made
+  // on - which is what the test was always about.
   await page.reload()
-  await expect(page.getByRole('button', { name: /UST2Y/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Saved' })).toBeVisible()
 })
 
 test('unsaving removes it again', async ({ page }) => {
@@ -68,7 +71,7 @@ test('unsaving removes it again', async ({ page }) => {
   await toggleSave(page, 'Saved')
   await expect(page.getByRole('button', { name: 'Save for later' })).toBeVisible()
 
-  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.getByRole('link', { name: 'Dashboard' }).click()
   await expect(page.getByRole('heading', { name: 'Most active today' })).toBeVisible()
 })
 
@@ -76,7 +79,7 @@ test('a watchlist tile opens the asset it stands for', async ({ page }) => {
   await openBond(page)
   await toggleSave(page, 'Save for later')
 
-  await page.getByRole('button', { name: 'Dashboard' }).click()
+  await page.getByRole('link', { name: 'Dashboard' }).click()
   await page.getByRole('button', { name: /UST2Y/ }).click()
 
   await expect(page.getByRole('heading', { name: 'US Treasury Note 2Y' })).toBeVisible()

@@ -17,7 +17,7 @@ import marshmallow as ma
 
 from services.exceptions import InvalidInput
 from validation import (
-    parse_amount, parse_days, parse_limit_price, parse_quantity, parse_side,
+    parse_amount, parse_days, parse_limit_price, parse_order_type, parse_quantity, parse_side,
 )
 
 
@@ -63,6 +63,11 @@ class Side(_Parsed, ma.fields.String):
     default_error_messages = {'required': "side must be 'buy' or 'sell'."}
 
 
+class OrderType(_Parsed, ma.fields.String):
+    _parse = staticmethod(parse_order_type)
+    default_error_messages = {'required': "orderType must be 'limit' or 'stop'."}
+
+
 class Days(_Parsed, ma.fields.Integer):
     _parse = staticmethod(parse_days)
 
@@ -95,6 +100,19 @@ class LimitOrderSchema(ma.Schema):
     side = Side(required=True, metadata={'enum': ['buy', 'sell'], 'example': 'buy'})
     quantity = Quantity(required=True, metadata={'example': 10})
     limitPrice = LimitPrice(required=True, metadata={'example': 120.50})
+    # Defaulted rather than required, so a caller written before stop orders
+    # existed keeps placing limit orders and means it.
+    orderType = OrderType(
+        load_default='limit',
+        metadata={
+            'enum': ['limit', 'stop'],
+            'example': 'limit',
+            'description': (
+                "'limit' waits for a price at least as good as limitPrice; "
+                "'stop' waits for one at least as bad."
+            ),
+        },
+    )
 
 
 class PerformanceQuerySchema(ma.Schema):
@@ -106,6 +124,10 @@ class LimitOrderQuerySchema(ma.Schema):
         load_default=None,
         validate=ma.validate.OneOf(['pending', 'filled', 'cancelled'], error='invalid status'),
         metadata={'description': 'Filter by status. Omitted returns all.'},
+    )
+    limit = ma.fields.Integer(
+        load_default=None,
+        metadata={'description': 'Maximum orders to return. Omitted returns all.'},
     )
 
 
@@ -122,6 +144,13 @@ class SearchQuerySchema(ma.Schema):
 class TransactionsQuerySchema(ma.Schema):
     limit = ma.fields.Integer(load_default=None)
     offset = ma.fields.Integer(load_default=0)
+    # Sorting is the database's job, not the caller's: reversing one page in
+    # the client would only reverse the rows that page happens to hold.
+    sort = ma.fields.String(
+        load_default='newest',
+        validate=ma.validate.OneOf(['newest', 'oldest'], error='invalid sort'),
+        metadata={'description': 'Order by date, newest or oldest first.'},
+    )
 
 
 # Credentials are deliberately not marked required here. The rules that

@@ -110,6 +110,64 @@ def test_list_limit_orders_filters_by_status(client):
     assert len(cancelled.get_json()['orders']) == 1
 
 
+def test_list_limit_orders_is_scoped_to_the_asset_type_in_the_route(client, monkeypatch):
+    import services.market_data as market_data
+
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    _place(client, user['userId'])
+
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    client.post(
+        f'/api/v1/users/{user["userId"]}/assets/crypto/limit-orders',
+        json={'ticker': 'BTC-USD', 'side': 'buy', 'quantity': 1, 'limitPrice': 8},
+    )
+
+    stocks = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders').get_json()
+    crypto = client.get(f'/api/v1/users/{user["userId"]}/assets/crypto/limit-orders').get_json()
+
+    assert [o['ticker'] for o in stocks['orders']] == ['AAPL']
+    assert [o['ticker'] for o in crypto['orders']] == ['BTC-USD']
+
+
+def test_list_limit_orders_honours_a_limit(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    for _ in range(3):
+        _place(client, user['userId'])
+
+    response = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders?limit=2')
+    assert len(response.get_json()['orders']) == 2
+
+
+def test_list_limit_orders_serializes_the_order_type(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    order = _place(client, user['userId']).get_json()['order']
+
+    assert order['orderType'] == 'limit'
+    # The fields an order history needs, which the client had typed all
+    # along and no route had ever been asked for.
+    assert order['resolvedAt'] is None
+    assert order['assetTransactionId'] is None
+
+
+# The client cancels by following this link rather than building the URL,
+# so it is part of the contract: present, and actually followable.
+def test_the_cancel_link_is_followable(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    order = _place(client, user['userId']).get_json()['order']
+
+    response = client.delete(order['_links']['cancel'])
+
+    assert response.status_code == 200
+    assert response.get_json() == {'status': 'cancelled'}
+
+
 def test_list_limit_orders_rejects_invalid_status(client):
     user = register_user(client)
     response = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders?status=nope')

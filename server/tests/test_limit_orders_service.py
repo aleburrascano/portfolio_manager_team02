@@ -26,13 +26,30 @@ def user_id(ctx):
 
 @pytest.fixture(autouse=True)
 def stub_market_data(monkeypatch):
-    """AAPL prices at $10 and is classified as a US-listed stock."""
+    """Everything prices at $10 and is classified as a US-listed stock."""
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
     monkeypatch.setattr(market_data, 'valuation_price', lambda ticker: 10.00)
     monkeypatch.setattr(
         market_data, 'quote_classification',
         lambda ticker: {'exchange': 'NMS', 'quoteType': 'EQUITY'},
     )
+
+    # evaluate_pending_orders screens every pending ticker with one batched
+    # quote call before pricing any of them properly. Deriving the screen
+    # from trade_price rather than fixing it at $10 keeps the two answers
+    # agreeing when a test overrides trade_price - otherwise the screen
+    # would filter out the very fill under test.
+    def live_quotes(symbols):
+        book = {}
+        for symbol in symbols:
+            try:
+                price = float(market_data.trade_price(symbol))
+            except MarketDataUnavailable:
+                continue
+            book[symbol] = {'symbol': symbol, 'currentPrice': price}
+        return book
+
+    monkeypatch.setattr(market_data, 'live_quotes', live_quotes)
 
 
 def test_place_limit_order_creates_pending_buy(user_id):
@@ -52,10 +69,37 @@ def test_place_limit_order_creates_pending_sell(user_id):
     assert order.side == 'sell'
 
 
-def test_place_limit_order_rejects_non_stock_asset_type(user_id):
+def test_place_limit_order_rejects_an_asset_type_that_cannot_take_one(user_id):
     deposit_cash(user_id, Decimal('1000.00'))
-    with pytest.raises(InvalidInput):
-        lo.place_limit_order(user_id, 'crypto', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'))
+    with pytest.raises(InvalidInput, match='only supported'):
+        lo.place_limit_order(user_id, 'bond', 'UST2Y', 'buy', Decimal('5'), Decimal('8.00'))
+
+
+# Crypto is quoted by the same feed and priced the same way as a stock, so
+# the poller needs no special case for it.
+def test_place_limit_order_accepts_crypto(user_id, monkeypatch):
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    deposit_cash(user_id, Decimal('1000.00'))
+
+    order = lo.place_limit_order(user_id, 'crypto', 'BTC-USD', 'buy', Decimal('1'), Decimal('20.00'))
+    assert order.status == 'pending'
+
+
+def test_place_limit_order_rejects_bad_order_type(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    with pytest.raises(InvalidInput, match='orderType'):
+        lo.place_limit_order(
+            user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'), 'trailing',
+        )
+
+
+def test_place_limit_order_defaults_to_a_limit_order(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    order = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'))
+    assert order.orderType == 'limit'
 
 
 def test_place_limit_order_rejects_bad_side(user_id):
@@ -137,7 +181,7 @@ def test_evaluate_pending_orders_fills_buy_when_price_at_or_below_limit(user_id,
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 1
+    assert len(filled) == 1
     refreshed = lo.list_limit_orders(user_id, status='filled')[0]
     assert refreshed.limitOrderId == order.limitOrderId
     assert refreshed.assetTransactionId is not None
@@ -151,7 +195,7 @@ def test_evaluate_pending_orders_leaves_buy_pending_when_price_above_limit(user_
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 0
+    assert len(filled) == 0
     assert len(lo.list_limit_orders(user_id, status='pending')) == 1
     assert at.get_holding_qty(user_id, 'AAPL') == 0.0
 
@@ -164,7 +208,7 @@ def test_evaluate_pending_orders_fills_sell_when_price_at_or_above_limit(user_id
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('15.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 1
+    assert len(filled) == 1
     refreshed = lo.list_limit_orders(user_id, status='filled')[0]
     assert refreshed.limitOrderId == order.limitOrderId
     assert at.get_holding_qty(user_id, 'AAPL') == 0.0
@@ -180,7 +224,7 @@ def test_evaluate_pending_orders_leaves_order_pending_on_insufficient_funds_at_f
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 0
+    assert len(filled) == 0
     pending = lo.list_limit_orders(user_id, status='pending')
     assert len(pending) == 1
 
@@ -196,7 +240,7 @@ def test_evaluate_pending_orders_leaves_order_pending_on_insufficient_holdings_a
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 0
+    assert len(filled) == 0
     pending = lo.list_limit_orders(user_id, status='pending')
     assert len(pending) == 1
 
@@ -211,7 +255,7 @@ def test_evaluate_pending_orders_only_fills_what_can_be_afforded_in_one_pass(use
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('10.00'))
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 1
+    assert len(filled) == 1
     statuses = {o.limitOrderId: o.status for o in lo.list_limit_orders(user_id)}
     assert statuses[first.limitOrderId] == 'filled'
     assert statuses[second.limitOrderId] == 'pending'
@@ -223,7 +267,143 @@ def test_evaluate_pending_orders_returns_fill_count(user_id, monkeypatch):
     lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
 
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
-    assert lo.evaluate_pending_orders() == 2
+    assert len(lo.evaluate_pending_orders()) == 2
+
+
+# A stop is the mirror of a limit: it waits for the price to move against
+# the position rather than in its favour. The four cases below are the whole
+# behavioural difference between the two order types.
+
+def test_stop_sell_fills_when_the_price_falls_to_the_trigger(user_id, monkeypatch):
+    """A stop loss: get out once it drops this far."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('7.00'))
+    assert len(lo.evaluate_pending_orders()) == 1
+    assert at.get_holding_qty(user_id, 'AAPL') == 0.0
+
+
+def test_stop_sell_stays_pending_while_the_price_holds_up(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+    assert len(lo.evaluate_pending_orders()) == 0
+    assert at.get_holding_qty(user_id, 'AAPL') == 5.0
+
+
+def test_stop_buy_fills_when_the_price_rises_to_the_trigger(user_id, monkeypatch):
+    """A breakout entry: get in once it clears this level."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('12.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('13.00'))
+    assert len(lo.evaluate_pending_orders()) == 1
+    assert at.get_holding_qty(user_id, 'AAPL') == 5.0
+
+
+def test_stop_buy_stays_pending_below_the_trigger(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('12.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('11.00'))
+    assert len(lo.evaluate_pending_orders()) == 0
+
+
+# The same price fills one and not the other, which is the point.
+def test_a_stop_and_a_limit_on_one_ticker_trigger_opposite_ways(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('10'))
+    take_profit = lo.place_limit_order(
+        user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'), 'limit',
+    )
+    stop_loss = lo.place_limit_order(
+        user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop',
+    )
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('7.00'))
+    assert len(lo.evaluate_pending_orders()) == 1
+
+    statuses = {o.limitOrderId: o.status for o in lo.list_limit_orders(user_id)}
+    assert statuses[stop_loss.limitOrderId] == 'filled'
+    assert statuses[take_profit.limitOrderId] == 'pending'
+
+
+# Once more than one asset type takes conditional orders, the type in the
+# route has to actually filter or the stock tab shows the crypto orders.
+def test_list_limit_orders_filters_by_asset_type(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    stock = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('8.00'))
+
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    crypto = lo.place_limit_order(user_id, 'crypto', 'BTC-USD', 'buy', Decimal('1'), Decimal('8.00'))
+
+    assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'stock')] == [stock.limitOrderId]
+    assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'crypto')] == [crypto.limitOrderId]
+    # Omitted, it still means "every type".
+    assert len(lo.list_limit_orders(user_id)) == 2
+
+
+def test_list_limit_orders_can_be_paged(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    for _ in range(3):
+        lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('8.00'))
+
+    assert len(lo.list_limit_orders(user_id, limit=2)) == 2
+
+
+# The screen exists so a tick costs one batched call plus a price only for
+# the tickers that look like they have crossed.
+def test_evaluate_pending_orders_prices_only_the_tickers_that_could_fill(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+    lo.place_limit_order(user_id, 'stock', 'MSFT', 'buy', Decimal('1'), Decimal('4.00'))
+
+    priced = []
+
+    def counted_price(ticker):
+        priced.append(ticker)
+        return Decimal('10.00')
+
+    monkeypatch.setattr(market_data, 'trade_price', counted_price)
+    monkeypatch.setattr(
+        market_data, 'live_quotes',
+        lambda symbols: {s: {'symbol': s, 'currentPrice': 10.0} for s in symbols},
+    )
+
+    assert len(lo.evaluate_pending_orders()) == 1
+    # MSFT's limit of $4 is nowhere near $10, so it never gets priced.
+    assert priced == ['AAPL']
+
+
+def test_evaluate_pending_orders_prices_a_ticker_the_screen_could_not(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+
+    # A gap in the quote feed must delay a fill at worst, never drop it.
+    monkeypatch.setattr(market_data, 'live_quotes', lambda symbols: {})
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+
+    assert len(lo.evaluate_pending_orders()) == 1
+
+
+def test_evaluate_pending_orders_survives_a_failing_screen(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('12.00'))
+
+    def boom(symbols):
+        raise RuntimeError('feed down')
+
+    monkeypatch.setattr(market_data, 'live_quotes', boom)
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+
+    assert len(lo.evaluate_pending_orders()) == 1
 
 
 def test_evaluate_pending_orders_skips_ticker_when_market_data_unavailable(user_id, monkeypatch):
@@ -239,7 +419,7 @@ def test_evaluate_pending_orders_skips_ticker_when_market_data_unavailable(user_
     monkeypatch.setattr(market_data, 'trade_price', flaky_price)
     filled = lo.evaluate_pending_orders()
 
-    assert filled == 1
+    assert len(filled) == 1
     statuses = {o.ticker: o.status for o in lo.list_limit_orders(user_id)}
     assert statuses['AAPL'] == 'pending'
     assert statuses['MSFT'] == 'filled'

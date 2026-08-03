@@ -8,6 +8,7 @@ vi.mock('./api', () => ({
   fetchCurrentUser: vi.fn(),
   logout: vi.fn(),
   fetchBalance: vi.fn().mockResolvedValue(1000),
+  fetchAssetTypes: vi.fn().mockResolvedValue([]),
   login: vi.fn(),
   register: vi.fn(),
 }))

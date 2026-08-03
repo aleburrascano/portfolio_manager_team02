@@ -43,6 +43,8 @@ Everything lives in `server/.env` (not committed):
 | `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
 | `CORS_ORIGINS` | Comma-separated. Defaults to `http://localhost:5173`. |
 | `CROSS_SITE_COOKIE` | Set to `1` only where the client is on a different domain than the server. Sends the session cookie as `SameSite=None; Secure`, which needs HTTPS — so it breaks local sign-in. |
+| `LOG_LEVEL` | Defaults to `INFO`, which logs one line per request with its status and duration. `WARNING` keeps only the slow ones, the 500s, and background work that failed. |
+| `START_LIMIT_ORDER_POLLER` | Set to `false` to stop the background thread that fills conditional orders and redeems matured bonds. The only switch that keeps this process off the market data feed on a timer, which is why the test suite sets it — leave it alone otherwise, or nothing ever fills. |
 
 MySQL needs its (empty) database to exist first; SQLite doesn't.
 
@@ -82,7 +84,11 @@ cd client && npm test            # components and API layer
 cd e2e    && npx playwright test # full stack, real browser
 ```
 
-The e2e suite starts its own server and client against a throwaway database.
+The e2e suite starts its own server and client against a throwaway database,
+with `MARKET_DATA=fake` so prices come from `services/fake_feed.py` rather
+than from Yahoo. That is what lets it trade stocks and crypto, and watch a
+conditional order actually fill, without depending on a third party being up
+or on a company keeping its name.
 
 ## Layout
 
@@ -132,6 +138,13 @@ another domain is a third-party cookie, which Safari blocks outright and Chrome
 is retiring. Pointed straight at Railway, signing in worked and then every
 following request came back 401, in Safari and in any browser with third-party
 cookies turned off.
+
+The last rewrite in that file is the one client-side routing needs: anything
+that isn't `/api`, `/socket.io`, or a real file is an address this app resolves
+itself, so it has to be served `index.html`. Without it, opening
+`/trade/stock/NVDA` directly — or reloading on it — 404s at the edge before the
+app ever loads. (`vercel.json` is schema-validated and JSON has no comments, so
+this note lives here rather than beside the rule.)
 
 The one cost is that Vercel's rewrites don't carry a WebSocket upgrade, so the
 quote feed settles on Socket.IO's long-polling transport. It was already

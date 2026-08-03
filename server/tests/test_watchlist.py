@@ -12,21 +12,26 @@ from helpers import register_user
 from services.exceptions import InvalidInput
 
 
+def quote_for(ticker):
+    return {
+        'symbol': ticker,
+        'name': f'{ticker} Inc.',
+        'currentPrice': 100.0,
+        'change': 1.0,
+        'changePercent': 1.0,
+    }
+
+
 @pytest.fixture(autouse=True)
 def stub_quotes(monkeypatch):
     """Every ticker quotes at $100 under a predictable name."""
+    # quote_book, not get_quote: the watchlist prices a whole asset type in
+    # one call, which is the promise its docstring makes.
     for provider in watchlist.PROVIDERS.values():
         monkeypatch.setattr(
-            provider,
-            'get_quote',
-            lambda ticker: {
-                'symbol': ticker,
-                'name': f'{ticker} Inc.',
-                'currentPrice': 100.0,
-                'change': 1.0,
-                'changePercent': 1.0,
-            },
+            provider, 'quote_book', lambda tickers: {t: quote_for(t) for t in tickers},
         )
+        monkeypatch.setattr(provider, 'get_quote', quote_for)
 
 
 def watchlist_url(user_id, asset_type='stock', ticker='AAPL'):
@@ -95,6 +100,17 @@ def test_newest_saved_appears_first(client):
     assert [entry['symbol'] for entry in entries] == ['NVDA', 'MSFT', 'AAPL']
 
 
+# Three saves land inside the same second, so this only holds if addedAt
+# carries sub-second precision rather than the column's server default.
+def test_ordering_survives_saves_within_one_second(client):
+    user = register_user(client)
+    for ticker in ('ZZZZ', 'AAAA', 'MMMM'):
+        client.put(watchlist_url(user['userId'], ticker=ticker))
+
+    entries = client.get(f'/api/v1/users/{user["userId"]}/watchlist').get_json()['watchlist']
+    assert [entry['symbol'] for entry in entries] == ['MMMM', 'AAAA', 'ZZZZ']
+
+
 def test_any_asset_type_can_be_watched(client):
     user = register_user(client)
     client.put(watchlist_url(user['userId'], asset_type='bond', ticker='UST2Y'))
@@ -122,7 +138,9 @@ def test_the_list_is_capped(client, monkeypatch):
 
 def test_a_quote_that_fails_still_lists_the_ticker(client, monkeypatch):
     for provider in watchlist.PROVIDERS.values():
-        monkeypatch.setattr(provider, 'get_quote', lambda ticker: (_ for _ in ()).throw(RuntimeError()))
+        monkeypatch.setattr(
+            provider, 'quote_book', lambda tickers: (_ for _ in ()).throw(RuntimeError()),
+        )
 
     user = register_user(client)
     client.put(watchlist_url(user['userId']))

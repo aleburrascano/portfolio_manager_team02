@@ -10,6 +10,7 @@ sell_asset already are - construct an app context, call it, assert on the
 database - with the sleep loop itself as a thin, separately tested wrapper.
 """
 import collections
+import logging
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
@@ -19,7 +20,7 @@ from sqlalchemy import select
 import db.connection as db_conn
 import services.market_data as market_data
 import services.user_transactions as ut
-from db.models import LimitOrder
+from db.models import Asset, LimitOrder
 from services.asset_providers import PROVIDERS
 from services.asset_transactions import get_holding_qty_decimal, record_trade, register_asset
 from services.exceptions import (
@@ -28,6 +29,9 @@ from services.exceptions import (
 )
 
 SIDES = ('buy', 'sell')
+ORDER_TYPES = ('limit', 'stop')
+
+logger = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -42,10 +46,11 @@ def _require_limit_order_support(asset_type: str) -> None:
 
 
 def place_limit_order(
-    user_id: int, asset_type: str, ticker: str, side: str, quantity: Decimal, limit_price: Decimal,
+    user_id: int, asset_type: str, ticker: str, side: str, quantity: Decimal,
+    limit_price: Decimal, order_type: str = 'limit',
 ) -> LimitOrder:
     """
-    Queue a GTC limit order.
+    Queue a GTC conditional order, either a limit or a stop.
 
     A quick, point-in-time affordability check runs now under the user row
     lock - the same check purchase_asset/sell_asset make - so an order that
@@ -55,10 +60,17 @@ def place_limit_order(
     the user's balance or holdings can legitimately move between now and
     then.
 
+    A limit buy can never fill above limit_price, so that is exactly what
+    the cash check needs. A stop buy triggers on the way *up* and fills at
+    whatever the market is then, which is a cost with no ceiling - there is
+    no honest figure to check it against, so the check uses the trigger
+    price as the nearest thing and the real one still happens at fill time.
+
     Raises:
         UnknownUser: no such user.
-        InvalidInput: asset_type isn't stock, side isn't buy/sell, or (for
-            a buy) the stock can't currently be bought.
+        InvalidInput: the asset type doesn't take conditional orders, side
+            isn't buy/sell, order_type isn't limit/stop, or (for a buy) the
+            asset can't currently be bought.
         MarketDataUnavailable: the asset can't be priced (from registering
             a never-before-traded ticker).
         InsufficientFunds / InsufficientHoldings: as of right now, the
@@ -66,6 +78,8 @@ def place_limit_order(
     """
     if side not in SIDES:
         raise InvalidInput("side must be 'buy' or 'sell'.")
+    if order_type not in ORDER_TYPES:
+        raise InvalidInput("orderType must be 'limit' or 'stop'.")
     _require_limit_order_support(asset_type)
 
     provider = PROVIDERS[asset_type]
@@ -89,7 +103,7 @@ def place_limit_order(
                 raise InsufficientHoldings('Not enough shares to cover this order if it fills right now.')
 
         order = LimitOrder(
-            userId=user_id, ticker=ticker, side=side,
+            userId=user_id, ticker=ticker, side=side, orderType=order_type,
             quantity=quantity, limitPrice=limit_price, status='pending',
         )
         session.add(order)
@@ -139,15 +153,36 @@ def cancel_limit_order(user_id: int, limit_order_id: int) -> None:
         raise
 
 
-def list_limit_orders(user_id: int, status: Optional[str] = None) -> List[LimitOrder]:
-    """A user's limit orders, newest first, optionally filtered by status."""
+def list_limit_orders(
+    user_id: int, asset_type: Optional[str] = None, status: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> List[LimitOrder]:
+    """
+    A user's conditional orders, newest first, optionally filtered by asset
+    type and status.
+
+    The asset type is a real filter rather than only a route segment: now
+    that more than one type takes conditional orders, a caller asking for a
+    stock's orders would otherwise be handed the crypto ones too. It comes
+    from the Assets row, which is the one place a ticker's type is recorded.
+
+    A pending list stays short - orders leave it as they fill or are
+    cancelled - but filled and cancelled ones accumulate for as long as the
+    account is used, so a caller showing history can ask for a page of it.
+    """
     statement = select(LimitOrder).where(LimitOrder.userId == user_id)
+    if asset_type is not None:
+        statement = statement.join(Asset, Asset.ticker == LimitOrder.ticker).where(
+            Asset.assetType == asset_type
+        )
     if status is not None:
         statement = statement.where(LimitOrder.status == status)
     # limitOrderId breaks ties within the same createdAt tick (SQLite's
     # CURRENT_TIMESTAMP only has second resolution), keeping the list
     # deterministically newest-first.
     statement = statement.order_by(LimitOrder.createdAt.desc(), LimitOrder.limitOrderId.desc())
+    if limit is not None:
+        statement = statement.limit(limit)
     return db_conn.get_session().scalars(statement).all()
 
 
@@ -158,12 +193,18 @@ def evaluate_pending_orders() -> int:
     was true when the condition was first noticed) - all-or-nothing, one
     AssetTransaction per fill.
 
-    Orders are grouped by ticker so each ticker's price costs one
-    market_data call no matter how many orders are waiting on it. Each
-    candidate is then locked and resolved independently: a user (or order)
-    row lock means one fill can't race a manual trade, a manual cancel, or
-    another fill for the same user, but a stuck or slow fill for one user
-    never blocks another user's.
+    Prices are found in two stages. One batched quote call screens every
+    pending ticker at once: a ticker no waiting order could fill at - which
+    on any given tick is nearly all of them - is dropped there and costs
+    nothing further. Only the tickers that look like they have crossed are
+    then priced individually through trade_price, the same call a market
+    order books at, so a fill still executes at the authoritative price
+    rather than at the indicative one used to screen it.
+
+    Each candidate is then locked and resolved independently: a user (or
+    order) row lock means one fill can't race a manual trade, a manual
+    cancel, or another fill for the same user, but a stuck or slow fill for
+    one user never blocks another user's.
 
     If a buy's cost (or a sell's quantity) can no longer be covered at fill
     time - the user spent the cash or sold the shares elsewhere since
@@ -173,7 +214,10 @@ def evaluate_pending_orders() -> int:
     default for a GTC order is to keep trying rather than to guess.
 
     Returns:
-        int: how many orders were filled this pass.
+        list[dict]: one row per fill, describing what happened. Returned
+        rather than announced: a fill is worth telling its owner about, but
+        this module has no Flask and no socket, so the caller (the poller)
+        does the telling.
     """
     session = db_conn.get_session()
     pending = session.scalars(
@@ -184,52 +228,121 @@ def evaluate_pending_orders() -> int:
         .order_by(LimitOrder.createdAt, LimitOrder.limitOrderId)
     ).all()
     if not pending:
-        return 0
+        return []
 
     by_ticker = collections.defaultdict(list)
     for order in pending:
         by_ticker[order.ticker].append(order)
 
-    filled = 0
+    screen = _indicative_prices(list(by_ticker))
+
+    filled = []
     for ticker, orders in by_ticker.items():
+        # A ticker the screen priced but which no waiting order has crossed
+        # needs no further lookup this tick. A ticker the screen couldn't
+        # price falls through to the authoritative fetch rather than being
+        # skipped, so a gap in the quote feed delays a fill at worst.
+        indicative = screen.get(ticker)
+        if indicative is not None and not any(_condition_met(order, indicative) for order in orders):
+            continue
+
         try:
             price = market_data.trade_price(ticker)
         except MarketDataUnavailable:
             continue  # try this ticker again next tick
 
         for order in orders:
-            if _try_fill(session, order.limitOrderId, price):
-                filled += 1
+            fill = _try_fill(session, order.limitOrderId, price)
+            if fill is not None:
+                filled.append(fill)
     return filled
 
 
-def _try_fill(session, limit_order_id: int, price: Decimal) -> bool:
-    """Fill one order under its own lock, if its condition still holds."""
+def _indicative_prices(tickers: List[str]) -> dict:
+    """
+    One batched quote call for every pending ticker, as {ticker: Decimal}.
+
+    Only used to decide which tickers are worth pricing properly, so a
+    failure here is not worth reporting - it just means nothing gets
+    screened out and every ticker is priced the slow way, exactly as before.
+    """
+    try:
+        quotes = market_data.live_quotes(tickers)
+    except Exception:
+        return {}
+
+    prices = {}
+    for ticker, quote in quotes.items():
+        price = quote.get('currentPrice')
+        if price is not None:
+            prices[ticker] = Decimal(str(price))
+    return prices
+
+
+def _condition_met(order: LimitOrder, price: Decimal) -> bool:
+    """
+    Whether `price` has crossed this order's trigger.
+
+    A limit order waits for a price at least as good as its trigger; a stop
+    order waits for one at least as bad. That single reversal is the whole
+    difference between the two, which is why both live in one table and one
+    poller rather than two of each.
+    """
+    if (order.side == 'buy') == (order.orderType == 'limit'):
+        # Limit buy: at or below. Stop sell: at or below.
+        return price <= order.limitPrice
+    # Limit sell: at or above. Stop buy: at or above.
+    return price >= order.limitPrice
+
+
+def _try_fill(session, limit_order_id: int, price: Decimal) -> Optional[dict]:
+    """
+    Fill one order under its own lock, if its condition still holds.
+
+    Returns a description of the fill, or None if it didn't happen. Read
+    into a plain dict before returning, because the caller reports it after
+    this session is gone and a detached ORM row would not survive the trip.
+    """
     try:
         order = _lock_order(session, limit_order_id)
         if order is None or order.status != 'pending':
-            return False
+            return None
 
-        met = price <= order.limitPrice if order.side == 'buy' else price >= order.limitPrice
-        if not met:
-            return False
+        if not _condition_met(order, price):
+            return None
 
         if not db_conn.lock_user(session, order.userId):
-            return False  # user no longer exists; leave the order pending
+            return None  # user no longer exists; leave the order pending
 
         if order.side == 'buy':
             if ut.get_user_balance(order.userId) < order.quantity * price:
-                return False
+                return None
         else:
             if get_holding_qty_decimal(order.userId, order.ticker) < order.quantity:
-                return False
+                return None
 
         tx = record_trade(session, order.userId, order.ticker, order.quantity, price, order.side)
         order.status = 'filled'
         order.assetTransactionId = tx.assetTransactionId
         order.resolvedAt = _now()
+
+        fill = {
+            'userId': order.userId,
+            'limitOrderId': order.limitOrderId,
+            'ticker': order.ticker,
+            'side': order.side,
+            'orderType': order.orderType,
+            'quantity': float(order.quantity),
+            'price': float(price),
+            'assetTransactionId': tx.assetTransactionId,
+        }
         session.commit()
-        return True
+        return fill
     except Exception:
+        # Logged, not just swallowed: this is the one place a money-moving
+        # failure has no request to report into, and an unfilled order that
+        # hit a constraint violation is otherwise indistinguishable from one
+        # whose price simply hasn't been met yet.
+        logger.exception('Limit order %s failed to fill', limit_order_id)
         session.rollback()
-        return False
+        return None
