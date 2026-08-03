@@ -6,22 +6,6 @@
   text-align: left;
 }
 
-.back-btn {
-  align-self: flex-start;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  font-family: var(--sans);
-  font-size: var(--fs-base);
-  cursor: pointer;
-  padding: 4px 0;
-  transition: color var(--dur-fast) var(--ease);
-}
-
-.back-btn:hover {
-  color: var(--text-h);
-}
-
 .trade-controls {
   display: flex;
   align-items: center;

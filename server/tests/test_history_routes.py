@@ -110,7 +110,7 @@ def test_export_requires_authentication(client):
 
 
 def test_export_defuses_a_formula_in_a_cell(client, monkeypatch):
-    import routes.history as history
+    import api.routes.history as history
 
     monkeypatch.setattr(history, 'get_user_transactions', lambda *args, **kwargs: [{
         'transactionId': 1, 'transactionDate': '2026-01-01', 'type': 'stock',

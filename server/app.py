@@ -8,18 +8,18 @@ from typing import Tuple
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
-from apidocs import init_app as init_apidocs
-from authorization import init_app as init_sessions
+from api.docs import init_app as init_apidocs
+from api.authorization import init_app as init_sessions
 from db.connection import init_app as init_db
-from errors import register_error_handlers
+from api.errors import register_error_handlers
 from limit_order_poller import start as start_limit_order_poller
-from observability import health, init_app as init_observability
-from realtime import init_app as init_realtime, socketio
-from routes.wallet import wallet_bp
-from routes.assets import assets_bp
-from routes.history import history_bp
-from routes.auth import auth_bp
-from routes.limit_orders import limit_orders_bp
+from api.observability import health, init_app as init_observability
+from api.realtime import init_app as init_realtime, socketio
+from api.routes.wallet import wallet_bp
+from api.routes.assets import assets_bp
+from api.routes.history import history_bp
+from api.routes.auth import auth_bp
+from api.routes.limit_orders import limit_orders_bp
 
 load_dotenv()
 
