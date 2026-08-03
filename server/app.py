@@ -23,18 +23,27 @@ load_dotenv()
 app = Flask(__name__)
 init_db(app)
 init_sessions(app)
-register_error_handlers(app)
 
 cors_origins = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
 CORS(app, origins=cors_origins, supports_credentials=True)
 init_realtime(app, cors_origins)
 
 API_PREFIX = '/api/v1'
-app.register_blueprint(wallet_bp, url_prefix=API_PREFIX)
-app.register_blueprint(assets_bp, url_prefix=API_PREFIX)
-app.register_blueprint(history_bp, url_prefix=API_PREFIX)
-app.register_blueprint(auth_bp, url_prefix=API_PREFIX)
-app.register_blueprint(limit_orders_bp, url_prefix=API_PREFIX)
+# Through the Api rather than Flask directly: that is what puts a
+# blueprint's routes and schemas into the spec.
+api = init_apidocs(app)
+
+# After the Api, deliberately. flask-smorest installs its own handler for
+# HTTPException, which answers a rejected request with its own envelope
+# ({'code', 'errors', 'status'}). Registering ours second puts this API's
+# single error shape back in front of it - the client reads
+# error.message and knows nothing about smorest's.
+register_error_handlers(app)
+api.register_blueprint(wallet_bp, url_prefix=API_PREFIX)
+api.register_blueprint(assets_bp, url_prefix=API_PREFIX)
+api.register_blueprint(history_bp, url_prefix=API_PREFIX)
+api.register_blueprint(auth_bp, url_prefix=API_PREFIX)
+api.register_blueprint(limit_orders_bp, url_prefix=API_PREFIX)
 
 # Disabled in tests (see tests/conftest.py) so the suite doesn't get a live
 # thread hitting real market data against the shared in-memory database.
@@ -45,9 +54,6 @@ if os.environ.get('START_LIMIT_ORDER_POLLER', 'true').lower() != 'false':
 def index() -> dict:
     """Health check endpoint."""
     return {'status': 'ok'}
-
-# Last, so the URL map it reads is complete.
-init_apidocs(app)
 
 if __name__ == '__main__':
     # socketio.run rather than app.run, so the WebSocket endpoint is served
