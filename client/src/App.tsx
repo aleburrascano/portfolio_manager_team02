@@ -1,26 +1,62 @@
 import { useEffect, useState } from 'react'
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useNavigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import TradeAssets from './pages/TradeAssets'
 import TransactionHistory from './pages/TransactionHistory'
 import Account from './pages/Account'
 import FillToasts from './components/FillToasts'
 import Header from './components/Header'
-import Sidebar, { type Page } from './components/Sidebar'
+import Sidebar from './components/Sidebar'
 import Login from './components/Login'
 import { AssetTypesProvider } from './AssetTypesContext'
 import { BalanceProvider } from './BalanceContext'
-import { fetchCurrentUser, logout, type AssetType, type SessionResult, type User } from './api'
+import { fetchCurrentUser, logout, type SessionResult, type User } from './api'
 import './App.css'
+
+/**
+ * The chrome every signed-in page sits inside, with the page itself in the
+ * outlet.
+ *
+ * Split out from App so that the header, the rail and the toast layer are
+ * mounted once for the whole session rather than per route - remounting
+ * them on every navigation would drop the socket subscriptions and any
+ * notice currently on screen.
+ */
+function AppShell({
+  user,
+  onLogout,
+}: {
+  user: User
+  onLogout: () => void
+}) {
+  const navigate = useNavigate()
+
+  return (
+    <BalanceProvider userId={user.userId}>
+      <a className="skip-link" href="#app-page">
+        Skip to main content
+      </a>
+      <div className="app-shell">
+        <Header user={user} onOpenAccount={() => navigate('/account')} onLogout={onLogout} />
+        <div className="app-body">
+          <Sidebar />
+          <main className="app-page" id="app-page" tabIndex={-1}>
+            <Outlet />
+          </main>
+        </div>
+      </div>
+      {/* At the shell, because a conditional order can fill - or a bond
+          mature - while the user is on any screen, including none of the
+          ones that would otherwise show it. */}
+      <FillToasts />
+    </BalanceProvider>
+  )
+}
 
 function App() {
   // The server session is the only source of truth for who is logged in, so
   // it's asked once on load rather than trusting anything the client stored.
   const [session, setSession] = useState<SessionResult | null>(null)
-  const [page, setPage] = useState<Page>('dashboard')
-  // Set when the user opens an asset from somewhere other than the trade
-  // screen - a holdings row, a watchlist tile - so that screen knows what
-  // to show on arrival.
-  const [openAsset, setOpenAsset] = useState<{ assetType: AssetType; symbol: string } | null>(null)
   // Bumped by the retry button; the effect re-runs the session check when
   // it changes. The effect only reports the answer, so clearing back to the
   // loading state stays in the click handler where it belongs.
@@ -51,7 +87,6 @@ function App() {
       await logout()
     } finally {
       setSession({ status: 'anonymous' })
-      setPage('dashboard')
     }
   }
 
@@ -93,43 +128,27 @@ function App() {
 
   return (
     <AssetTypesProvider>
-      <BalanceProvider userId={user.userId}>
-        <a className="skip-link" href="#app-page">
-          Skip to main content
-        </a>
-        <div className="app-shell">
-          <Header
-            user={user}
-            onOpenAccount={() => setPage('account')}
-            onLogout={handleLogout}
-          />
-          <div className="app-body">
-            <Sidebar page={page} onNavigate={setPage} />
-            <main className="app-page" id="app-page" tabIndex={-1}>
-              {page === 'dashboard' && (
-                <Dashboard
-                  user={user}
-                  onBrowseAssets={() => {
-                    setOpenAsset(null)
-                    setPage('trade-assets')
-                  }}
-                  onSelectAsset={(assetType, symbol) => {
-                    setOpenAsset({ assetType, symbol })
-                    setPage('trade-assets')
-                  }}
-                />
-              )}
-              {page === 'trade-assets' && <TradeAssets user={user} openAsset={openAsset} />}
-              {page === 'transaction-history' && <TransactionHistory user={user} />}
-              {page === 'account' && <Account user={user} onUpdate={handleLogin} />}
-            </main>
-          </div>
-        </div>
-        {/* At the shell, because a conditional order can fill while the
-            user is on any screen - including none of the ones that would
-            otherwise show it. */}
-        <FillToasts />
-      </BalanceProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppShell user={user} onLogout={handleLogout} />}>
+            <Route index element={<Dashboard user={user} />} />
+            {/* An asset type is part of the address, so a tab is a place -
+                shareable, bookmarkable, and reachable with the back button.
+                Bare /trade picks the first tab rather than showing nothing. */}
+            <Route path="trade" element={<Navigate to="/trade/stock" replace />} />
+            <Route path="trade/:assetType" element={<TradeAssets user={user} />} />
+            <Route path="trade/:assetType/:symbol" element={<TradeAssets user={user} />} />
+            {/* Its own path rather than a third segment under trade, which
+                would be ambiguous with a ticker named "orders". */}
+            <Route path="orders/:assetType" element={<TradeAssets user={user} showOrders />} />
+            <Route path="history" element={<TransactionHistory user={user} />} />
+            <Route path="account" element={<Account user={user} onUpdate={handleLogin} />} />
+            {/* An address this app doesn't have is not worth an error page;
+                the dashboard is where someone wanted to be anyway. */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
     </AssetTypesProvider>
   )
 }

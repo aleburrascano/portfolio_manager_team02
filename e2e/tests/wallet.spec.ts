@@ -86,7 +86,7 @@ test('shows the transaction in the history page', async ({ page }) => {
   await page.getByRole('button', { name: 'Done' }).click()
   await expect(page.locator('.wallet-balance')).toHaveText('$75.00')
 
-  await page.getByRole('button', { name: 'History' }).click()
+  await page.getByRole('link', { name: 'History' }).click()
   await expect(page.getByText('Deposited cash')).toBeVisible()
   await expect(page.getByText('+$75.00')).toBeVisible()
 })

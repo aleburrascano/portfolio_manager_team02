@@ -18,7 +18,7 @@
   gap: 2px;
 }
 
-.sidebar-nav button {
+.sidebar-nav a {
   width: 100%;
   display: flex;
   align-items: center;
@@ -32,6 +32,9 @@
   font-size: var(--fs-base);
   font-weight: 600;
   color: var(--text-muted);
+  /* These are links now, so the underline has to be turned off explicitly
+     where the button styling used to make the question moot. */
+  text-decoration: none;
   cursor: pointer;
   text-align: left;
   transition:
@@ -39,14 +42,14 @@
     color var(--dur-fast) var(--ease);
 }
 
-.sidebar-nav button:hover {
+.sidebar-nav a:hover {
   background: var(--bg);
   color: var(--text-h);
 }
 
 /* The rule marks which page you are on. It is the only place in the app a
    coloured edge means anything, which is why it is allowed to be here. */
-.sidebar-nav button.active {
+.sidebar-nav a.active {
   border-left-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent-ink);
@@ -92,7 +95,7 @@
     flex: 1;
   }
 
-  .sidebar-nav button {
+  .sidebar-nav a {
     flex-direction: column;
     justify-content: center;
     gap: 3px;
@@ -105,7 +108,7 @@
     text-align: center;
   }
 
-  .sidebar-nav button.active {
+  .sidebar-nav a.active {
     border-left-color: transparent;
     border-top-color: var(--accent);
   }

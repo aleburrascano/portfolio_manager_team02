@@ -1,15 +1,14 @@
 import type { ReactNode } from 'react'
+import { NavLink } from 'react-router-dom'
 import './Sidebar.css'
-
-export type Page = 'dashboard' | 'trade-assets' | 'transaction-history' | 'account'
 
 // Three destinations, not five: account settings and logging out moved to
 // the account menu in the header, which is where people reach for them.
 // That leaves the rail (and the phone's bottom bar) with only the places
 // you actually navigate between.
-const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
+const NAV_ITEMS: { to: string; label: string; icon: ReactNode }[] = [
   {
-    page: 'dashboard',
+    to: '/',
     label: 'Dashboard',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -21,7 +20,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    page: 'trade-assets',
+    to: '/trade',
     label: 'Trade',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -30,7 +29,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
     ),
   },
   {
-    page: 'transaction-history',
+    to: '/history',
     label: 'History',
     icon: (
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -41,24 +40,28 @@ const NAV_ITEMS: { page: Page; label: string; icon: ReactNode }[] = [
   },
 ]
 
-function Sidebar({ page, onNavigate }: { page: Page; onNavigate: (page: Page) => void }) {
+function Sidebar() {
   return (
     <nav className="sidebar" aria-label="Main">
       <ul className="sidebar-nav">
         {NAV_ITEMS.map((item) => (
-          <li key={item.page}>
-            <button
-              type="button"
-              className={page === item.page ? 'active' : ''}
-              aria-current={page === item.page ? 'page' : undefined}
+          <li key={item.to}>
+            {/* Links, not buttons: these are places, and a place should be
+                openable in a new tab, bookmarkable, and reachable with the
+                browser's own back button. */}
+            <NavLink
+              to={item.to}
+              // Only the dashboard matches exactly - /trade should stay lit
+              // while looking at an asset underneath it.
+              end={item.to === '/'}
+              className={({ isActive }) => (isActive ? 'active' : '')}
               title={item.label}
-              onClick={() => onNavigate(item.page)}
             >
               <span className="sidebar-icon" aria-hidden="true">
                 {item.icon}
               </span>
               <span className="sidebar-label">{item.label}</span>
-            </button>
+            </NavLink>
           </li>
         ))}
       </ul>
