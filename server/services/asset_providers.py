@@ -24,6 +24,11 @@ class AssetProvider(ABC):
 
     asset_type: str
 
+    # Whether this asset type can be traded via a GTC limit order. Stocks
+    # only for now; the poller and routes stay generic so a future provider
+    # only has to flip this on.
+    supports_limit_orders: bool = False
+
     @abstractmethod
     def search(self, query: str) -> List[dict]:
         """Search results in the summary shape (symbol, name, quote fields)."""
@@ -146,6 +151,7 @@ class _MarketTradedProvider(AssetProvider):
 
 class StockProvider(_MarketTradedProvider):
     asset_type = 'stock'
+    supports_limit_orders = True
 
     # Yahoo Finance exchange codes for Nasdaq, NYSE, and NYSE American/Arca.
     US_EXCHANGES = {'NMS', 'NGM', 'NCM', 'NYQ', 'ASE', 'PCX', 'BATS'}

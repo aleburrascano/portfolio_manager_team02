@@ -15,7 +15,7 @@ from services.exceptions import (
 )
 
 
-def _register_asset(session, provider, ticker: str) -> None:
+def register_asset(session, provider, ticker: str) -> None:
     """
     Make sure the asset exists, and is the type it claims to be, before a
     transaction references it.
@@ -55,15 +55,38 @@ def get_holding_qty(user_id: int, ticker: str) -> float:
     Returns:
         float: The number of shares owned (0 if none).
     """
-    return float(_get_holding_qty_decimal(user_id, ticker))
+    return float(get_holding_qty_decimal(user_id, ticker))
 
 
-def _get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
+def get_holding_qty_decimal(user_id: int, ticker: str) -> Decimal:
     total_shares = db_conn.get_session().scalar(
         select(func.coalesce(func.sum(AssetTransaction.qty), 0))
         .where(AssetTransaction.userId == user_id, AssetTransaction.ticker == ticker)
     )
     return Decimal(str(total_shares))
+
+
+def record_trade(
+    session, user_id: int, ticker: str, quantity: Decimal, price: Decimal, side: str
+) -> AssetTransaction:
+    """
+    Insert the one AssetTransaction row a trade produces, signed by side.
+
+    Shared by purchase_asset/sell_asset (market orders) and
+    services.limit_orders (the fill a pending order produces), so there is
+    exactly one place that builds an AssetTransaction and exactly one shape
+    it can have.
+    """
+    tx = AssetTransaction(
+        ticker=ticker,
+        qty=quantity if side == 'buy' else -quantity,
+        price=price,
+        assetTransactionType=side,
+        userId=user_id,
+    )
+    session.add(tx)
+    session.flush()
+    return tx
 
 
 def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) -> None:
@@ -96,7 +119,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        _register_asset(session, provider, ticker)
+        register_asset(session, provider, ticker)
         price = provider.trade_price(ticker)
         cost = quantity * price
 
@@ -105,13 +128,7 @@ def purchase_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal
         if ut.get_user_balance(user_id) < cost:
             raise InsufficientFunds('Not enough cash for this purchase.')
 
-        session.add(AssetTransaction(
-            ticker=ticker,
-            qty=quantity,
-            price=price,
-            assetTransactionType='buy',
-            userId=user_id,
-        ))
+        record_trade(session, user_id, ticker, quantity, price, 'buy')
         session.commit()
     except Exception:
         session.rollback()
@@ -144,21 +161,15 @@ def sell_asset(user_id: int, asset_type: str, ticker: str, quantity: Decimal) ->
         if not db_conn.lock_user(session, user_id):
             raise UnknownUser('No such user.')
 
-        _register_asset(session, provider, ticker)
+        register_asset(session, provider, ticker)
         price = provider.trade_price(ticker)
 
         # Re-checked under the user row lock, so no concurrent request can
         # sell the same shares twice.
-        if _get_holding_qty_decimal(user_id, ticker) < quantity:
+        if get_holding_qty_decimal(user_id, ticker) < quantity:
             raise InsufficientHoldings('Not enough shares to sell.')
 
-        session.add(AssetTransaction(
-            ticker=ticker,
-            qty=-quantity,
-            price=price,
-            assetTransactionType='sell',
-            userId=user_id,
-        ))
+        record_trade(session, user_id, ticker, quantity, price, 'sell')
         session.commit()
     except Exception:
         session.rollback()

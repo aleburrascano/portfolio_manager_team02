@@ -9,11 +9,13 @@ from dotenv import load_dotenv
 from authorization import init_app as init_sessions
 from db.connection import init_app as init_db
 from errors import register_error_handlers
+from limit_order_poller import start as start_limit_order_poller
 from realtime import init_app as init_realtime, socketio
 from routes.wallet import wallet_bp
 from routes.assets import assets_bp
 from routes.history import history_bp
 from routes.auth import auth_bp
+from routes.limit_orders import limit_orders_bp
 
 load_dotenv()
 
@@ -31,6 +33,12 @@ app.register_blueprint(wallet_bp, url_prefix=API_PREFIX)
 app.register_blueprint(assets_bp, url_prefix=API_PREFIX)
 app.register_blueprint(history_bp, url_prefix=API_PREFIX)
 app.register_blueprint(auth_bp, url_prefix=API_PREFIX)
+app.register_blueprint(limit_orders_bp, url_prefix=API_PREFIX)
+
+# Disabled in tests (see tests/conftest.py) so the suite doesn't get a live
+# thread hitting real market data against the shared in-memory database.
+if os.environ.get('START_LIMIT_ORDER_POLLER', 'true').lower() != 'false':
+    start_limit_order_poller(app)
 
 @app.route('/')
 def index() -> dict:

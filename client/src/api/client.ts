@@ -67,3 +67,8 @@ export function patch(body?: unknown): RequestInit {
     body: JSON.stringify(body ?? {}),
   }
 }
+
+/** Build the RequestInit for a DELETE. */
+export function del(): RequestInit {
+  return { method: 'DELETE' }
+}
