@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://api-production-bf98.up.railway.app/api/:path*"
+    },
+    {
+      "source": "/socket.io",
+      "destination": "https://api-production-bf98.up.railway.app/socket.io/"
+    },
+    {
+      "source": "/socket.io/",
+      "destination": "https://api-production-bf98.up.railway.app/socket.io/"
+    },
+    {
+      "source": "/socket.io/:path*",
+      "destination": "https://api-production-bf98.up.railway.app/socket.io/:path*"
+    }
+  ]
+}
