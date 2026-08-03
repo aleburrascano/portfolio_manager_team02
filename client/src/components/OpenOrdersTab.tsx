@@ -9,6 +9,18 @@ import {
 import { formatCurrency, formatNumber } from '../format'
 import './OpenOrdersTab.css'
 
+/**
+ * Which side of the trigger this order is waiting for.
+ *
+ * A limit waits for a price at least as good as the trigger, a stop for one
+ * at least as bad, so the same side reads the opposite way round and the
+ * figure on its own would be ambiguous.
+ */
+function triggerLabel(order: LimitOrder): string {
+  const waitsForFall = (order.orderType === 'limit') === (order.side === 'buy')
+  return waitsForFall ? '≤' : '≥'
+}
+
 function formatPlaced(value: string) {
   return new Date(value).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -91,8 +103,9 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
               <tr>
                 <th scope="col">Ticker</th>
                 <th scope="col">Side</th>
+                <th scope="col">Type</th>
                 <th scope="col" className="numeric">Quantity</th>
-                <th scope="col" className="numeric">Limit price</th>
+                <th scope="col" className="numeric">Trigger</th>
                 <th scope="col">Placed</th>
                 <th scope="col" aria-label="Cancel" />
               </tr>
@@ -102,9 +115,12 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
                 <tr key={order.limitOrderId}>
                   <td data-label="Ticker" className="figure open-orders-ticker">{order.ticker}</td>
                   <td data-label="Side" className={`open-orders-side ${order.side}`}>{order.side}</td>
+                  <td data-label="Type" className="open-orders-type">{order.orderType}</td>
                   <td data-label="Quantity" className="numeric figure">{formatNumber(order.quantity, 2)}</td>
-                  <td data-label="Limit price" className="numeric figure">
-                    {formatCurrency(order.limitPrice)}
+                  {/* A stop and a limit on the same side wait for opposite
+                      moves, so the price is captioned with which one. */}
+                  <td data-label="Trigger" className="numeric figure">
+                    {triggerLabel(order)} {formatCurrency(order.limitPrice)}
                   </td>
                   <td data-label="Placed">{formatPlaced(order.createdAt)}</td>
                   <td data-label="">

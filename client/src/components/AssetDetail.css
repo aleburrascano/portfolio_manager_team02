@@ -141,8 +141,8 @@
   color: var(--accent-ink);
 }
 
-/* A second, smaller tab row for market vs. limit - subordinate to the
-   buy/sell tabs above it, not another primary choice. */
+/* A second, smaller tab row for market vs. limit vs. stop - subordinate to
+   the buy/sell tabs above it, not another primary choice. */
 .order-type-tabs {
   display: flex;
   gap: 6px;
@@ -167,6 +167,15 @@
 .order-type-tabs button.active {
   border-color: var(--accent);
   color: var(--accent-ink);
+}
+
+/* Sits directly under the trigger price box and says which way the trigger
+   runs, which the number alone can't. Quiet, because it is a caption on the
+   field above rather than a message in its own right. */
+.trade-hint {
+  margin: -6px 0 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
 }
 
 .trade-price {

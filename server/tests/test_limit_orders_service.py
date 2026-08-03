@@ -69,10 +69,37 @@ def test_place_limit_order_creates_pending_sell(user_id):
     assert order.side == 'sell'
 
 
-def test_place_limit_order_rejects_non_stock_asset_type(user_id):
+def test_place_limit_order_rejects_an_asset_type_that_cannot_take_one(user_id):
     deposit_cash(user_id, Decimal('1000.00'))
-    with pytest.raises(InvalidInput):
-        lo.place_limit_order(user_id, 'crypto', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'))
+    with pytest.raises(InvalidInput, match='only supported'):
+        lo.place_limit_order(user_id, 'bond', 'UST2Y', 'buy', Decimal('5'), Decimal('8.00'))
+
+
+# Crypto is quoted by the same feed and priced the same way as a stock, so
+# the poller needs no special case for it.
+def test_place_limit_order_accepts_crypto(user_id, monkeypatch):
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    deposit_cash(user_id, Decimal('1000.00'))
+
+    order = lo.place_limit_order(user_id, 'crypto', 'BTC-USD', 'buy', Decimal('1'), Decimal('20.00'))
+    assert order.status == 'pending'
+
+
+def test_place_limit_order_rejects_bad_order_type(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    with pytest.raises(InvalidInput, match='orderType'):
+        lo.place_limit_order(
+            user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'), 'trailing',
+        )
+
+
+def test_place_limit_order_defaults_to_a_limit_order(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    order = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'))
+    assert order.orderType == 'limit'
 
 
 def test_place_limit_order_rejects_bad_side(user_id):
@@ -241,6 +268,76 @@ def test_evaluate_pending_orders_returns_fill_count(user_id, monkeypatch):
 
     monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
     assert lo.evaluate_pending_orders() == 2
+
+
+# A stop is the mirror of a limit: it waits for the price to move against
+# the position rather than in its favour. The four cases below are the whole
+# behavioural difference between the two order types.
+
+def test_stop_sell_fills_when_the_price_falls_to_the_trigger(user_id, monkeypatch):
+    """A stop loss: get out once it drops this far."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('7.00'))
+    assert lo.evaluate_pending_orders() == 1
+    assert at.get_holding_qty(user_id, 'AAPL') == 0.0
+
+
+def test_stop_sell_stays_pending_while_the_price_holds_up(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('9.00'))
+    assert lo.evaluate_pending_orders() == 0
+    assert at.get_holding_qty(user_id, 'AAPL') == 5.0
+
+
+def test_stop_buy_fills_when_the_price_rises_to_the_trigger(user_id, monkeypatch):
+    """A breakout entry: get in once it clears this level."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('12.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('13.00'))
+    assert lo.evaluate_pending_orders() == 1
+    assert at.get_holding_qty(user_id, 'AAPL') == 5.0
+
+
+def test_stop_buy_stays_pending_below_the_trigger(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('12.00'), 'stop')
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('11.00'))
+    assert lo.evaluate_pending_orders() == 0
+
+
+# The same price fills one and not the other, which is the point.
+def test_a_stop_and_a_limit_on_one_ticker_trigger_opposite_ways(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('10'))
+    take_profit = lo.place_limit_order(
+        user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'), 'limit',
+    )
+    stop_loss = lo.place_limit_order(
+        user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('8.00'), 'stop',
+    )
+
+    monkeypatch.setattr(market_data, 'trade_price', lambda ticker: Decimal('7.00'))
+    assert lo.evaluate_pending_orders() == 1
+
+    statuses = {o.limitOrderId: o.status for o in lo.list_limit_orders(user_id)}
+    assert statuses[stop_loss.limitOrderId] == 'filled'
+    assert statuses[take_profit.limitOrderId] == 'pending'
+
+
+def test_list_limit_orders_can_be_paged(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    for _ in range(3):
+        lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('8.00'))
+
+    assert len(lo.list_limit_orders(user_id, limit=2)) == 2
 
 
 # The screen exists so a tick costs one batched call plus a price only for

@@ -108,9 +108,9 @@ describe('AssetDetail order type', () => {
     await screen.findByText('AAPL', { selector: '.asset-symbol' })
 
     await typer.click(screen.getByRole('button', { name: 'Limit' }))
-    await typer.click(screen.getByRole('button', { name: /Review buy order/ }))
+    await typer.click(screen.getByRole('button', { name: /Review limit buy/ }))
 
-    expect(screen.queryByRole('heading', { name: /Place buy order/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /Place limit buy/ })).not.toBeInTheDocument()
   })
 
   it('places a limit order without touching balance or holdings, and leaves the market path untouched', async () => {
@@ -122,17 +122,53 @@ describe('AssetDetail order type', () => {
     await typer.clear(screen.getByLabelText('Quantity'))
     await typer.type(screen.getByLabelText('Quantity'), '5')
     await typer.type(screen.getByLabelText('Limit price'), '8')
-    await typer.click(screen.getByRole('button', { name: /Review buy order/ }))
+    await typer.click(screen.getByRole('button', { name: /Review limit buy/ }))
 
-    expect(await screen.findByRole('heading', { name: /Place buy order for 5.00 AAPL/ })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /Place limit buy for 5.00 AAPL/ })).toBeInTheDocument()
     expect(screen.getByText(/Pending until the price is met/)).toBeInTheDocument()
 
     await typer.click(screen.getByRole('button', { name: 'Place order' }))
 
-    expect(mockedPlaceLimitOrder).toHaveBeenCalledWith(1, 'stock', 'AAPL', 'buy', 5, 8, expect.any(String))
+    expect(mockedPlaceLimitOrder).toHaveBeenCalledWith(
+      1, 'stock', 'AAPL', 'buy', 5, 8, 'limit', expect.any(String),
+    )
     expect(mockedBuyAsset).not.toHaveBeenCalled()
     expect(mockedFetchHoldings).toHaveBeenCalledTimes(1) // only the initial load, not a post-order refresh
     expect(await screen.findByText(/Limit order placed/)).toBeInTheDocument()
+  })
+
+  it('places a stop order and says which way its trigger runs', async () => {
+    const typer = userEvent.setup()
+    mockedFetchHoldings.mockResolvedValue(10) // there has to be something to stop out of
+    renderDetail()
+    await screen.findByText('AAPL', { selector: '.asset-symbol' })
+
+    await typer.click(screen.getByRole('button', { name: 'Sell' }))
+    await typer.click(screen.getByRole('button', { name: 'Stop' }))
+
+    // A stop sell is a stop loss: it waits for the price to fall, which is
+    // the opposite of what a limit sell waits for.
+    expect(screen.getByText('Sells if the price falls to this or lower.')).toBeInTheDocument()
+
+    await typer.type(screen.getByLabelText('Stop price'), '8')
+    await typer.click(screen.getByRole('button', { name: /Review stop sell/ }))
+    await typer.click(screen.getByRole('button', { name: 'Place order' }))
+
+    expect(mockedPlaceLimitOrder).toHaveBeenCalledWith(
+      1, 'stock', 'AAPL', 'sell', 1, 8, 'stop', expect.any(String),
+    )
+    expect(await screen.findByText(/Stop order placed/)).toBeInTheDocument()
+  })
+
+  it('reverses the hint for a limit sell, which waits for a rise', async () => {
+    const typer = userEvent.setup()
+    renderDetail()
+    await screen.findByText('AAPL', { selector: '.asset-symbol' })
+
+    await typer.click(screen.getByRole('button', { name: 'Sell' }))
+    await typer.click(screen.getByRole('button', { name: 'Limit' }))
+
+    expect(screen.getByText('Sells if the price rises to this or higher.')).toBeInTheDocument()
   })
 
   it('still places a market order the normal way when Market is selected', async () => {
