@@ -44,7 +44,11 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  /* auto-fill rather than auto-fit: empty tracks are kept instead of
+     collapsed, so a one-ticker watchlist is a single tile-sized tile
+     rather than one tile stretched the full width of the card. A full
+     row lays out identically either way. */
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
   gap: 10px;
 }
 
