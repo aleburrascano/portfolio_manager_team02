@@ -197,3 +197,46 @@ class AssetTransaction(Base):
         DateTime, server_default=func.now()
     )
     userId: Mapped[int] = mapped_column(ForeignKey('Users.userId', ondelete='CASCADE'))
+
+
+class LimitOrder(Base):
+    """
+    A good-till-cancelled conditional buy or sell of a stock: fills at the
+    current market price the first time it crosses limitPrice, or sits
+    pending until it does or the user cancels it.
+
+    Unlike AssetTransaction this row is mutable - status moves from
+    'pending' to exactly one of 'filled'/'cancelled' - which is why, unlike
+    AssetTransaction, it carries a resolvedAt. assetTransactionId is set
+    only on a fill, linking the order to the one AssetTransaction row it
+    produced.
+    """
+
+    __tablename__ = 'LimitOrders'
+    __table_args__ = (
+        CheckConstraint('quantity > 0', name='limitOrderQuantityPositive'),
+        CheckConstraint('limitPrice > 0', name='limitOrderPricePositive'),
+        # The poller's hot path: every pending order, grouped by ticker.
+        Index('ixLimitOrderStatusTicker', 'status', 'ticker'),
+        # A user's own orders, newest first (the Open Orders view).
+        Index('ixLimitOrderUserStatus', 'userId', 'status', 'createdAt'),
+        # ticker leading, which is what InnoDB needs to back the foreign
+        # key - mirrors ixAssetTicker on AssetTransaction.
+        Index('ixLimitOrderTicker', 'ticker'),
+    )
+
+    limitOrderId: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    userId: Mapped[int] = mapped_column(ForeignKey('Users.userId', ondelete='CASCADE'))
+    ticker: Mapped[str] = mapped_column(ForeignKey('Assets.ticker'))
+    side: Mapped[str] = mapped_column(Enum('buy', 'sell', name='limitOrderSide'))
+    quantity: Mapped[Decimal] = mapped_column(MONEY)
+    limitPrice: Mapped[Decimal] = mapped_column(MONEY)
+    status: Mapped[str] = mapped_column(
+        Enum('pending', 'filled', 'cancelled', name='limitOrderStatus'),
+        server_default='pending',
+    )
+    createdAt: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    resolvedAt: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    assetTransactionId: Mapped[Optional[int]] = mapped_column(
+        ForeignKey('AssetTransactions.assetTransactionId'), nullable=True
+    )

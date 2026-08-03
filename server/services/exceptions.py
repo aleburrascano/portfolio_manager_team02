@@ -32,6 +32,12 @@ class UnknownUser(ServiceError):
     status = 404
 
 
+class OrderNotFound(ServiceError):
+    """No limit order with that ID exists for this user."""
+
+    status = 404
+
+
 class UsernameTaken(ServiceError):
     """Another account already uses that username."""
 

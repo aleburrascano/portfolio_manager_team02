@@ -70,3 +70,19 @@ def holdings_links(user_id: int, asset_type: str, ticker: str) -> dict:
         'buy': url_for('assets.buy_asset', user_id=user_id, asset_type=asset_type),
         'sell': url_for('assets.sell_asset', user_id=user_id, asset_type=asset_type),
     }
+
+
+def limit_order_links(user_id: int, limit_order_id: int) -> dict:
+    return {
+        'cancel': url_for(
+            'limit_orders.cancel_limit_order', user_id=user_id, limit_order_id=limit_order_id
+        ),
+    }
+
+
+def limit_orders_links(user_id: int, asset_type: str) -> dict:
+    return {
+        'self': url_for('limit_orders.list_limit_orders', user_id=user_id, asset_type=asset_type),
+        'place': url_for('limit_orders.place_limit_order', user_id=user_id, asset_type=asset_type),
+        'portfolio': url_for('wallet.get_portfolio_breakdown', user_id=user_id),
+    }

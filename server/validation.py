@@ -67,6 +67,28 @@ def parse_quantity(raw: Any) -> Decimal:
     return _check_range(_to_decimal(raw, 'quantity'), 'quantity', MAX_AMOUNT)
 
 
+def parse_side(raw: Any) -> str:
+    """
+    Validate a limit order's buy/sell side.
+
+    Raises:
+        InvalidInput: if it isn't 'buy' or 'sell'.
+    """
+    if raw not in ('buy', 'sell'):
+        raise InvalidInput("side must be 'buy' or 'sell'.")
+    return raw
+
+
+def parse_limit_price(raw: Any) -> Decimal:
+    """
+    Validate a limit order's trigger price.
+
+    Raises:
+        InvalidInput: if it isn't a finite, positive, in-range number.
+    """
+    return _check_range(_to_decimal(raw, 'limitPrice'), 'limitPrice', MAX_AMOUNT)
+
+
 # A chart window, bounded because each extra day is priced from the market
 # data feed and an unbounded value would let one request pull decades.
 MIN_DAYS = 7
