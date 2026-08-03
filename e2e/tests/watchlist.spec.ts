@@ -32,7 +32,7 @@ test.beforeEach(async ({ page }) => {
 
 test('a new account is offered most-active rather than an empty box', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Most active today' })).toBeVisible()
-  await expect(page.getByText(/Nothing saved yet/)).toBeVisible()
+  await expect(page.getByText(/Today's most traded stocks/)).toBeVisible()
 })
 
 test('saving an asset moves it onto the dashboard watchlist', async ({ page }) => {
