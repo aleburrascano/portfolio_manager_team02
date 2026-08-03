@@ -41,7 +41,24 @@ function performance(overrides: Partial<Performance> = {}): Performance {
     byAssetType: [
       { assetType: 'stock', value: 1000, costBasis: 500, gainLoss: 500, gainLossPercent: 100 },
     ],
+    benchmark: { ticker: 'SPY', label: 'S&P 500' },
     ...overrides,
+  }
+}
+
+/** The same series, with the index comparison the server attaches. */
+function withBenchmark(portfolioEnd: number, benchmarkEnd: number): Partial<Performance> {
+  return {
+    series: [
+      {
+        date: '2026-01-01', portfolioValue: 1000, investedValue: 500,
+        cash: 500, netDeposits: 1000, benchmarkValue: 1000,
+      },
+      {
+        date: '2026-01-02', portfolioValue: portfolioEnd, investedValue: 1000,
+        cash: 500, netDeposits: 1000, benchmarkValue: benchmarkEnd,
+      },
+    ],
   }
 }
 
@@ -114,5 +131,30 @@ describe('PortfolioPerformance', () => {
     mockedFetch.mockRejectedValue(new Error('Performance service is down'))
     render(<PortfolioPerformance user={user} balance={100} />)
     expect(await screen.findByText(/Performance service is down/)).toBeInTheDocument()
+  })
+
+  // Beating your own deposits only means you didn't lose money. This is the
+  // comparison that says whether the picking was worth doing.
+  it('says how far ahead of the benchmark the portfolio is', async () => {
+    mockedFetch.mockResolvedValue(performance(withBenchmark(1500, 1200)))
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    expect(await screen.findByText('ahead of S&P 500 by $300.00')).toBeInTheDocument()
+  })
+
+  it('says so when the portfolio is behind the benchmark', async () => {
+    mockedFetch.mockResolvedValue(performance(withBenchmark(1100, 1400)))
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    expect(await screen.findByText('behind S&P 500 by $300.00')).toBeInTheDocument()
+  })
+
+  // The index is priced best-effort like everything else here: no
+  // comparison rather than no chart.
+  it('leaves the comparison out when the index could not be priced', async () => {
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await screen.findByText(/against \$1,000.00 paid in/)
+    expect(screen.queryByText(/S&P 500 by/)).not.toBeInTheDocument()
   })
 })

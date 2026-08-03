@@ -17,8 +17,16 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
+import services.market_data as market_data
 from services.asset_providers import PROVIDERS
 from services.user_transactions import get_cash_flows, get_user_asset_transactions
+
+# What "the market" means on this chart. A broad US index fund, because the
+# portfolios here are mostly US-listed and a comparison against something
+# narrower would flatter or punish for reasons that have nothing to do with
+# the user's decisions.
+BENCHMARK_TICKER = 'SPY'
+BENCHMARK_LABEL = 'S&P 500'
 
 
 def _as_date(value: Any) -> date:
@@ -65,14 +73,23 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         user_id (int): The ID of the user.
         days (int): How far back to chart.
 
+    Each point also carries `benchmarkValue`: what the same deposits, made
+    on the same days, would be worth in a broad index fund instead. "Did I
+    beat my own deposits" is the weaker of the two comparisons available
+    here, and it was the only one being offered.
+
     Returns:
-        dict: {'series': list[dict], 'summary': dict, 'byAssetType': list[dict]}
+        dict: {'series': list[dict], 'summary': dict, 'byAssetType':
+        list[dict], 'benchmark': dict}
     """
     trades = get_user_asset_transactions(user_id)
     cash_flows = get_cash_flows(user_id)
 
     if not trades and not cash_flows:
-        return {'series': [], 'summary': _empty_summary(), 'byAssetType': []}
+        return {
+            'series': [], 'summary': _empty_summary(), 'byAssetType': [],
+            'benchmark': {'ticker': BENCHMARK_TICKER, 'label': BENCHMARK_LABEL},
+        }
 
     today = date.today()
     first_activity = min(_as_date(row['transactionDate']) for row in trades + cash_flows)
@@ -165,11 +182,74 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         latest['investedValue'] = round(invested, 2)
         latest['portfolioValue'] = round(invested + latest['cash'], 2)
 
+    # Merged into the same points rather than returned alongside them, so
+    # the chart draws one dataset and a tooltip shows both figures for the
+    # date under the cursor.
+    for point, benchmark in zip(series, _benchmark_series(series)):
+        point['benchmarkValue'] = benchmark['benchmarkValue']
+
     return {
         'series': series,
         'summary': _summarise(series),
         'byAssetType': _by_asset_type(shares, asset_type_of, live_price, trades),
+        'benchmark': {'ticker': BENCHMARK_TICKER, 'label': BENCHMARK_LABEL},
     }
+
+
+def _benchmark_series(series: List[dict]) -> List[dict]:
+    """
+    What the same money would have been worth in the index instead, on the
+    same dates.
+
+    Deposits are matched, not just the opening balance: a portfolio that was
+    topped up halfway through would otherwise be compared against a
+    benchmark that never received the money, which flatters it for no reason
+    other than timing. Every dollar goes in on the day it arrived and buys
+    that day's close.
+
+    Best-effort like everything else on this chart: if the index can't be
+    priced, the comparison is simply absent rather than the whole request
+    failing.
+    """
+    if not series:
+        return []
+
+    # Straight to market_data rather than through a provider: this is a
+    # fixed reference series, not an asset anyone holds, and the window it
+    # needs is the widest the chart offers rather than a provider's default.
+    try:
+        closes = {
+            _as_date(point['date']): float(point['close'])
+            for point in market_data.price_history(BENCHMARK_TICKER, period='5y')
+            if point.get('close')
+        }
+    except Exception:
+        return []
+    if not closes:
+        return []
+
+    units = 0.0
+    last_close = None
+    previous_deposits = 0.0
+    benchmark = []
+
+    for point in series:
+        close = closes.get(_as_date(point['date'])) or last_close
+        if close:
+            last_close = close
+
+        # The change in net deposits is what went in (or came out) that day.
+        contributed = point['netDeposits'] - previous_deposits
+        previous_deposits = point['netDeposits']
+        if close and contributed:
+            units += contributed / close
+
+        benchmark.append({
+            'date': point['date'],
+            'benchmarkValue': round(units * close, 2) if close else 0.0,
+        })
+
+    return benchmark
 
 
 def _empty_summary() -> dict:
