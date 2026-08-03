@@ -4,6 +4,7 @@ import {
   transactionsExportUrl,
   type RealizedGain,
   type Transaction,
+  type TransactionPage,
   type TransactionSort,
   type User,
 } from '../api'
@@ -59,10 +60,9 @@ function TransactionHistory({ user }: { user: User }) {
   // skeleton rather than the old order without a separate loading flag that
   // could drift out of step with what is held.
   const requestKey = `${user.userId}:${sort}`
-  const [page, setPage] = useState<{ key: string; transactions: Transaction[]; total: number }>({
+  const [page, setPage] = useState<{ key: string; result: TransactionPage | null }>({
     key: '',
-    transactions: [],
-    total: 0,
+    result: null,
   })
 
   useEffect(() => {
@@ -70,9 +70,7 @@ function TransactionHistory({ user }: { user: User }) {
 
     fetchTransactions(user.userId, PAGE_SIZE, 0, sort)
       .then((result) => {
-        if (!cancelled) {
-          setPage({ key: requestKey, transactions: result.transactions, total: result.total })
-        }
+        if (!cancelled) setPage({ key: requestKey, result })
       })
       .catch((err) => {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to fetch transaction history')
@@ -87,13 +85,16 @@ function TransactionHistory({ user }: { user: User }) {
   // held - so a row that arrives between two pages can't cause one to be
   // skipped, only repeated at worst.
   async function loadMore() {
+    const held = page.result?.transactions.length ?? 0
     setLoadingMore(true)
     try {
-      const next = await fetchTransactions(user.userId, PAGE_SIZE, page.transactions.length, sort)
+      const next = await fetchTransactions(user.userId, PAGE_SIZE, held, sort)
       setPage((current) => ({
         key: current.key,
-        transactions: [...current.transactions, ...next.transactions],
-        total: next.total,
+        result: {
+          ...next,
+          transactions: [...(current.result?.transactions ?? []), ...next.transactions],
+        },
       }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch more transactions')
@@ -106,15 +107,15 @@ function TransactionHistory({ user }: { user: User }) {
   // refetches rather than reversing what is held, which would only reorder
   // the rows this page happens to have - a different list entirely.
   const loading = page.key !== requestKey
-  const transactions = page.transactions
-  const total = page.total
+  const transactions = page.result?.transactions ?? []
+  const total = page.result?.total ?? 0
   const hasMore = transactions.length < total
 
   return (
     <section id="transaction-history-content">
       <div className="history-header">
         <h1 className="section-title">Transaction history</h1>
-        {transactions.length > 0 && (
+        {transactions.length > 0 && page.result && (
           <div className="history-actions">
             <button
               type="button"
@@ -128,7 +129,7 @@ function TransactionHistory({ user }: { user: User }) {
                 origin, so the session cookie goes with it. */}
             <a
               className="secondary-btn"
-              href={transactionsExportUrl(user.userId)}
+              href={transactionsExportUrl(page.result)}
               download="transactions.csv"
             >
               Export CSV

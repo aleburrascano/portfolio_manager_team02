@@ -113,10 +113,10 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
   // refetch, whichever list is being shown.
   useOrderFills(() => setReloadKey((current) => current + 1))
 
-  async function handleCancel(orderId: number) {
-    setCancellingId(orderId)
+  async function handleCancel(order: LimitOrder) {
+    setCancellingId(order.limitOrderId)
     try {
-      await cancelLimitOrder(user.userId, orderId)
+      await cancelLimitOrder(order)
       setState({ key: requestKey, orders: await loadOrders() })
     } catch (err) {
       setState({
@@ -198,7 +198,7 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
                         type="button"
                         className="secondary-btn open-orders-cancel"
                         disabled={cancellingId === order.limitOrderId}
-                        onClick={() => handleCancel(order.limitOrderId)}
+                        onClick={() => handleCancel(order)}
                       >
                         {cancellingId === order.limitOrderId ? 'Cancelling…' : 'Cancel'}
                       </button>

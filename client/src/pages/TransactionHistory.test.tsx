@@ -6,7 +6,9 @@ import { fetchTransactions, type Transaction } from '../api'
 
 vi.mock('../api', () => ({
   fetchTransactions: vi.fn(),
-  transactionsExportUrl: (userId: number) => `/api/v1/users/${userId}/transactions/export`,
+  // The real one reads the link off the page it was given; the stub does
+  // the same, so a page that lost its links would fail here.
+  transactionsExportUrl: (page: { _links: { export: string } }) => page._links.export,
 }))
 
 const mockedFetch = vi.mocked(fetchTransactions)
@@ -22,7 +24,11 @@ const purchase: Transaction = {
 }
 
 function page(transactions: Transaction[], total = transactions.length) {
-  return { transactions, total }
+  return {
+    transactions,
+    total,
+    _links: { self: '/api/v1/users/1/transactions', export: '/api/v1/users/1/transactions/export' },
+  }
 }
 
 beforeEach(() => {

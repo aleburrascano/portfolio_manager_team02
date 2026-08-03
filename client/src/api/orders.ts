@@ -1,4 +1,4 @@
-import { apiFetch, del, post } from './client'
+import { apiFetch, del, followLink, post } from './client'
 import type { AssetType } from './assets'
 
 export type OrderSide = 'buy' | 'sell'
@@ -27,6 +27,8 @@ export type LimitOrder = {
   resolvedAt: string | null
   /** The trade a fill produced; null unless this order filled. */
   assetTransactionId: number | null
+  /** What can be done with this order, as the server describes it. */
+  _links: { cancel: string }
 }
 
 export async function placeLimitOrder(
@@ -65,6 +67,13 @@ export async function fetchLimitOrders(
   return data.orders
 }
 
-export async function cancelLimitOrder(userId: number, limitOrderId: number): Promise<void> {
-  await apiFetch(`/users/${userId}/limit-orders/${limitOrderId}`, 'Failed to cancel order', del())
+/**
+ * Cancel an order by following the `cancel` link it came with.
+ *
+ * The route shape isn't repeated here: the server said where the action
+ * lives when it handed the order over, which is what the `_links` on every
+ * response are for.
+ */
+export async function cancelLimitOrder(order: LimitOrder): Promise<void> {
+  await followLink(order._links.cancel, 'Failed to cancel order', del())
 }

@@ -92,6 +92,19 @@ def test_export_returns_csv_of_every_row(client):
     assert len(rows) == 3  # header plus both deposits
 
 
+# The client follows this link rather than building the URL, so it is part
+# of the contract: it has to be present and it has to actually work.
+def test_the_export_link_is_followable(client):
+    user = register_user(client)
+    _deposit(client, user['userId'])
+
+    body = client.get(f'/api/v1/users/{user["userId"]}/transactions').get_json()
+    response = client.get(body['_links']['export'])
+
+    assert response.status_code == 200
+    assert response.mimetype == 'text/csv'
+
+
 def test_export_is_private(client):
     register_user(client)
     assert client.get('/api/v1/users/999/transactions/export').status_code == 403
