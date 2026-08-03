@@ -201,9 +201,20 @@ class AssetTransaction(Base):
 
 class LimitOrder(Base):
     """
-    A good-till-cancelled conditional buy or sell of a stock: fills at the
-    current market price the first time it crosses limitPrice, or sits
-    pending until it does or the user cancels it.
+    A good-till-cancelled conditional buy or sell: fills at the current
+    market price the first time it crosses limitPrice, or sits pending until
+    it does or the user cancels it.
+
+    orderType says which way "crosses" runs. A limit order waits for a price
+    at least as good as limitPrice - at or below it to buy, at or above it
+    to sell - which is the shape of buying a dip or taking a profit. A stop
+    order is the exact mirror, waiting for the price to move against the
+    holding, which is the shape of cutting a loss or entering on a breakout.
+    That is the only difference between them, which is why one column
+    carries it rather than a second table.
+
+    limitPrice is the trigger in both cases; it is not the price the order
+    fills at, which is whatever the market is when the trigger is crossed.
 
     Unlike AssetTransaction this row is mutable - status moves from
     'pending' to exactly one of 'filled'/'cancelled' - which is why, unlike
@@ -229,6 +240,9 @@ class LimitOrder(Base):
     userId: Mapped[int] = mapped_column(ForeignKey('Users.userId', ondelete='CASCADE'))
     ticker: Mapped[str] = mapped_column(ForeignKey('Assets.ticker'))
     side: Mapped[str] = mapped_column(Enum('buy', 'sell', name='limitOrderSide'))
+    orderType: Mapped[str] = mapped_column(
+        Enum('limit', 'stop', name='limitOrderType'), server_default='limit'
+    )
     quantity: Mapped[Decimal] = mapped_column(MONEY)
     limitPrice: Mapped[Decimal] = mapped_column(MONEY)
     status: Mapped[str] = mapped_column(

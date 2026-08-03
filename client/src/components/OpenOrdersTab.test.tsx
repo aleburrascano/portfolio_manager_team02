@@ -19,6 +19,7 @@ function order(overrides: Partial<LimitOrder> = {}): LimitOrder {
     limitOrderId: 1,
     ticker: 'AAPL',
     side: 'buy',
+    orderType: 'limit',
     quantity: 5,
     limitPrice: 8,
     status: 'pending',
@@ -48,8 +49,27 @@ describe('OpenOrdersTab', () => {
 
     const row = within(await screen.findByRole('row', { name: /AAPL/ }))
     expect(row.getByText('buy')).toBeInTheDocument()
+    expect(row.getByText('limit')).toBeInTheDocument()
     expect(row.getByText('5.00')).toBeInTheDocument()
-    expect(row.getByText('$8.00')).toBeInTheDocument()
+    // A limit buy waits for a fall, so the trigger reads as a ceiling.
+    expect(row.getByText('≤ $8.00')).toBeInTheDocument()
+  })
+
+  it('reads a stop sell as waiting for a fall', async () => {
+    mockedFetch.mockResolvedValue([order({ side: 'sell', orderType: 'stop' })])
+    render(<OpenOrdersTab user={user} assetType="stock" />)
+
+    const row = within(await screen.findByRole('row', { name: /AAPL/ }))
+    expect(row.getByText('stop')).toBeInTheDocument()
+    expect(row.getByText('≤ $8.00')).toBeInTheDocument()
+  })
+
+  it('reads a limit sell as waiting for a rise', async () => {
+    mockedFetch.mockResolvedValue([order({ side: 'sell', orderType: 'limit' })])
+    render(<OpenOrdersTab user={user} assetType="stock" />)
+
+    const row = within(await screen.findByRole('row', { name: /AAPL/ }))
+    expect(row.getByText('≥ $8.00')).toBeInTheDocument()
   })
 
   it('cancels an order and refetches the list', async () => {

@@ -17,14 +17,40 @@ beforeEach(() => {
 
 describe('placeLimitOrder', () => {
   it('posts the order fields and idempotency key, and unwraps the order', async () => {
-    const order = { limitOrderId: 1, ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8, status: 'pending', createdAt: '2026-01-01T00:00:00', resolvedAt: null, assetTransactionId: null }
+    const order = { limitOrderId: 1, ticker: 'AAPL', side: 'buy', orderType: 'limit', quantity: 5, limitPrice: 8, status: 'pending', createdAt: '2026-01-01T00:00:00', resolvedAt: null, assetTransactionId: null }
     mockedApiFetch.mockResolvedValue({ order })
 
-    await expect(placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8, 'key-1')).resolves.toBe(order)
+    await expect(placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8, 'limit', 'key-1')).resolves.toBe(order)
     expect(mockedApiFetch).toHaveBeenCalledWith(
       '/users/1/assets/stock/limit-orders',
       expect.any(String),
-      { method: 'POST', body: { ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8 }, idempotencyKey: 'key-1' },
+      {
+        method: 'POST',
+        body: { ticker: 'AAPL', side: 'buy', quantity: 5, limitPrice: 8, orderType: 'limit' },
+        idempotencyKey: 'key-1',
+      },
+    )
+  })
+
+  it('defaults to a limit order', async () => {
+    mockedApiFetch.mockResolvedValue({ order: {} })
+    await placeLimitOrder(1, 'stock', 'AAPL', 'buy', 5, 8)
+
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ body: expect.objectContaining({ orderType: 'limit' }) }),
+    )
+  })
+
+  it('sends a stop order as one', async () => {
+    mockedApiFetch.mockResolvedValue({ order: {} })
+    await placeLimitOrder(1, 'stock', 'AAPL', 'sell', 5, 8, 'stop')
+
+    expect(mockedApiFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ body: expect.objectContaining({ orderType: 'stop' }) }),
     )
   })
 })

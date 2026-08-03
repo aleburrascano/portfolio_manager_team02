@@ -69,6 +69,13 @@
   color: var(--negative);
 }
 
+/* Capitalised but not coloured: which kind an order is matters, but it is
+   not the buy/sell distinction and shouldn't compete with it. */
+.open-orders-type {
+  text-transform: capitalize;
+  color: var(--text-muted);
+}
+
 .open-orders-cancel {
   padding: 5px 12px;
   font-size: var(--fs-sm);

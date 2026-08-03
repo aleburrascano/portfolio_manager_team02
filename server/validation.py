@@ -79,6 +79,18 @@ def parse_side(raw: Any) -> str:
     return raw
 
 
+def parse_order_type(raw: Any) -> str:
+    """
+    Validate a conditional order's kind.
+
+    Raises:
+        InvalidInput: if it isn't 'limit' or 'stop'.
+    """
+    if raw not in ('limit', 'stop'):
+        raise InvalidInput("orderType must be 'limit' or 'stop'.")
+    return raw
+
+
 def parse_limit_price(raw: Any) -> Decimal:
     """
     Validate a limit order's trigger price.

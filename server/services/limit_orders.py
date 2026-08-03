@@ -29,6 +29,7 @@ from services.exceptions import (
 )
 
 SIDES = ('buy', 'sell')
+ORDER_TYPES = ('limit', 'stop')
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +46,11 @@ def _require_limit_order_support(asset_type: str) -> None:
 
 
 def place_limit_order(
-    user_id: int, asset_type: str, ticker: str, side: str, quantity: Decimal, limit_price: Decimal,
+    user_id: int, asset_type: str, ticker: str, side: str, quantity: Decimal,
+    limit_price: Decimal, order_type: str = 'limit',
 ) -> LimitOrder:
     """
-    Queue a GTC limit order.
+    Queue a GTC conditional order, either a limit or a stop.
 
     A quick, point-in-time affordability check runs now under the user row
     lock - the same check purchase_asset/sell_asset make - so an order that
@@ -58,10 +60,17 @@ def place_limit_order(
     the user's balance or holdings can legitimately move between now and
     then.
 
+    A limit buy can never fill above limit_price, so that is exactly what
+    the cash check needs. A stop buy triggers on the way *up* and fills at
+    whatever the market is then, which is a cost with no ceiling - there is
+    no honest figure to check it against, so the check uses the trigger
+    price as the nearest thing and the real one still happens at fill time.
+
     Raises:
         UnknownUser: no such user.
-        InvalidInput: asset_type isn't stock, side isn't buy/sell, or (for
-            a buy) the stock can't currently be bought.
+        InvalidInput: the asset type doesn't take conditional orders, side
+            isn't buy/sell, order_type isn't limit/stop, or (for a buy) the
+            asset can't currently be bought.
         MarketDataUnavailable: the asset can't be priced (from registering
             a never-before-traded ticker).
         InsufficientFunds / InsufficientHoldings: as of right now, the
@@ -69,6 +78,8 @@ def place_limit_order(
     """
     if side not in SIDES:
         raise InvalidInput("side must be 'buy' or 'sell'.")
+    if order_type not in ORDER_TYPES:
+        raise InvalidInput("orderType must be 'limit' or 'stop'.")
     _require_limit_order_support(asset_type)
 
     provider = PROVIDERS[asset_type]
@@ -92,7 +103,7 @@ def place_limit_order(
                 raise InsufficientHoldings('Not enough shares to cover this order if it fills right now.')
 
         order = LimitOrder(
-            userId=user_id, ticker=ticker, side=side,
+            userId=user_id, ticker=ticker, side=side, orderType=order_type,
             quantity=quantity, limitPrice=limit_price, status='pending',
         )
         session.add(order)
@@ -142,8 +153,16 @@ def cancel_limit_order(user_id: int, limit_order_id: int) -> None:
         raise
 
 
-def list_limit_orders(user_id: int, status: Optional[str] = None) -> List[LimitOrder]:
-    """A user's limit orders, newest first, optionally filtered by status."""
+def list_limit_orders(
+    user_id: int, status: Optional[str] = None, limit: Optional[int] = None,
+) -> List[LimitOrder]:
+    """
+    A user's conditional orders, newest first, optionally filtered by status.
+
+    A pending list stays short - orders leave it as they fill or are
+    cancelled - but filled and cancelled ones accumulate for as long as the
+    account is used, so a caller showing history can ask for a page of it.
+    """
     statement = select(LimitOrder).where(LimitOrder.userId == user_id)
     if status is not None:
         statement = statement.where(LimitOrder.status == status)
@@ -151,6 +170,8 @@ def list_limit_orders(user_id: int, status: Optional[str] = None) -> List[LimitO
     # CURRENT_TIMESTAMP only has second resolution), keeping the list
     # deterministically newest-first.
     statement = statement.order_by(LimitOrder.createdAt.desc(), LimitOrder.limitOrderId.desc())
+    if limit is not None:
+        statement = statement.limit(limit)
     return db_conn.get_session().scalars(statement).all()
 
 
@@ -244,9 +265,18 @@ def _indicative_prices(tickers: List[str]) -> dict:
 
 
 def _condition_met(order: LimitOrder, price: Decimal) -> bool:
-    """Whether `price` satisfies this order's trigger."""
-    if order.side == 'buy':
+    """
+    Whether `price` has crossed this order's trigger.
+
+    A limit order waits for a price at least as good as its trigger; a stop
+    order waits for one at least as bad. That single reversal is the whole
+    difference between the two, which is why both live in one table and one
+    poller rather than two of each.
+    """
+    if (order.side == 'buy') == (order.orderType == 'limit'):
+        # Limit buy: at or below. Stop sell: at or below.
         return price <= order.limitPrice
+    # Limit sell: at or above. Stop buy: at or above.
     return price >= order.limitPrice
 
 
