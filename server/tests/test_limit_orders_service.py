@@ -332,6 +332,24 @@ def test_a_stop_and_a_limit_on_one_ticker_trigger_opposite_ways(user_id, monkeyp
     assert statuses[take_profit.limitOrderId] == 'pending'
 
 
+# Once more than one asset type takes conditional orders, the type in the
+# route has to actually filter or the stock tab shows the crypto orders.
+def test_list_limit_orders_filters_by_asset_type(user_id, monkeypatch):
+    deposit_cash(user_id, Decimal('1000.00'))
+    stock = lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('1'), Decimal('8.00'))
+
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    crypto = lo.place_limit_order(user_id, 'crypto', 'BTC-USD', 'buy', Decimal('1'), Decimal('8.00'))
+
+    assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'stock')] == [stock.limitOrderId]
+    assert [o.limitOrderId for o in lo.list_limit_orders(user_id, 'crypto')] == [crypto.limitOrderId]
+    # Omitted, it still means "every type".
+    assert len(lo.list_limit_orders(user_id)) == 2
+
+
 def test_list_limit_orders_can_be_paged(user_id):
     deposit_cash(user_id, Decimal('1000.00'))
     for _ in range(3):

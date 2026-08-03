@@ -31,7 +31,14 @@ def _as_date(value) -> date:
     return value.date() if hasattr(value, 'date') else value
 
 
-def _serialize(bond: Bond) -> dict:
+def serialize_bond(bond: Bond) -> dict:
+    """
+    A Bond row as the plain dict every function here takes.
+
+    Public because a caller holding its own Session - the seed script, which
+    runs outside a request and so has no get_session() - still needs to turn
+    a row into terms this module can price.
+    """
     return {
         'ticker': bond.ticker,
         'name': bond.name,
@@ -47,13 +54,13 @@ def _serialize(bond: Bond) -> dict:
 def get_bond(ticker: str) -> Optional[dict]:
     """Look up one bond's catalog row by ticker."""
     bond = get_session().get(Bond, ticker)
-    return _serialize(bond) if bond else None
+    return serialize_bond(bond) if bond else None
 
 
 def list_bonds() -> List[dict]:
     """The full bond catalog."""
     bonds = get_session().scalars(select(Bond).order_by(Bond.maturityDate))
-    return [_serialize(bond) for bond in bonds]
+    return [serialize_bond(bond) for bond in bonds]
 
 
 def search_bonds(query: str) -> List[dict]:
@@ -64,7 +71,7 @@ def search_bonds(query: str) -> List[dict]:
         .where(or_(Bond.ticker.like(like), Bond.name.like(like)))
         .order_by(Bond.maturityDate)
     )
-    return [_serialize(bond) for bond in bonds]
+    return [serialize_bond(bond) for bond in bonds]
 
 
 def is_matured(bond: dict, as_of: Optional[date] = None) -> bool:

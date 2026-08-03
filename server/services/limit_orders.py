@@ -20,7 +20,7 @@ from sqlalchemy import select
 import db.connection as db_conn
 import services.market_data as market_data
 import services.user_transactions as ut
-from db.models import LimitOrder
+from db.models import Asset, LimitOrder
 from services.asset_providers import PROVIDERS
 from services.asset_transactions import get_holding_qty_decimal, record_trade, register_asset
 from services.exceptions import (
@@ -154,16 +154,27 @@ def cancel_limit_order(user_id: int, limit_order_id: int) -> None:
 
 
 def list_limit_orders(
-    user_id: int, status: Optional[str] = None, limit: Optional[int] = None,
+    user_id: int, asset_type: Optional[str] = None, status: Optional[str] = None,
+    limit: Optional[int] = None,
 ) -> List[LimitOrder]:
     """
-    A user's conditional orders, newest first, optionally filtered by status.
+    A user's conditional orders, newest first, optionally filtered by asset
+    type and status.
+
+    The asset type is a real filter rather than only a route segment: now
+    that more than one type takes conditional orders, a caller asking for a
+    stock's orders would otherwise be handed the crypto ones too. It comes
+    from the Assets row, which is the one place a ticker's type is recorded.
 
     A pending list stays short - orders leave it as they fill or are
     cancelled - but filled and cancelled ones accumulate for as long as the
     account is used, so a caller showing history can ask for a page of it.
     """
     statement = select(LimitOrder).where(LimitOrder.userId == user_id)
+    if asset_type is not None:
+        statement = statement.join(Asset, Asset.ticker == LimitOrder.ticker).where(
+            Asset.assetType == asset_type
+        )
     if status is not None:
         statement = statement.where(LimitOrder.status == status)
     # limitOrderId breaks ties within the same createdAt tick (SQLite's

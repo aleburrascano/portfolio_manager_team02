@@ -58,7 +58,7 @@ def place_limit_order(body: dict, user_id: int, asset_type: str) -> Tuple[dict, 
 @limit_orders_bp.arguments(LimitOrderQuerySchema, location='query')
 def list_limit_orders(query: dict, user_id: int, asset_type: str) -> Tuple[dict, int]:
     """
-    List this user's conditional orders, newest first.
+    List this user's conditional orders for this asset type, newest first.
 
     Returns:
         dict: {'orders': list[dict], '_links': dict}
@@ -66,7 +66,7 @@ def list_limit_orders(query: dict, user_id: int, asset_type: str) -> Tuple[dict,
     limit = query.get('limit')
     if limit is not None:
         limit = max(1, min(limit, MAX_PAGE_SIZE))
-    orders = lo.list_limit_orders(user_id, query.get('status'), limit)
+    orders = lo.list_limit_orders(user_id, asset_type, query.get('status'), limit)
     return {
         'orders': [_serialize(order) for order in orders],
         '_links': limit_orders_links(user_id, asset_type),

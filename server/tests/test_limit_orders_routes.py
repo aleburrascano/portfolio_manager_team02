@@ -110,6 +110,29 @@ def test_list_limit_orders_filters_by_status(client):
     assert len(cancelled.get_json()['orders']) == 1
 
 
+def test_list_limit_orders_is_scoped_to_the_asset_type_in_the_route(client, monkeypatch):
+    import services.market_data as market_data
+
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    _place(client, user['userId'])
+
+    monkeypatch.setattr(
+        market_data, 'quote_classification',
+        lambda ticker: {'exchange': 'CCC', 'quoteType': 'CRYPTOCURRENCY'},
+    )
+    client.post(
+        f'/api/v1/users/{user["userId"]}/assets/crypto/limit-orders',
+        json={'ticker': 'BTC-USD', 'side': 'buy', 'quantity': 1, 'limitPrice': 8},
+    )
+
+    stocks = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders').get_json()
+    crypto = client.get(f'/api/v1/users/{user["userId"]}/assets/crypto/limit-orders').get_json()
+
+    assert [o['ticker'] for o in stocks['orders']] == ['AAPL']
+    assert [o['ticker'] for o in crypto['orders']] == ['BTC-USD']
+
+
 def test_list_limit_orders_honours_a_limit(client):
     user = register_user(client)
     client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
