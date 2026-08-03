@@ -2,6 +2,29 @@ import { apiFetch, post } from './client'
 
 export type AssetType = 'stock' | 'crypto' | 'bond'
 
+/**
+ * What one asset type is called and what can be done with it.
+ *
+ * Comes from the server's provider registry rather than a list kept here,
+ * so an asset type added there shows up in the tabs, the labels, and the
+ * order-type toggles without a matching edit on this side.
+ */
+export type AssetTypeInfo = {
+  assetType: AssetType
+  label: string
+  /** Whether prices for this type arrive over the quote feed. */
+  streams: boolean
+  supportsLimitOrders: boolean
+}
+
+export async function fetchAssetTypes(): Promise<AssetTypeInfo[]> {
+  const data = await apiFetch<{ assetTypes: AssetTypeInfo[] }>(
+    '/assets/types',
+    'Failed to fetch asset types',
+  )
+  return data.assetTypes
+}
+
 export type Asset = {
   symbol: string
   name: string

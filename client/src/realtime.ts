@@ -88,6 +88,53 @@ export function useLiveFeed(assetType: AssetType, symbols: string[]): LiveFeed {
 }
 
 /**
+ * One feed covering several asset types at once, keyed {assetType: symbols}.
+ *
+ * A subscription names the type its symbols belong to - the server needs it
+ * to know which provider to price them through - so a list mixing types, a
+ * watchlist, needs one subscription per type. The quotes come back in a
+ * single map because a symbol belongs to exactly one type, so nothing
+ * collides and callers can look a tile up without knowing what kind it is.
+ */
+export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>): LiveFeed {
+  const [quotes, setQuotes] = useState<Record<string, QuoteUpdate>>({})
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  // Depend on the contents, not the object identity - callers build a fresh
+  // one every render and it would otherwise resubscribe constantly.
+  const subscription = Object.entries(symbolsByType)
+    .filter(([, symbols]) => symbols && symbols.length > 0)
+    .map(([assetType, symbols]) => `${assetType}:${symbols!.join(',')}`)
+    .sort()
+    .join('|')
+
+  useEffect(() => {
+    if (!subscription) return
+
+    const requests = subscription.split('|').map((group) => {
+      const [assetType, symbols] = group.split(':')
+      return { assetType: assetType as AssetType, symbols: symbols.split(',') }
+    })
+    const connection = getSocket()
+
+    function handleQuote(update: QuoteUpdate) {
+      setQuotes((current) => ({ ...current, [update.symbol]: update }))
+      setLastUpdate(new Date())
+    }
+
+    connection.on('quote', handleQuote)
+    for (const request of requests) connection.emit('subscribe', request)
+
+    return () => {
+      for (const request of requests) connection.emit('unsubscribe', request)
+      connection.off('quote', handleQuote)
+    }
+  }, [subscription])
+
+  return { quotes, lastUpdate }
+}
+
+/**
  * Whether pushed quotes are currently arriving.
  *
  * A price that has quietly stopped updating looks exactly like a price that

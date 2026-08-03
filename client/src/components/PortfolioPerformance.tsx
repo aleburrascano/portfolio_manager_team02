@@ -5,6 +5,7 @@ import {
   type PortfolioPerformance as Performance,
   type User,
 } from '../api'
+import { useAssetTypes } from '../asset-types'
 import { formatCurrency, formatNumber } from '../format'
 import './PortfolioPerformance.css'
 
@@ -15,12 +16,6 @@ const RANGES = [
   { days: 365, label: '1Y' },
   { days: 1825, label: 'All' },
 ] as const
-
-const ASSET_LABELS: Record<string, string> = {
-  stock: 'Stocks',
-  crypto: 'Crypto',
-  bond: 'Bonds',
-}
 
 function formatAxisDate(value: string) {
   return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -45,6 +40,7 @@ function Signed({ value, percent }: { value: number; percent: number }) {
 }
 
 function PortfolioPerformance({ user, balance }: { user: User; balance: number | null }) {
+  const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
   // Results are tagged with the request they answer, so "still loading" is
   // derived from what we hold rather than tracked in a separate flag that
@@ -207,7 +203,7 @@ function PortfolioPerformance({ user, balance }: { user: User; balance: number |
             <dl className="performance-classes">
               {data!.byAssetType.map((row) => (
                 <div key={row.assetType}>
-                  <dt>{ASSET_LABELS[row.assetType] ?? row.assetType}</dt>
+                  <dt>{byType[row.assetType]?.label ?? row.assetType}</dt>
                   <dd>
                     <Signed value={row.gainLoss} percent={row.gainLossPercent} />
                   </dd>

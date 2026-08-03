@@ -11,6 +11,7 @@ import PortfolioComposition from '../components/PortfolioComposition'
 import HoldingsTable from '../components/HoldingsTable'
 import Watchlist from '../components/Watchlist'
 import WalletCard from '../components/WalletCard'
+import { useAssetTypes } from '../asset-types'
 import { useBalance } from '../balance-context'
 
 // Charting is the single largest thing the client ships, and nothing above
@@ -40,6 +41,7 @@ function Dashboard({
   onSelectAsset: (assetType: AssetType, symbol: string) => void
 }) {
   const { balance } = useBalance()
+  const { types } = useAssetTypes()
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -61,11 +63,14 @@ function Dashboard({
       try {
         const res = await fetchPortfolioBreakdown(user.userId)
         if (cancelled) return
+        // Cash first, then a slice per asset type the server reports, so
+        // the donut gains a slice when the server gains a provider.
         setData([
           { name: 'Cash', value: res.cash },
-          { name: 'Stocks', value: res.stock },
-          { name: 'Crypto', value: res.crypto },
-          { name: 'Bonds', value: res.bond },
+          ...types.map(({ assetType, label }) => ({
+            name: label,
+            value: res[assetType] ?? 0,
+          })),
         ])
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load portfolio')
@@ -78,7 +83,7 @@ function Dashboard({
     return () => {
       cancelled = true
     }
-  }, [user.userId, balance])
+  }, [user.userId, balance, types])
 
   useEffect(() => {
     let cancelled = false

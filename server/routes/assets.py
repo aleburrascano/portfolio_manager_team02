@@ -12,7 +12,7 @@ from typing import Tuple
 
 import services.asset_transactions as st
 import services.watchlist as watchlist
-from services.asset_providers import PROVIDERS
+from services.asset_providers import PROVIDERS, capabilities
 from apidocs import IDEMPOTENCY_KEY, Blueprint
 from authorization import require_user
 from idempotency import idempotent
@@ -32,6 +32,23 @@ def known_asset_type(view):
         return view(*args, **kwargs)
 
     return wrapped
+
+
+@assets_bp.route('/assets/types', methods=['GET'])
+def get_asset_types() -> Tuple[dict, int]:
+    """
+    The asset types this server supports, and what each one can do.
+
+    Public, and deliberately the first thing the client asks for: its tabs,
+    its labels, which types show a live price indicator, and which offer
+    conditional orders all come from here, so adding an asset type on the
+    server adds it to the UI without a matching edit.
+
+    Returns:
+        dict: {'assetTypes': [{'assetType', 'label', 'streams',
+        'supportsLimitOrders'}]}
+    """
+    return {'assetTypes': capabilities()}, 200
 
 
 @assets_bp.route('/assets/<asset_type>/search', methods=['GET'])

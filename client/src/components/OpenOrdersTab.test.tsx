@@ -37,14 +37,14 @@ beforeEach(() => {
 describe('OpenOrdersTab', () => {
   it('teaches the panel when there are no open orders', async () => {
     mockedFetch.mockResolvedValue([])
-    render(<OpenOrdersTab user={user} />)
+    render(<OpenOrdersTab user={user} assetType="stock" />)
 
     expect(await screen.findByText(/don't have any open limit orders/)).toBeInTheDocument()
   })
 
   it('lists a pending order', async () => {
     mockedFetch.mockResolvedValue([order()])
-    render(<OpenOrdersTab user={user} />)
+    render(<OpenOrdersTab user={user} assetType="stock" />)
 
     const row = within(await screen.findByRole('row', { name: /AAPL/ }))
     expect(row.getByText('buy')).toBeInTheDocument()
@@ -57,7 +57,7 @@ describe('OpenOrdersTab', () => {
     mockedCancel.mockResolvedValue(undefined)
     mockedFetch.mockResolvedValueOnce([])
     const typer = userEvent.setup()
-    render(<OpenOrdersTab user={user} />)
+    render(<OpenOrdersTab user={user} assetType="stock" />)
 
     await screen.findByRole('row', { name: /AAPL/ })
     await typer.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -68,7 +68,7 @@ describe('OpenOrdersTab', () => {
 
   it('surfaces a failure instead of a silently empty list', async () => {
     mockedFetch.mockRejectedValue(new Error('Orders service is down'))
-    render(<OpenOrdersTab user={user} />)
+    render(<OpenOrdersTab user={user} assetType="stock" />)
 
     expect(await screen.findByText('Orders service is down')).toBeInTheDocument()
   })
