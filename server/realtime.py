@@ -137,13 +137,27 @@ def notify_order_filled(fill: dict) -> None:
     effort by design: the fill is already committed, so a socket that can't
     be reached costs the user a refresh, not a trade.
     """
-    user_id = fill.get('userId')
+    _notify_user('orderFilled', fill, fill.get('limitOrderId'))
+
+
+def notify_bond_redeemed(payout: dict) -> None:
+    """
+    Tell one user that a bond of theirs has matured and been paid out.
+
+    Same shape of event as a fill and for the same reason: it happens on a
+    date rather than in response to anything they did.
+    """
+    _notify_user('bondRedeemed', payout, payout.get('ticker'))
+
+
+def _notify_user(event: str, payload: dict, subject) -> None:
+    user_id = payload.get('userId')
     if user_id is None:
         return
     try:
-        socketio.emit('orderFilled', fill, to=_user_room(user_id))
+        socketio.emit(event, payload, to=_user_room(user_id))
     except Exception:
-        logger.exception('Could not announce fill of order %s', fill.get('limitOrderId'))
+        logger.exception('Could not announce %s for %s', event, subject)
 
 
 @socketio.on('subscribe')

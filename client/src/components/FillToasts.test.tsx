@@ -2,14 +2,21 @@ import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FillToasts from './FillToasts'
-import { useOrderFills, type OrderFill } from '../realtime'
+import {
+  useBondRedemptions,
+  useOrderFills,
+  type BondRedemption,
+  type OrderFill,
+} from '../realtime'
 
-vi.mock('../realtime', () => ({ useOrderFills: vi.fn() }))
+vi.mock('../realtime', () => ({ useOrderFills: vi.fn(), useBondRedemptions: vi.fn() }))
 
 const mockedUseOrderFills = vi.mocked(useOrderFills)
+const mockedUseRedemptions = vi.mocked(useBondRedemptions)
 
-/** The handler the component registered, so a test can push a fill at it. */
+/** The handlers the component registered, so a test can push events at it. */
 let announce: (fill: OrderFill) => void
+let announceRedemption: (payout: BondRedemption) => void
 
 function fill(overrides: Partial<OrderFill> = {}): OrderFill {
   return {
@@ -27,6 +34,9 @@ function fill(overrides: Partial<OrderFill> = {}): OrderFill {
 beforeEach(() => {
   mockedUseOrderFills.mockImplementation((onFill) => {
     announce = onFill
+  })
+  mockedUseRedemptions.mockImplementation((onRedeem) => {
+    announceRedemption = onRedeem
   })
 })
 
@@ -71,8 +81,30 @@ describe('FillToasts', () => {
     render(<FillToasts />)
     act(() => announce(fill()))
 
-    await typer.click(screen.getByRole('button', { name: 'Dismiss AAPL fill' }))
+    await typer.click(screen.getByRole('button', { name: 'Dismiss AAPL notice' }))
     expect(screen.queryByText(/order filled/)).not.toBeInTheDocument()
+  })
+
+  // A bond matures on a date, so its owner is told the same way.
+  it('announces a bond paying out at maturity', () => {
+    render(<FillToasts />)
+    act(() =>
+      announceRedemption({ ticker: 'UST2Y', quantity: 2, price: 1000, proceeds: 2000 }),
+    )
+
+    expect(screen.getByText('Bond matured')).toBeInTheDocument()
+    expect(screen.getByText('UST2Y paid out $2,000.00 at face value.')).toBeInTheDocument()
+  })
+
+  it('keeps a fill and a redemption apart', () => {
+    render(<FillToasts />)
+    act(() => announce(fill()))
+    act(() =>
+      announceRedemption({ ticker: 'UST2Y', quantity: 1, price: 1000, proceeds: 1000 }),
+    )
+
+    expect(screen.getByText('Limit order filled')).toBeInTheDocument()
+    expect(screen.getByText('Bond matured')).toBeInTheDocument()
   })
 
   it('clears itself after a while', () => {

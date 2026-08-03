@@ -1,60 +1,83 @@
 import { useState } from 'react'
-import { useOrderFills, type OrderFill } from '../realtime'
+import {
+  useBondRedemptions,
+  useOrderFills,
+  type BondRedemption,
+  type OrderFill,
+} from '../realtime'
 import { formatCurrency, formatNumber } from '../format'
 import './FillToasts.css'
 
 /** Long enough to read a sentence, short enough not to sit in the way. */
 const DISMISS_AFTER_MS = 9000
 
+type Notice = { id: string; title: string; body: string; subject: string }
+
+function fillNotice(fill: OrderFill): Notice {
+  return {
+    id: `fill:${fill.limitOrderId}`,
+    title: `${fill.orderType === 'stop' ? 'Stop' : 'Limit'} order filled`,
+    // The executed price, not the trigger: for a stop especially those are
+    // different numbers and only one is what the user actually paid.
+    body: `${fill.side === 'buy' ? 'Bought' : 'Sold'} ${formatNumber(fill.quantity, 2)} ${fill.ticker} at ${formatCurrency(fill.price)}.`,
+    subject: fill.ticker,
+  }
+}
+
+function redemptionNotice(payout: BondRedemption): Notice {
+  return {
+    id: `bond:${payout.ticker}`,
+    title: 'Bond matured',
+    body: `${payout.ticker} paid out ${formatCurrency(payout.proceeds)} at face value.`,
+    subject: payout.ticker,
+  }
+}
+
 /**
- * Announces conditional orders as they fill.
+ * Announces the things that move someone's money without them doing
+ * anything: a conditional order filling, and a bond reaching maturity.
  *
- * A fill is the one thing in this app that moves someone's money without
- * them doing anything, and it can land on any screen - so it is announced
- * at the shell level rather than on the orders tab, which is exactly the
- * place they are least likely to be looking when it happens.
+ * Both happen on the server's own schedule and can land on any screen, so
+ * they are announced at the shell rather than on the pages that would
+ * otherwise show them - which are exactly the ones the user is least likely
+ * to be looking at when it happens.
  *
- * role="status" rather than "alert": it is worth knowing and not worth
+ * role="status" rather than "alert": worth knowing and not worth
  * interrupting for, so a screen reader announces it at the next pause.
  */
 function FillToasts() {
-  const [fills, setFills] = useState<OrderFill[]>([])
+  const [notices, setNotices] = useState<Notice[]>([])
 
-  useOrderFills((fill) => {
-    setFills((current) => [...current, fill])
+  function announce(notice: Notice) {
+    setNotices((current) => [...current, notice])
     setTimeout(
-      () => setFills((current) => current.filter((f) => f.limitOrderId !== fill.limitOrderId)),
+      () => setNotices((current) => current.filter((n) => n.id !== notice.id)),
       DISMISS_AFTER_MS,
     )
-  })
-
-  function dismiss(limitOrderId: number) {
-    setFills((current) => current.filter((f) => f.limitOrderId !== limitOrderId))
   }
 
-  if (fills.length === 0) return null
+  useOrderFills((fill) => announce(fillNotice(fill)))
+  useBondRedemptions((payout) => announce(redemptionNotice(payout)))
+
+  function dismiss(id: string) {
+    setNotices((current) => current.filter((n) => n.id !== id))
+  }
+
+  if (notices.length === 0) return null
 
   return (
     <div className="fill-toasts" role="status" aria-live="polite">
-      {fills.map((fill) => (
-        <div key={fill.limitOrderId} className="fill-toast">
+      {notices.map((notice) => (
+        <div key={notice.id} className="fill-toast">
           <div>
-            <p className="fill-toast-title">
-              {fill.orderType === 'stop' ? 'Stop' : 'Limit'} order filled
-            </p>
-            {/* The executed price, not the trigger: for a stop especially,
-                those are different numbers and only one of them is what
-                the user actually paid. */}
-            <p className="fill-toast-body">
-              {fill.side === 'buy' ? 'Bought' : 'Sold'} {formatNumber(fill.quantity, 2)}{' '}
-              {fill.ticker} at {formatCurrency(fill.price)}.
-            </p>
+            <p className="fill-toast-title">{notice.title}</p>
+            <p className="fill-toast-body">{notice.body}</p>
           </div>
           <button
             type="button"
             className="fill-toast-close"
-            aria-label={`Dismiss ${fill.ticker} fill`}
-            onClick={() => dismiss(fill.limitOrderId)}
+            aria-label={`Dismiss ${notice.subject} notice`}
+            onClick={() => dismiss(notice.id)}
           >
             ×
           </button>
