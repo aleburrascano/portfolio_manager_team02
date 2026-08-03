@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './Dashboard.css'
 import {
   fetchPortfolioBreakdown,
@@ -31,15 +32,13 @@ function ChartFallback() {
   )
 }
 
-function Dashboard({
-  user,
-  onBrowseAssets,
-  onSelectAsset,
-}: {
-  user: User
-  onBrowseAssets: () => void
-  onSelectAsset: (assetType: AssetType, symbol: string) => void
-}) {
+function Dashboard({ user }: { user: User }) {
+  const navigate = useNavigate()
+  // Opening an asset is navigation, so it goes to that asset's address
+  // rather than being handed up as a callback and held as state.
+  const onSelectAsset = (assetType: AssetType, symbol: string) =>
+    navigate(`/trade/${assetType}/${encodeURIComponent(symbol)}`)
+
   const { balance } = useBalance()
   const { types } = useAssetTypes()
   const [data, setData] = useState<{ name: string; value: number }[] | null>(null)
@@ -152,7 +151,7 @@ function Dashboard({
                 ? 'Once you buy your first stock, crypto, or bond, this is where the split across them will appear.'
                 : 'This is where the split of your money across cash, stocks, crypto, and bonds will appear. Deposit some cash above to get started.'}
             </p>
-            <button type="button" className="secondary-btn" onClick={onBrowseAssets}>
+            <button type="button" className="secondary-btn" onClick={() => navigate('/trade')}>
               Browse assets
             </button>
           </section>

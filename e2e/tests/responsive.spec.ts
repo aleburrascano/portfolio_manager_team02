@@ -47,7 +47,7 @@ test.describe('phone', () => {
 
     // Every target clears the 44px minimum.
     for (const name of ['Dashboard', 'Trade', 'History']) {
-      const box = await page.getByRole('button', { name }).boundingBox()
+      const box = await page.getByRole('link', { name }).boundingBox()
       expect(box!.height, `${name} tap target`).toBeGreaterThanOrEqual(44)
     }
   })
@@ -59,7 +59,7 @@ test.describe('phone', () => {
     await fundAccount(page, '5000')
     await expectNoHorizontalScroll(page, 'Dashboard after funding')
 
-    await page.getByRole('button', { name: 'Trade' }).click()
+    await page.getByRole('link', { name: 'Trade' }).click()
     await page.getByRole('button', { name: 'Bonds' }).click()
     await expect(page.getByText('Most active bonds')).toBeVisible()
     await expectNoHorizontalScroll(page, 'Trade')
@@ -72,7 +72,7 @@ test.describe('phone', () => {
     await page.getByRole('button', { name: 'Buy 1.00 UST2Y' }).click()
     await expect(page.getByText(/Bought 1\.00 UST2Y for/)).toBeVisible()
 
-    await page.getByRole('button', { name: 'History' }).click()
+    await page.getByRole('link', { name: 'History' }).click()
     await expect(page.getByText('Bought 1.00 UST2Y')).toBeVisible()
     await expectNoHorizontalScroll(page, 'Transaction history')
 
@@ -81,7 +81,7 @@ test.describe('phone', () => {
     await page.getByRole('menuitem', { name: 'Account settings' }).click()
     await expectNoHorizontalScroll(page, 'Account')
 
-    await page.getByRole('button', { name: 'Dashboard' }).click()
+    await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('table').filter({ hasText: 'UST2Y' })).toBeVisible()
     await expectNoHorizontalScroll(page, 'Dashboard with holdings')
   })
@@ -106,14 +106,14 @@ test.describe('desktop', () => {
     await registerNewUser(page, uniqueUsername('desk'))
     await fundAccount(page, '5000')
 
-    await page.getByRole('button', { name: 'Trade' }).click()
+    await page.getByRole('link', { name: 'Trade' }).click()
     await page.getByRole('button', { name: 'Bonds' }).click()
     await page.getByRole('button', { name: /US Treasury Note 2Y/ }).click()
     await page.getByRole('button', { name: 'Review buy' }).click()
     await page.getByRole('button', { name: 'Buy 1.00 UST2Y' }).click()
     await expect(page.getByText(/Bought 1\.00 UST2Y for/)).toBeVisible()
 
-    await page.getByRole('button', { name: 'Dashboard' }).click()
+    await page.getByRole('link', { name: 'Dashboard' }).click()
     await expect(page.getByRole('table').filter({ hasText: 'UST2Y' })).toBeVisible()
 
     const overflow = await page.evaluate(() => {
@@ -150,7 +150,7 @@ test.describe('tablet', () => {
 
     await expectNoHorizontalScroll(page, 'Dashboard on tablet')
 
-    await page.getByRole('button', { name: 'Trade' }).click()
+    await page.getByRole('link', { name: 'Trade' }).click()
     await expectNoHorizontalScroll(page, 'Trade on tablet')
   })
 })
