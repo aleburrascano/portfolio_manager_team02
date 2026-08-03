@@ -124,6 +124,21 @@ the schema — the docs and the parser both follow from that.
 The server runs on Railway (with its MySQL), the client on Vercel. Pushing to
 `main` deploys both.
 
+The browser never addresses Railway directly. `client/vercel.json` rewrites
+`/api` and `/socket.io` to the Railway service, so every request the client
+makes goes to its own origin — mirroring what Vite's proxy does locally. That
+is not a detail: the session cookie has to be first-party, and a cookie set by
+another domain is a third-party cookie, which Safari blocks outright and Chrome
+is retiring. Pointed straight at Railway, signing in worked and then every
+following request came back 401, in Safari and in any browser with third-party
+cookies turned off.
+
+The one cost is that Vercel's rewrites don't carry a WebSocket upgrade, so the
+quote feed settles on Socket.IO's long-polling transport. It was already
+falling back to polling before this, so nothing was lost. A custom domain
+(`app.example.com` and `api.example.com`) would make both first-party and keep
+the upgrade, if the project ever gets one.
+
 Migrations run on boot: the server starts with `alembic upgrade head`, so a
 merged migration reaches the deployed database without anyone remembering to
 apply it. Forgetting had already broken production twice, which is a worse
