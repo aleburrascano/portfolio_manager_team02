@@ -1,4 +1,4 @@
-import { apiFetch, post } from './client'
+import { API_BASE, apiFetch, post } from './client'
 import type { AssetType } from './assets'
 
 /**
@@ -117,12 +117,39 @@ export async function fetchPortfolioHoldings(userId: number): Promise<HoldingsRe
   return apiFetch(`/users/${userId}/portfolio/holdings`, 'Failed to fetch holdings')
 }
 
-export async function fetchTransactions(userId: number): Promise<Transaction[]> {
-  const data = await apiFetch<{ transactions: Transaction[] }>(
-    `/users/${userId}/transactions`,
-    'Failed to fetch transaction history',
-  )
-  return data.transactions
+export type TransactionPage = {
+  transactions: Transaction[]
+  /** The count before paging, so a caller knows whether more exist. */
+  total: number
+}
+
+/**
+ * One page of history, newest first.
+ *
+ * Paged in the database against an index rather than fetched whole and
+ * sorted here: a seeded account is already a couple of hundred rows and
+ * only grows.
+ */
+export type TransactionSort = 'newest' | 'oldest'
+
+export async function fetchTransactions(
+  userId: number,
+  limit?: number,
+  offset = 0,
+  sort: TransactionSort = 'newest',
+): Promise<TransactionPage> {
+  const params = new URLSearchParams()
+  if (limit != null) params.set('limit', String(limit))
+  if (offset) params.set('offset', String(offset))
+  if (sort !== 'newest') params.set('sort', sort)
+  const query = params.size > 0 ? `?${params}` : ''
+
+  return apiFetch(`/users/${userId}/transactions${query}`, 'Failed to fetch transaction history')
+}
+
+/** Where the browser should point to download the whole history as CSV. */
+export function transactionsExportUrl(userId: number): string {
+  return `${API_BASE}/users/${userId}/transactions/export`
 }
 
 export async function submitCashTransaction(

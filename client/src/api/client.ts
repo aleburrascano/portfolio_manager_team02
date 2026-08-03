@@ -3,8 +3,10 @@
 
 import { API_ORIGIN } from '../config'
 
-// Relative in development, absolute once an origin is configured.
-const API_BASE = `${API_ORIGIN}/api/v1`
+// Relative in development, absolute once an origin is configured. Exported
+// for the one case that can't go through apiFetch: a download, which the
+// browser has to navigate to itself so it gets a file rather than a string.
+export const API_BASE = `${API_ORIGIN}/api/v1`
 
 type ApiErrorBody = { error?: { message?: string } | string }
 

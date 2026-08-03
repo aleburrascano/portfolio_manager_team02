@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TransactionHistory from './TransactionHistory'
@@ -6,10 +6,24 @@ import { fetchTransactions, type Transaction } from '../api'
 
 vi.mock('../api', () => ({
   fetchTransactions: vi.fn(),
+  transactionsExportUrl: (userId: number) => `/api/v1/users/${userId}/transactions/export`,
 }))
 
 const mockedFetch = vi.mocked(fetchTransactions)
 const user = { userId: 1, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' }
+
+const deposit: Transaction = {
+  transactionId: 1, type: 'cash', transactionType: 'deposit',
+  transactionDate: '2024-01-01T00:00:00Z', signedAmount: 100,
+}
+const purchase: Transaction = {
+  transactionId: 2, type: 'stock', transactionType: 'buy',
+  transactionDate: '2024-01-02T00:00:00Z', signedAmount: -50, ticker: 'AAPL', qty: 5, price: 10,
+}
+
+function page(transactions: Transaction[], total = transactions.length) {
+  return { transactions, total }
+}
 
 beforeEach(() => {
   mockedFetch.mockReset()
@@ -23,7 +37,7 @@ describe('TransactionHistory', () => {
   })
 
   it('explains what will appear here when there is no history', async () => {
-    mockedFetch.mockResolvedValue([])
+    mockedFetch.mockResolvedValue(page([]))
     render(<TransactionHistory user={user} />)
     expect(
       await screen.findByText(/Every deposit, withdrawal, buy, and sell you make will be listed here/),
@@ -37,17 +51,7 @@ describe('TransactionHistory', () => {
   })
 
   it('describes and formats cash and asset transactions', async () => {
-    const transactions: Transaction[] = [
-      {
-        transactionId: 1, type: 'cash', transactionType: 'deposit',
-        transactionDate: '2024-01-01T00:00:00Z', signedAmount: 100,
-      },
-      {
-        transactionId: 2, type: 'stock', transactionType: 'buy',
-        transactionDate: '2024-01-02T00:00:00Z', signedAmount: -50, ticker: 'AAPL', qty: 5, price: 10,
-      },
-    ]
-    mockedFetch.mockResolvedValue(transactions)
+    mockedFetch.mockResolvedValue(page([purchase, deposit]))
     render(<TransactionHistory user={user} />)
 
     // Both rows read as something that happened, in the same tense.
@@ -57,30 +61,66 @@ describe('TransactionHistory', () => {
     expect(screen.getByText('-$50.00')).toBeInTheDocument()
   })
 
-  it('lists the newest transaction first and can reverse the order', async () => {
-    const transactions: Transaction[] = [
-      {
-        transactionId: 1, type: 'cash', transactionType: 'deposit',
-        transactionDate: '2024-01-01T00:00:00Z', signedAmount: 100,
-      },
-      {
-        transactionId: 2, type: 'stock', transactionType: 'buy',
-        transactionDate: '2024-01-02T00:00:00Z', signedAmount: -50, ticker: 'AAPL', qty: 5, price: 10,
-      },
-    ]
-    mockedFetch.mockResolvedValue(transactions)
-    const typer = userEvent.setup()
+  it('asks for a page rather than the whole history', async () => {
+    mockedFetch.mockResolvedValue(page([deposit]))
     render(<TransactionHistory user={user} />)
 
-    const descriptionOrder = () =>
-      screen.getAllByRole('cell')
-        .map((cell) => cell.textContent)
-        .filter((text) => text === 'Deposited cash' || text === 'Bought 5.00 AAPL')
+    await screen.findByText('Deposited cash')
+    expect(mockedFetch).toHaveBeenCalledWith(1, expect.any(Number), 0, 'newest')
+  })
+
+  // Reversing the rows already fetched would only reorder that page, which
+  // is a different list from the one the user asked to see.
+  it('refetches in the other direction rather than reversing what it holds', async () => {
+    const typer = userEvent.setup()
+    mockedFetch.mockResolvedValue(page([purchase, deposit]))
+    render(<TransactionHistory user={user} />)
+    await screen.findByText('Deposited cash')
+
+    mockedFetch.mockResolvedValue(page([deposit, purchase]))
+    await typer.click(screen.getByRole('button', { name: 'Newest first' }))
+
+    expect(mockedFetch).toHaveBeenLastCalledWith(1, expect.any(Number), 0, 'oldest')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Oldest first' })).toBeInTheDocument(),
+    )
+  })
+
+  it('says how much of the history is on screen', async () => {
+    mockedFetch.mockResolvedValue(page([deposit], 214))
+    render(<TransactionHistory user={user} />)
+
+    expect(await screen.findByText('Showing 1 of 214')).toBeInTheDocument()
+  })
+
+  it('appends the next page rather than replacing the current one', async () => {
+    const typer = userEvent.setup()
+    mockedFetch.mockResolvedValue(page([deposit], 2))
+    render(<TransactionHistory user={user} />)
+    await screen.findByText('Deposited cash')
+
+    mockedFetch.mockResolvedValue(page([purchase], 2))
+    await typer.click(screen.getByRole('button', { name: 'Load more' }))
+
+    expect(mockedFetch).toHaveBeenLastCalledWith(1, expect.any(Number), 1, 'newest')
+    expect(await screen.findByText('Bought 5.00 AAPL')).toBeInTheDocument()
+    expect(screen.getByText('Deposited cash')).toBeInTheDocument()
+  })
+
+  it('offers no Load more once everything is shown', async () => {
+    mockedFetch.mockResolvedValue(page([deposit, purchase], 2))
+    render(<TransactionHistory user={user} />)
 
     await screen.findByText('Deposited cash')
-    expect(descriptionOrder()).toEqual(['Bought 5.00 AAPL', 'Deposited cash'])
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument()
+  })
 
-    await typer.click(screen.getByRole('button', { name: 'Newest first' }))
-    expect(descriptionOrder()).toEqual(['Deposited cash', 'Bought 5.00 AAPL'])
+  it('links to the CSV export as a download', async () => {
+    mockedFetch.mockResolvedValue(page([deposit]))
+    render(<TransactionHistory user={user} />)
+
+    const link = await screen.findByRole('link', { name: 'Export CSV' })
+    expect(link).toHaveAttribute('href', '/api/v1/users/1/transactions/export')
+    expect(link).toHaveAttribute('download', 'transactions.csv')
   })
 })
