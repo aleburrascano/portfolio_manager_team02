@@ -26,6 +26,7 @@ function order(overrides: Partial<LimitOrder> = {}): LimitOrder {
     createdAt: '2026-01-05T12:00:00',
     resolvedAt: null,
     assetTransactionId: null,
+    _links: { cancel: '/api/v1/users/1/limit-orders/1' },
     ...overrides,
   }
 }
@@ -123,7 +124,7 @@ describe('OpenOrdersTab', () => {
     await screen.findByRole('row', { name: /AAPL/ })
     await typer.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    expect(mockedCancel).toHaveBeenCalledWith(1, 1)
+    expect(mockedCancel).toHaveBeenCalledWith(expect.objectContaining({ limitOrderId: 1 }))
     await waitFor(() => expect(screen.getByText(/don't have any open orders/)).toBeInTheDocument())
   })
 

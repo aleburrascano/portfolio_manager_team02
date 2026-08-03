@@ -1,4 +1,4 @@
-import { API_BASE, apiFetch, post } from './client'
+import { apiFetch, linkUrl, post } from './client'
 import type { AssetType } from './assets'
 
 /**
@@ -142,6 +142,8 @@ export type TransactionPage = {
   transactions: Transaction[]
   /** The count before paging, so a caller knows whether more exist. */
   total: number
+  /** Where the server says the related resources and actions live. */
+  _links: { self: string; export: string }
 }
 
 /**
@@ -168,9 +170,16 @@ export async function fetchTransactions(
   return apiFetch(`/users/${userId}/transactions${query}`, 'Failed to fetch transaction history')
 }
 
-/** Where the browser should point to download the whole history as CSV. */
-export function transactionsExportUrl(userId: number): string {
-  return `${API_BASE}/users/${userId}/transactions/export`
+/**
+ * Where the browser should point to download the history as CSV.
+ *
+ * Built from the link the page came with rather than from the route shape,
+ * so the download and the list it belongs to can't drift apart. A URL
+ * rather than a fetch because the browser has to navigate to it itself to
+ * get a file instead of a string in memory.
+ */
+export function transactionsExportUrl(page: TransactionPage): string {
+  return linkUrl(page._links.export)
 }
 
 export async function submitCashTransaction(

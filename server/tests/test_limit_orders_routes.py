@@ -132,6 +132,19 @@ def test_list_limit_orders_serializes_the_order_type(client):
     assert order['assetTransactionId'] is None
 
 
+# The client cancels by following this link rather than building the URL,
+# so it is part of the contract: present, and actually followable.
+def test_the_cancel_link_is_followable(client):
+    user = register_user(client)
+    client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 1000})
+    order = _place(client, user['userId']).get_json()['order']
+
+    response = client.delete(order['_links']['cancel'])
+
+    assert response.status_code == 200
+    assert response.get_json() == {'status': 'cancelled'}
+
+
 def test_list_limit_orders_rejects_invalid_status(client):
     user = register_user(client)
     response = client.get(f'/api/v1/users/{user["userId"]}/assets/stock/limit-orders?status=nope')
