@@ -1,19 +1,22 @@
 """
-Background evaluation of pending limit orders, independent of who (if
-anyone) is watching the app - unlike realtime.py's broadcast loop, which
-only fetches prices while a client is subscribed, a limit order has to keep
-being checked whether or not its owner has the app open.
+Background work that has to happen whether or not anyone is watching the
+app - unlike realtime.py's broadcast loop, which only fetches prices while a
+client is subscribed.
 
-Each tick opens its own throwaway Flask app context, so services.limit_orders
-can call db.connection.get_session() exactly as a request would; the
-context's teardown (already registered by db.connection.init_app) closes
-that tick's session on the way out, so there is no session lifecycle code
-here at all.
+Two things qualify. A limit order has to keep being checked against the
+market whether or not its owner has the app open, and a bond matures on a
+date rather than when someone next signs in.
+
+Each tick opens its own throwaway Flask app context, so the services can
+call db.connection.get_session() exactly as a request would; the context's
+teardown (already registered by db.connection.init_app) closes that tick's
+session on the way out, so there is no session lifecycle code here at all.
 """
 import logging
 import threading
 
-from realtime import notify_order_filled
+from realtime import notify_bond_redeemed, notify_order_filled
+from services.bond_redemption import redeem_matured_bonds
 from services.limit_orders import evaluate_pending_orders
 from services.market_data import sweep_caches
 
@@ -24,11 +27,11 @@ logger = logging.getLogger(__name__)
 
 def run_once(app) -> int:
     """
-    One tick: evaluate all pending orders under a fresh app context, and
-    tell each owner about anything that filled.
+    One tick: fill what can be filled, redeem what has matured, and tell
+    each owner about anything that happened to them.
 
-    The announcing happens here rather than in services.limit_orders because
-    a service never imports Flask, and the socket is Flask's. This module
+    The announcing happens here rather than in the services because a
+    service never imports Flask, and the socket is Flask's. This module
     already sits on that side of the line.
 
     Returns:
@@ -45,10 +48,20 @@ def run_once(app) -> int:
             # One bad tick (a DB hiccup, an upstream outage) must not kill
             # the thread - there is no supervisor to restart it.
             logger.exception('Limit order evaluation failed')
-            return 0
+            fills = []
+
+        # Its own try, so an outage in one of these does not stop the other:
+        # they share a timer, not a fate.
+        try:
+            payouts = redeem_matured_bonds()
+        except Exception:
+            logger.exception('Bond redemption failed')
+            payouts = []
 
         for fill in fills:
             notify_order_filled(fill)
+        for payout in payouts:
+            notify_bond_redeemed(payout)
         return len(fills)
 
 

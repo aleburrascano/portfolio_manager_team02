@@ -146,6 +146,26 @@ export type OrderFill = {
   assetTransactionId: number
 }
 
+/** A bond of this user's that has matured and been paid out at par. */
+export type BondRedemption = {
+  ticker: string
+  quantity: number
+  /** Face value, which is what a bond pays at maturity. */
+  price: number
+  proceeds: number
+}
+
+/**
+ * Run `onRedeem` whenever a bond of this user's matures and pays out.
+ *
+ * Same shape of subscription as a fill, and for the same reason: it happens
+ * on a date rather than in response to anything they did, so nothing on
+ * this side would otherwise know their cash had moved.
+ */
+export function useBondRedemptions(onRedeem: (payout: BondRedemption) => void): void {
+  useUserEvent('bondRedeemed', onRedeem)
+}
+
 /**
  * Run `onFill` whenever one of this user's conditional orders fills.
  *
@@ -154,6 +174,14 @@ export type OrderFill = {
  * open orders list would sit there showing a row that has already resolved,
  * and the balance beside it would be wrong.
  *
+ */
+export function useOrderFills(onFill: (fill: OrderFill) => void): void {
+  useUserEvent('orderFilled', onFill)
+}
+
+/**
+ * Subscribe to an event the server addresses to this user alone.
+ *
  * The handler is kept in a ref, updated in its own effect, so a caller can
  * pass a fresh closure every render - which it will, since the useful ones
  * capture state - without the socket listener being torn down and put back
@@ -161,22 +189,22 @@ export type OrderFill = {
  * say that and is not safe: a render React discards would still have
  * changed it.
  */
-export function useOrderFills(onFill: (fill: OrderFill) => void): void {
-  const handler = useRef(onFill)
+function useUserEvent<T>(event: string, onEvent: (payload: T) => void): void {
+  const handler = useRef(onEvent)
 
   useEffect(() => {
-    handler.current = onFill
-  }, [onFill])
+    handler.current = onEvent
+  }, [onEvent])
 
   useEffect(() => {
     const connection = getSocket()
-    const listener = (fill: OrderFill) => handler.current(fill)
+    const listener = (payload: T) => handler.current(payload)
 
-    connection.on('orderFilled', listener)
+    connection.on(event, listener)
     return () => {
-      connection.off('orderFilled', listener)
+      connection.off(event, listener)
     }
-  }, [])
+  }, [event])
 }
 
 /**
