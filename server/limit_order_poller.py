@@ -13,6 +13,7 @@ here at all.
 import logging
 import threading
 
+from realtime import notify_order_filled
 from services.limit_orders import evaluate_pending_orders
 from services.market_data import sweep_caches
 
@@ -22,19 +23,33 @@ logger = logging.getLogger(__name__)
 
 
 def run_once(app) -> int:
-    """One tick: evaluate all pending orders under a fresh app context."""
+    """
+    One tick: evaluate all pending orders under a fresh app context, and
+    tell each owner about anything that filled.
+
+    The announcing happens here rather than in services.limit_orders because
+    a service never imports Flask, and the socket is Flask's. This module
+    already sits on that side of the line.
+
+    Returns:
+        int: how many orders filled this tick.
+    """
     with app.app_context():
         try:
             # Piggybacked here rather than given its own thread: market data
             # entries expire on read, so this only clears out tickers nobody
             # asked about again, and this is the one loop already on a timer.
             sweep_caches()
-            return evaluate_pending_orders()
+            fills = evaluate_pending_orders()
         except Exception:
             # One bad tick (a DB hiccup, an upstream outage) must not kill
             # the thread - there is no supervisor to restart it.
             logger.exception('Limit order evaluation failed')
             return 0
+
+        for fill in fills:
+            notify_order_filled(fill)
+        return len(fills)
 
 
 def _run(app, stop_event: threading.Event) -> None:

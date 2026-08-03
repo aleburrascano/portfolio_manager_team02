@@ -6,6 +6,7 @@ import {
   type LimitOrder,
   type User,
 } from '../api'
+import { useOrderFills } from '../realtime'
 import { formatCurrency, formatNumber } from '../format'
 import './OpenOrdersTab.css'
 
@@ -39,6 +40,7 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
   const [orders, setOrders] = useState<LimitOrder[] | null>(null)
   const [error, setError] = useState('')
   const [cancellingId, setCancellingId] = useState<number | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   // Fetching and storing are kept apart so the effect can drop a response
   // that arrives after the user has moved on, while the cancel handler -
@@ -66,7 +68,11 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
     return () => {
       cancelled = true
     }
-  }, [loadOrders])
+  }, [reloadKey, loadOrders])
+
+  // An order that fills leaves this list, and it does so without anyone
+  // here asking - so the arrival of the news is what triggers the refetch.
+  useOrderFills(() => setReloadKey((current) => current + 1))
 
   async function handleCancel(orderId: number) {
     setCancellingId(orderId)
