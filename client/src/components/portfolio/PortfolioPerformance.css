@@ -24,6 +24,10 @@
   color: var(--text-muted);
 }
 
+.performance-comparison {
+  margin: 4px 0 0;
+}
+
 .performance-delta {
   font-size: var(--fs-md);
   font-weight: 600;
