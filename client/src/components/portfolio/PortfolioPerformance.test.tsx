@@ -240,4 +240,23 @@ describe('PortfolioPerformance', () => {
     await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
     expect(screen.getByRole('button', { name: 'S&P 500' })).toBeInTheDocument()
   })
+
+  /**
+   * A stored asset type this deployment no longer has. The server answers
+   * an unknown one with a 422, so passing it through would leave the chart
+   * showing an error until the user cleared their browser storage.
+   */
+  it('falls back when the stored asset type is not one the app has', async () => {
+    window.localStorage.setItem(
+      'treetop.performance.comparison',
+      JSON.stringify({
+        benchmark: { assetType: 'commodity', ticker: 'GC=F', label: 'Gold' },
+        comparing: true,
+      }),
+    )
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
+    expect(screen.queryByRole('button', { name: 'Gold' })).not.toBeInTheDocument()
+  })
 })
