@@ -139,6 +139,16 @@ export type OrderFill = {
   assetTransactionId: number
 }
 
+/** A conditional order dropped because its position no longer exists. */
+export type OrderCancellation = {
+  limitOrderId: number
+  ticker: string
+  side: 'buy' | 'sell'
+  orderType: 'limit' | 'stop'
+  quantity: number
+  reason: 'position_closed'
+}
+
 /** A bond of this user's that has matured and been paid out at par. */
 export type BondRedemption = {
   ticker: string
@@ -170,6 +180,19 @@ export function useBondRedemptions(onRedeem: (payout: BondRedemption) => void): 
  */
 export function useOrderFills(onFill: (fill: OrderFill) => void): void {
   useUserEvent('orderFilled', onFill)
+}
+
+/**
+ * Run `onCancel` whenever the server drops one of this user's orders
+ * because the position behind it is gone.
+ *
+ * The one server-side resolution the user did not ask for, which is exactly
+ * why it is announced: an open orders list that quietly loses a row, or a
+ * row that silently changes tab, reads as a bug rather than as the tidying
+ * up it is.
+ */
+export function useOrderCancellations(onCancel: (cancellation: OrderCancellation) => void): void {
+  useUserEvent('orderCancelled', onCancel)
 }
 
 /**

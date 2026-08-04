@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import {
   useBondRedemptions,
+  useOrderCancellations,
   useOrderFills,
   type BondRedemption,
+  type OrderCancellation,
   type OrderFill,
 } from '../../hooks/realtime'
 import { formatCurrency, formatNumber } from '../../lib/format'
@@ -19,6 +21,15 @@ function fillNotice(fill: OrderFill): Notice {
     title: `${fill.orderType === 'stop' ? 'Stop' : 'Limit'} order filled`,
     body: `${fill.side === 'buy' ? 'Bought' : 'Sold'} ${formatNumber(fill.quantity, 2)} ${fill.ticker} at ${formatCurrency(fill.price)}.`,
     subject: fill.ticker,
+  }
+}
+
+function cancellationNotice(cancellation: OrderCancellation): Notice {
+  return {
+    id: `cancelled:${cancellation.limitOrderId}`,
+    title: `${cancellation.orderType === 'stop' ? 'Stop' : 'Limit'} order cancelled`,
+    body: `You no longer hold any ${cancellation.ticker}, so the order to sell ${formatNumber(cancellation.quantity, 2)} of it was dropped.`,
+    subject: cancellation.ticker,
   }
 }
 
@@ -56,6 +67,7 @@ function FillToasts() {
 
   useOrderFills((fill) => announce(fillNotice(fill)))
   useBondRedemptions((payout) => announce(redemptionNotice(payout)))
+  useOrderCancellations((cancellation) => announce(cancellationNotice(cancellation)))
 
   function dismiss(id: string) {
     setNotices((current) => current.filter((n) => n.id !== id))
