@@ -42,36 +42,153 @@
 }
 
 /*
- * On a wide screen the two panels in the middle row sit side by side, so
- * they are made to match heights. Nothing else here is pinned to the
- * window.
+ * On a wide screen the dashboard fills the window and does not scroll.
  *
- * It used to be a grid exactly the height of the viewport, each panel
- * given a fraction of it and scrolling inside its own box. That reads
- * well on an account with three holdings and falls apart on a real one:
- * a watchlist wrapping to a second row took a third of the window, and
- * what was left showed one row of a twenty-seven row table through a
- * 128px slot, with the performance card's own asset-type breakdown
- * clipped away entirely. A dashboard that hides its contents to avoid a
- * scrollbar has the trade backwards - so the panels are their natural
- * height now and the column scrolls when there is more than fits.
+ * The arrangement is what makes that affordable. Stacked full width, the
+ * watchlist charged the whole dashboard for its second row of tiles -
+ * about 115px - and what was left showed one row of a twenty-seven row
+ * table through a 128px slot. As a column beside the holdings table it
+ * takes space that was empty anyway, and the panels it used to starve get
+ * their height back.
+ *
+ *   wallet    wallet
+ *   chart     composition
+ *   holdings  watchlist
+ *
+ * The middle row keeps its own two-column split, so this only has to
+ * place four children.
  */
-@media (min-width: 1001px) {
+@media (min-width: 1001px) and (min-height: 700px) {
+  #dashboard-content {
+    display: grid;
+
+    /* The rail gives way on narrower screens rather than squeezing the
+       holdings table until its last column is unreachable. */
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 21vw, 400px);
+    grid-template-rows: auto clamp(300px, 36vh, 420px) minmax(0, 1fr);
+    grid-template-areas:
+      'wallet wallet'
+      'charts charts'
+      'holdings watch';
+    gap: 12px;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  #dashboard-content > * {
+    min-height: 0;
+  }
+
+  #dashboard-content .wallet-statement {
+    grid-area: wallet;
+    margin-bottom: 0;
+    padding: 8px 0 12px;
+  }
+
   #dashboard-content .dashboard-row {
+    grid-area: charts;
     align-items: stretch;
+    gap: 12px;
+  }
+
+  #dashboard-content .holdings-card {
+    grid-area: holdings;
+  }
+
+  #dashboard-content .watchlist-card {
+    grid-area: watch;
   }
 
   #dashboard-content .card {
     display: flex;
     flex-direction: column;
+
+    /* A grid area doesn't clip, so without this a card whose content
+       can't shrink any further paints over its neighbour. */
+    overflow: hidden;
   }
 
-  /* Lets the chart grow into whatever height the composition panel beside
-     it takes, rather than leaving a gap under it. */
+  /*
+   * Composition stacks rather than sitting the legend beside a small
+   * circle: the donut on top, the breakdown reading as a table under it.
+   * Side by side, most of this card was empty.
+   */
+  #dashboard-content .composition-card-scroll {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #dashboard-content .donut-wrap {
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
+  }
+
+  /* The donut floats in whatever height the legend doesn't need, so the
+     slack sits around the circle instead of collecting as a band between
+     the last legend row and the total. */
+  #dashboard-content .donut-wrap svg {
+    width: clamp(88px, 12vh, 160px);
+    height: clamp(88px, 12vh, 160px);
+    margin-block: auto;
+  }
+
+  #dashboard-content .composition-legend {
+    width: 100%;
+    flex: none;
+    gap: 6px;
+  }
+
+  #dashboard-content .composition-total {
+    padding-top: 10px;
+  }
+
   #dashboard-content .performance-card .performance-body {
     flex: 1;
-    min-height: 260px;
+    min-height: 150px;
     height: auto;
+  }
+
+  /* Two across at every width. Left to auto-fill, the rail dropped to a
+     single column of very wide tiles once it clamped down at 1440. */
+  #dashboard-content .watchlist-card .tile-grid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  #dashboard-content .holdings-card .holdings-scroll {
+    flex: 1;
+    overflow-y: auto;
+  }
+
+  #dashboard-content .holdings-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-sticky);
+    background: var(--surface);
+  }
+}
+
+/*
+ * Short screens: the per-asset breakdown under the chart is the first
+ * thing to go. Keeping it costs the chart its legibility and pushes the
+ * composition legend into the total row underneath it.
+ */
+@media (min-width: 1001px) and (min-height: 700px) and (max-height: 1000px) {
+  #dashboard-content .performance-classes {
+    display: none;
+  }
+
+  #dashboard-content .composition-legend li {
+    font-size: var(--fs-sm);
   }
 }
 
