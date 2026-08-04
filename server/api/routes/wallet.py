@@ -78,15 +78,24 @@ def withdraw_cash(body: dict, user_id: int) -> Tuple[dict, int]:
 def get_portfolio_performance(query: dict, user_id: int) -> Tuple[dict, int]:
     """
     Get a user's portfolio value over time, against what they paid in and
-    against what the same deposits would have made in a broad index fund.
+    against what the same deposits would have made in some other asset.
+
+    The benchmark defaults to an S&P 500 tracker; `benchmarkType` and
+    `benchmarkTicker` compare against anything else the catalog prices.
 
     Returns:
         dict: {'series': [{'date', 'portfolioValue', 'investedValue', 'cash',
         'netDeposits', 'benchmarkValue'}], 'summary': {...}, 'byAssetType':
-        [...], 'benchmark': {'ticker', 'label'}, '_links': dict}
+        [...], 'benchmark': {'assetType', 'ticker'}, '_links': dict}
     """
     days = parse_days(query.get('days'))
-    return {**pp.get_portfolio_performance(user_id, days), '_links': portfolio_links(user_id)}, 200
+    performance = pp.get_portfolio_performance(
+        user_id,
+        days,
+        query.get('benchmarkType') or pp.BENCHMARK_ASSET_TYPE,
+        query.get('benchmarkTicker') or pp.BENCHMARK_TICKER,
+    )
+    return {**performance, '_links': portfolio_links(user_id)}, 200
 
 @wallet_bp.route('/users/<int:user_id>/portfolio/holdings', methods=['GET'])
 @require_user

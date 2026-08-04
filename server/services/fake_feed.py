@@ -33,6 +33,12 @@ CATALOG = {
     'TSLA': {'name': 'Tesla, Inc.', 'quoteType': 'EQUITY', 'exchange': 'NMS'},
     'BTC-USD': {'name': 'Bitcoin USD', 'quoteType': 'CRYPTOCURRENCY', 'exchange': 'CCC'},
     'ETH-USD': {'name': 'Ethereum USD', 'quoteType': 'CRYPTOCURRENCY', 'exchange': 'CCC'},
+    # The performance chart's default benchmark. Without it here the
+    # comparison is dead in every environment running on this feed - the
+    # one feature of that chart nobody could see while developing it.
+    # `ETF` rather than `EQUITY` keeps it out of the most-active screen,
+    # which is a list of companies.
+    'SPY': {'name': 'SPDR S&P 500 ETF Trust', 'quoteType': 'ETF', 'exchange': 'PCX'},
 }
 
 

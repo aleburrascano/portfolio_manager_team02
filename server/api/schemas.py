@@ -15,6 +15,7 @@ from typing import Any
 
 import marshmallow as ma
 
+from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
 from api.validation import (
     parse_amount, parse_days, parse_limit_price, parse_order_type, parse_quantity, parse_side,
@@ -111,6 +112,15 @@ class LimitOrderSchema(ma.Schema):
 
 class PerformanceQuerySchema(ma.Schema):
     days = Days(load_default=None, metadata={'description': 'How far back to chart.'})
+    benchmarkType = ma.fields.String(
+        load_default=None,
+        validate=ma.validate.OneOf(list(PROVIDERS), error='unknown asset type'),
+        metadata={'description': 'The asset type the benchmark is priced by.'},
+    )
+    benchmarkTicker = Ticker(
+        load_default=None,
+        metadata={'description': 'What to compare the portfolio against.', 'example': 'SPY'},
+    )
 
 
 class LimitOrderQuerySchema(ma.Schema):

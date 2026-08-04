@@ -80,14 +80,6 @@ def history(monkeypatch):
             monkeypatch.setattr(provider, 'get_history', get_history)
             monkeypatch.setattr(provider, 'valuation_price', valuation_price)
             monkeypatch.setattr(provider, 'live_quotes', live_quotes)
-
-        monkeypatch.setattr(
-            perf.market_data, 'price_history',
-            lambda ticker, period='1y', _p=prices: [
-                {'date': day.isoformat(), 'close': close}
-                for day, close in sorted(_p.get(ticker, {}).items())
-            ],
-        )
     return _apply
 
 
@@ -367,7 +359,7 @@ def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
     result = perf.get_portfolio_performance(user_id)
 
     assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 1100.0, 1200.0]
-    assert result['benchmark'] == {'ticker': 'SPY', 'label': 'S&P 500'}
+    assert result['benchmark'] == {'assetType': 'stock', 'ticker': 'SPY'}
 
 
 def test_benchmark_matches_a_later_deposit(user_id, history):
@@ -427,10 +419,10 @@ def test_a_failing_benchmark_lookup_does_not_fail_the_request(user_id, history, 
     history({})
     deposit(user_id, 1000, today_utc() - timedelta(days=1))
 
-    def boom(ticker, period='1y'):
+    def boom(ticker, days=365):
         raise RuntimeError('feed down')
 
-    monkeypatch.setattr(perf.market_data, 'price_history', boom)
+    monkeypatch.setattr(perf.PROVIDERS['stock'], 'get_history', boom)
 
     result = perf.get_portfolio_performance(user_id)
     assert result['series']
@@ -604,3 +596,43 @@ def test_benchmark_sells_units_when_cash_is_withdrawn(user_id, history):
 
     result = perf.get_portfolio_performance(user_id)
     assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 500.0, 500.0]
+
+
+def test_benchmark_can_be_any_asset_the_user_names(user_id, history):
+    today = today_utc()
+    days = [today - timedelta(days=n) for n in (2, 1, 0)]
+    history({
+        'SPY': dict(zip(days, (100.0, 100.0, 100.0))),
+        'BTC-USD': dict(zip(days, (100.0, 200.0, 400.0))),
+    })
+    deposit(user_id, 1000, days[0])
+
+    result = perf.get_portfolio_performance(user_id, benchmark_type='crypto', benchmark_ticker='BTC-USD')
+
+    assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 2000.0, 4000.0]
+    assert result['benchmark'] == {'assetType': 'crypto', 'ticker': 'BTC-USD'}
+
+
+def test_benchmark_prices_a_bond_through_its_own_provider(user_id, history):
+    """
+    A bond is a legal benchmark even though no feed quotes one: the
+    comparison goes through the same provider registry the holdings do,
+    not through the market feed directly.
+    """
+    today = today_utc()
+    days = [today - timedelta(days=n) for n in (2, 1, 0)]
+    history({'GOVT30': dict(zip(days, (900.0, 900.0, 1800.0)))})
+    deposit(user_id, 900, days[0])
+
+    result = perf.get_portfolio_performance(user_id, benchmark_type='bond', benchmark_ticker='GOVT30')
+    assert [point['benchmarkValue'] for point in result['series']] == [900.0, 900.0, 1800.0]
+
+
+def test_an_unknown_benchmark_asset_type_leaves_the_comparison_out(user_id, history):
+    history({'SPY': {today_utc() - timedelta(days=1): 100.0}})
+    deposit(user_id, 1000, today_utc() - timedelta(days=1))
+
+    result = perf.get_portfolio_performance(user_id, benchmark_type='commodity', benchmark_ticker='SPY')
+
+    assert result['series']
+    assert all('benchmarkValue' not in point for point in result['series'])
