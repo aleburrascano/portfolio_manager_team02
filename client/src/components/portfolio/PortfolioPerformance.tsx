@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   fetchPortfolioPerformance,
+  type AssetTypeInfo,
   type Benchmark,
   type PortfolioPerformance as Performance,
   type User,
@@ -36,23 +37,32 @@ const COMPARISON_KEY = 'treetop.performance.comparison'
  * chart, not a fact about the portfolio, and someone who picked Bitcoin on
  * their laptop hasn't said anything about what their phone should open on.
  *
- * Validated on the way out rather than trusted. The stored value outlives
- * the code that wrote it - it survives a deploy that renames an asset type
- * - and an unchecked one would be sent to the API as a query or rendered
- * as the button's label.
+ * Validated against `known` rather than trusted. The stored value outlives
+ * the code that wrote it, so it can name an asset type this deployment no
+ * longer has - and the server answers an unknown one with a 422, which
+ * would leave the chart showing an error until someone thought to clear
+ * their browser storage. Matching it against the live registry means the
+ * worst a stale value costs is the default comparison.
  *
  * `window.localStorage`, not the bare global: Node 25 defines a
  * `localStorage` of its own, and under the test runner the bare name finds
  * that one - inert without --localstorage-file - instead of the DOM's.
  */
-function savedComparison(): Comparison {
+function savedComparison(known: AssetTypeInfo[]): Comparison {
   try {
     const saved = JSON.parse(window.localStorage.getItem(COMPARISON_KEY) ?? '')
     const { assetType, ticker, label } = saved?.benchmark ?? {}
-    if (typeof assetType !== 'string' || typeof ticker !== 'string') return DEFAULT_COMPARISON
+    if (typeof ticker !== 'string' || !ticker) return DEFAULT_COMPARISON
+
+    const type = known.find((candidate) => candidate.assetType === assetType)
+    if (!type) return DEFAULT_COMPARISON
 
     return {
-      benchmark: { assetType, ticker, label: typeof label === 'string' && label ? label : ticker },
+      benchmark: {
+        assetType: type.assetType,
+        ticker,
+        label: typeof label === 'string' && label ? label : ticker,
+      },
       comparing: saved.comparing !== false,
     }
   } catch {
@@ -84,7 +94,7 @@ function PortfolioPerformance({
   balance: number | null
   balanceSettled?: boolean
 }) {
-  const { byType } = useAssetTypes()
+  const { types, byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
   /**
    * `comparing` is client-side only, so turning the line off and back on
@@ -92,7 +102,7 @@ function PortfolioPerformance({
    * a round trip to hide something the browser already has would make a
    * checkbox feel broken. Changing the asset does refetch.
    */
-  const [comparison, setComparison] = useState<Comparison>(savedComparison)
+  const [comparison, setComparison] = useState<Comparison>(() => savedComparison(types))
   const { benchmark, comparing } = comparison
   const [picking, setPicking] = useState(false)
 
