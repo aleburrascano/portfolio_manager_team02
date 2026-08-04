@@ -16,9 +16,9 @@ import logging
 import os
 import threading
 
-from api.realtime import notify_bond_redeemed, notify_order_filled
+from api.realtime import notify_bond_redeemed, notify_order_cancelled, notify_order_filled
 from services.bond_redemption import redeem_matured_bonds
-from services.limit_orders import evaluate_pending_orders
+from services.limit_orders import cancel_orders_for_closed_positions, evaluate_pending_orders
 from services.market_data import sweep_caches
 
 POLL_INTERVAL_SECONDS = float(os.environ.get('POLL_INTERVAL_SECONDS', '5'))
@@ -30,12 +30,17 @@ logger = logging.getLogger(__name__)
 
 def run_once(app) -> int:
     """
-    One tick: fill what can be filled, redeem what has matured, and tell
-    each owner about anything that happened to them.
+    One tick: fill what can be filled, redeem what has matured, drop the
+    orders whose position has gone, and tell each owner about anything that
+    happened to them.
 
     The announcing happens here rather than in the services because a
     service never imports Flask, and the socket is Flask's. This module
     already sits on that side of the line.
+
+    Reconciling comes after filling and redeeming, because both of those
+    close positions - an order left dead by a fill is then dropped on the
+    same tick rather than lingering until the next one.
 
     Returns:
         int: how many orders filled this tick.
@@ -54,10 +59,18 @@ def run_once(app) -> int:
             logger.exception('Bond redemption failed')
             payouts = []
 
+        try:
+            cancellations = cancel_orders_for_closed_positions()
+        except Exception:
+            logger.exception('Order reconciliation failed')
+            cancellations = []
+
         for fill in fills:
             notify_order_filled(fill)
         for payout in payouts:
             notify_bond_redeemed(payout)
+        for cancellation in cancellations:
+            notify_order_cancelled(cancellation)
         return len(fills)
 
 

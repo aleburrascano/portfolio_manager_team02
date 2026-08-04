@@ -38,3 +38,33 @@ def test_run_once_announces_nothing_when_nothing_filled(app, monkeypatch):
 
     assert poller.run_once(app) == 0
     assert announced == []
+
+
+def cancellation(order_id=1, user_id=7):
+    return {
+        'userId': user_id, 'limitOrderId': order_id, 'ticker': 'AMZN', 'side': 'sell',
+        'orderType': 'limit', 'quantity': 3.0, 'reason': 'position_closed',
+    }
+
+
+def test_run_once_announces_every_cancellation(app, monkeypatch):
+    announced = []
+    monkeypatch.setattr(poller, 'notify_order_cancelled', announced.append)
+    monkeypatch.setattr(poller, 'evaluate_pending_orders', lambda: [])
+    monkeypatch.setattr(
+        poller, 'cancel_orders_for_closed_positions', lambda: [cancellation(1), cancellation(2)],
+    )
+
+    poller.run_once(app)
+    assert [c['limitOrderId'] for c in announced] == [1, 2]
+
+
+def test_run_once_still_fills_when_reconciliation_fails(app, monkeypatch):
+    def boom():
+        raise RuntimeError('the database went away')
+
+    monkeypatch.setattr(poller, 'notify_order_filled', lambda _: None)
+    monkeypatch.setattr(poller, 'evaluate_pending_orders', lambda: [fill(1)])
+    monkeypatch.setattr(poller, 'cancel_orders_for_closed_positions', boom)
+
+    assert poller.run_once(app) == 1

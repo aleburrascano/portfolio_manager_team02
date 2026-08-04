@@ -6,7 +6,7 @@ import services.asset_transactions as at
 import services.limit_orders as lo
 import services.market_data as market_data
 from services.auth import register
-from services.cash_transactions import deposit_cash
+from services.cash_transactions import deposit_cash, withdraw_cash
 from services.exceptions import (
     InsufficientFunds, InsufficientHoldings, InvalidInput, MarketDataUnavailable,
     OrderNotFound, UnknownUser,
@@ -400,3 +400,106 @@ def test_evaluate_pending_orders_skips_ticker_when_market_data_unavailable(user_
     statuses = {o.ticker: o.status for o in lo.list_limit_orders(user_id)}
     assert statuses['AAPL'] == 'pending'
     assert statuses['MSFT'] == 'filled'
+
+
+def test_cancels_a_sell_order_once_the_whole_position_is_gone(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    order = lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    cancelled = lo.cancel_orders_for_closed_positions()
+
+    assert [row['limitOrderId'] for row in cancelled] == [order.limitOrderId]
+    assert lo.list_limit_orders(user_id)[0].status == 'cancelled'
+
+
+def test_a_cancellation_says_what_it_dropped_and_why(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'), 'stop')
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    cancellation = lo.cancel_orders_for_closed_positions()[0]
+
+    assert cancellation['userId'] == user_id
+    assert cancellation['ticker'] == 'AAPL'
+    assert cancellation['side'] == 'sell'
+    assert cancellation['orderType'] == 'stop'
+    assert cancellation['quantity'] == 5.0
+    assert cancellation['reason'] == 'position_closed'
+
+
+def test_a_cancelled_order_carries_when_it_was_resolved(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    lo.cancel_orders_for_closed_positions()
+
+    assert lo.list_limit_orders(user_id)[0].resolvedAt is not None
+
+
+def test_leaves_a_sell_order_alone_while_any_of_the_position_remains(user_id):
+    """Trimming a position says nothing about whether the rest is going too."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('3'))
+
+    assert lo.cancel_orders_for_closed_positions() == []
+    assert lo.list_limit_orders(user_id)[0].status == 'pending'
+
+
+def test_leaves_a_buy_order_alone_when_the_cash_has_gone(user_id):
+    """Cash replenishes, so an uncovered buy keeps waiting rather than dying."""
+    deposit_cash(user_id, Decimal('1000.00'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'buy', Decimal('5'), Decimal('8.00'))
+    withdraw_cash(user_id, Decimal('1000.00'))
+
+    assert lo.cancel_orders_for_closed_positions() == []
+    assert lo.list_limit_orders(user_id)[0].status == 'pending'
+
+
+def test_only_cancels_orders_of_the_user_whose_position_closed(user_id):
+    other_id = register('Grace', 'password1', 'Grace', 'Hopper')['userId']
+    for owner in (user_id, other_id):
+        deposit_cash(owner, Decimal('1000.00'))
+        at.purchase_asset(owner, 'stock', 'AAPL', Decimal('5'))
+        lo.place_limit_order(owner, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    cancelled = lo.cancel_orders_for_closed_positions()
+
+    assert [row['userId'] for row in cancelled] == [user_id]
+    assert lo.list_limit_orders(other_id)[0].status == 'pending'
+
+
+def test_leaves_a_sell_order_for_a_different_ticker_alone(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    at.purchase_asset(user_id, 'stock', 'MSFT', Decimal('5'))
+    lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    lo.place_limit_order(user_id, 'stock', 'MSFT', 'sell', Decimal('5'), Decimal('12.00'))
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    cancelled = lo.cancel_orders_for_closed_positions()
+
+    assert [row['ticker'] for row in cancelled] == ['AAPL']
+    statuses = {o.ticker: o.status for o in lo.list_limit_orders(user_id)}
+    assert statuses == {'AAPL': 'cancelled', 'MSFT': 'pending'}
+
+
+def test_does_not_touch_an_order_that_has_already_resolved(user_id):
+    deposit_cash(user_id, Decimal('1000.00'))
+    at.purchase_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+    order = lo.place_limit_order(user_id, 'stock', 'AAPL', 'sell', Decimal('5'), Decimal('12.00'))
+    lo.cancel_limit_order(user_id, order.limitOrderId)
+    at.sell_asset(user_id, 'stock', 'AAPL', Decimal('5'))
+
+    assert lo.cancel_orders_for_closed_positions() == []
+
+
+def test_cancels_nothing_when_no_orders_are_pending(user_id):
+    assert lo.cancel_orders_for_closed_positions() == []

@@ -142,3 +142,44 @@ def test_asset_detail_404_for_unknown_ticker(client, monkeypatch):
     monkeypatch.setattr(market_data, 'asset_quote', lambda ticker: None)
     response = client.get('/api/v1/assets/stock/NOPE')
     assert response.status_code == 404
+
+
+def test_crypto_quotes_measure_change_over_24_hours(client, monkeypatch):
+    """
+    A crypto never closes, so its move is measured against the price a day
+    ago - not against the midnight bar, which reads as roughly double it.
+    """
+    import services.market_data as market_data
+    from services.asset_providers import PROVIDERS
+
+    monkeypatch.setattr(
+        market_data, 'asset_quote',
+        lambda ticker: {'symbol': ticker, 'currentPrice': 110.0, 'change': 10.0, 'changePercent': 10.0},
+    )
+    monkeypatch.setattr(market_data, 'rolling_24h_closes', lambda symbols: {'BTC-USD': 100.0})
+
+    quote = PROVIDERS['crypto'].get_quote('BTC-USD')
+    assert quote['change'] == 10.0
+    assert quote['changePercent'] == 10.0
+
+    monkeypatch.setattr(market_data, 'rolling_24h_closes', lambda symbols: {'BTC-USD': 105.0})
+    quote = PROVIDERS['crypto'].get_quote('BTC-USD')
+    assert round(quote['change'], 2) == 5.0
+    assert round(quote['changePercent'], 2) == 4.76
+
+
+def test_stock_quotes_are_left_measured_from_the_previous_close(client, monkeypatch):
+    import services.market_data as market_data
+    from services.asset_providers import PROVIDERS
+
+    monkeypatch.setattr(
+        market_data, 'asset_quote',
+        lambda ticker: {'symbol': ticker, 'currentPrice': 110.0, 'change': 10.0, 'changePercent': 10.0},
+    )
+
+    def unexpected(symbols):
+        raise AssertionError('a stock should not be restated over 24 hours')
+
+    monkeypatch.setattr(market_data, 'rolling_24h_closes', unexpected)
+
+    assert PROVIDERS['stock'].get_quote('AAPL')['change'] == 10.0
