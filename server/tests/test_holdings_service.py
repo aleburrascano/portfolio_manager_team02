@@ -5,7 +5,7 @@ The trades are written straight to the database rather than bought through
 the routes, because these tests are about the arithmetic over a ledger, and
 buying through the routes would price every trade off the live market.
 """
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 import pytest
@@ -14,6 +14,11 @@ import services.holdings as holdings_service
 from db.connection import get_session
 from db.models import Asset, AssetTransaction
 from services.auth import register
+
+# The session the day-change tests below are written against. Trades are
+# stamped in UTC, as the database stamps them, and this is the New York
+# date they are read back as.
+SESSION_DAY = date(2026, 8, 3)
 
 
 @pytest.fixture()
@@ -27,8 +32,20 @@ def user_id(ctx):
     return register('Ada', 'password1', 'Ada', 'Lovelace')['userId']
 
 
-def record_trade(user_id, ticker, qty, price, asset_type='stock', day=1):
-    """Write one trade directly, with `qty` signed the way the schema stores it."""
+@pytest.fixture()
+def today(monkeypatch):
+    """Pin the exchange's date, so a day change doesn't depend on when the suite runs."""
+    monkeypatch.setattr(holdings_service, '_session_date', lambda: SESSION_DAY)
+
+
+def record_trade(user_id, ticker, qty, price, asset_type='stock', day=1, at=None):
+    """
+    Write one trade directly, with `qty` signed the way the schema stores it.
+
+    `at` gives the UTC timestamp outright, for the tests that care which
+    trading session a trade landed in; `day` is the older shorthand and
+    puts it in January, comfortably before any session under test.
+    """
     session = get_session()
     if session.get(Asset, ticker) is None:
         session.add(Asset(ticker=ticker, assetType=asset_type))
@@ -39,7 +56,7 @@ def record_trade(user_id, ticker, qty, price, asset_type='stock', day=1):
         price=Decimal(str(price)),
         assetTransactionType='buy' if Decimal(str(qty)) > 0 else 'sell',
         userId=user_id,
-        assetTransactionDate=datetime(2026, 1, day, 12, 0, 0),
+        assetTransactionDate=at or datetime(2026, 1, day, 12, 0, 0),
     ))
     session.commit()
 
@@ -188,6 +205,73 @@ def test_a_flat_market_reports_no_daily_move(user_id, priced_at):
     totals = holdings_service.get_holdings(user_id)['totals']
     assert totals['dayChange'] == 0.0
     assert totals['dayChangePercent'] == 0.0
+
+
+def test_buying_after_a_rally_does_not_bank_the_rally(user_id, priced_at, today):
+    """
+    The reported bug, with the numbers that produced it: GOOG closed 5.11%
+    up at 372.47 from 354.37, and a purchase made after the close showed
+    that entire move as the buyer's gain - on money that was sitting in
+    cash while it happened.
+    """
+    record_trade(user_id, 'GOOG', qty=1.5, price=372.47, at=datetime(2026, 8, 3, 22, 30))
+    priced_at({'GOOG': 372.47}, changes={'GOOG': 18.10})
+
+    result = holdings_service.get_holdings(user_id)
+    assert result['holdings'][0]['dayChange'] == 0.0
+    assert result['totals']['dayChange'] == 0.0
+    assert result['totals']['dayChangePercent'] == 0.0
+
+
+def test_a_purchase_made_tonight_belongs_to_todays_session(user_id, priced_at, today):
+    """
+    8pm in New York is already tomorrow in UTC, which is how the timestamp
+    is stored. Taking its date without converting would file an after-hours
+    purchase under the next session and credit it with today's move - the
+    exact case this bug was reported in.
+    """
+    record_trade(user_id, 'GOOG', qty=1.5, price=372.47, at=datetime(2026, 8, 4, 0, 30))
+    priced_at({'GOOG': 372.47}, changes={'GOOG': 18.10})
+
+    assert holdings_service.get_holdings(user_id)['totals']['dayChange'] == 0.0
+
+
+def test_a_position_bought_today_moves_from_what_was_paid(user_id, priced_at, today):
+    """Buying mid-session is still a real gain - just from the buy price on."""
+    record_trade(user_id, 'AAPL', qty=10, price=100.0, at=datetime(2026, 8, 3, 15, 0))
+    priced_at({'AAPL': 104.0}, changes={'AAPL': 9.0})
+
+    assert holdings_service.get_holdings(user_id)['holdings'][0]['dayChange'] == 40.0
+
+
+def test_shares_held_and_shares_bought_today_are_counted_separately(user_id, priced_at, today):
+    record_trade(user_id, 'AAPL', qty=10, price=50.0, day=1)
+    record_trade(user_id, 'AAPL', qty=10, price=100.0, at=datetime(2026, 8, 3, 15, 0))
+    priced_at({'AAPL': 104.0}, changes={'AAPL': 9.0})
+
+    # 10 held through the session's 9.00 move, 10 bought at 100 and now 104.
+    assert holdings_service.get_holdings(user_id)['holdings'][0]['dayChange'] == 130.0
+
+
+def test_selling_today_does_not_inflate_the_session_quantity(user_id, priced_at, today):
+    """
+    Buying and selling the same day leaves fewer shares than were bought,
+    and the day change must follow what is still held rather than what
+    passed through.
+    """
+    record_trade(user_id, 'AAPL', qty=10, price=100.0, at=datetime(2026, 8, 3, 15, 0))
+    record_trade(user_id, 'AAPL', qty=-6, price=104.0, at=datetime(2026, 8, 3, 16, 0))
+    priced_at({'AAPL': 104.0}, changes={'AAPL': 9.0})
+
+    assert holdings_service.get_holdings(user_id)['holdings'][0]['dayChange'] == 16.0
+
+
+def test_a_position_held_since_before_today_still_moves_with_the_market(user_id, priced_at, today):
+    """The fix must not flatten the day change for everything else."""
+    record_trade(user_id, 'AAPL', qty=10, price=100, day=1)
+    priced_at({'AAPL': 150.0}, changes={'AAPL': 5.0})
+
+    assert holdings_service.get_holdings(user_id)['holdings'][0]['dayChange'] == 50.0
 
 
 def test_holdings_are_scoped_to_one_user(user_id, priced_at):
