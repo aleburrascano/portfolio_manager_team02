@@ -47,9 +47,13 @@ def _today() -> date:
     return datetime.now(timezone.utc).date()
 
 
-def _close_by_date(asset_type: str, ticker: str) -> Dict[date, float]:
+def _close_by_date(asset_type: str, ticker: str, days: int) -> Dict[date, float]:
     """
     A {date: close} map for one ticker, or an empty map if it has no history.
+
+    `days` is the chart window, passed through so the closes fetched actually
+    span it: a five-year chart valued against a single year of history left
+    every older holding at zero for the years it couldn't see.
 
     Best-effort on purpose: one ticker whose history can't be fetched should
     leave a gap in the chart, not fail the whole request.
@@ -59,7 +63,7 @@ def _close_by_date(asset_type: str, ticker: str) -> Dict[date, float]:
         return {}
 
     try:
-        history = provider.get_history(ticker)
+        history = provider.get_history(ticker, days)
     except Exception:
         return {}
 
@@ -108,7 +112,7 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
 
     asset_type_of = {row['ticker']: row['assetType'] for row in trades}
     closes = {
-        ticker: _close_by_date(asset_type, ticker)
+        ticker: _close_by_date(asset_type, ticker, days)
         for ticker, asset_type in asset_type_of.items()
     }
 
@@ -122,6 +126,7 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
 
     shares: Dict[str, Decimal] = defaultdict(Decimal)
     last_price: Dict[str, Optional[float]] = {ticker: None for ticker in asset_type_of}
+    traded_price: Dict[str, float] = {}
     cash = Decimal('0')
     net_deposits = Decimal('0')
     series: List[dict] = []
@@ -132,6 +137,7 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
             quantity = Decimal(str(trade['qty']))
             shares[trade['ticker']] += quantity
             cash -= quantity * Decimal(str(trade['price']))
+            traded_price[trade['ticker']] = float(trade['price'])
 
         flow = cash_on.get(day)
         if flow:
@@ -144,8 +150,13 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
                 last_price[ticker] = price
 
         if day >= start:
+            # The most recent close, carried forward across market closures.
+            # Before the first close a held ticker has - the day it was
+            # bought, or a genuine hole at the left edge of the fetched
+            # history - fall back to what it was traded at rather than zero,
+            # so a position never blinks out to nothing on the day it appears.
             invested = sum(
-                float(quantity) * (last_price.get(ticker) or 0.0)
+                float(quantity) * (last_price.get(ticker) or traded_price.get(ticker) or 0.0)
                 for ticker, quantity in shares.items()
                 if quantity
             )
@@ -170,7 +181,7 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
 
     for ticker, price in live_price.items():
         if not price:
-            live_price[ticker] = last_price.get(ticker) or 0.0
+            live_price[ticker] = last_price.get(ticker) or traded_price.get(ticker) or 0.0
 
     if series:
         invested = sum(float(qty) * live_price[ticker] for ticker, qty in held.items())
@@ -220,6 +231,7 @@ def _benchmark_series(series: List[dict]) -> List[dict]:
 
     units = 0.0
     last_close = None
+    pending = 0.0
     previous_deposits = 0.0
     benchmark = []
 
@@ -228,10 +240,16 @@ def _benchmark_series(series: List[dict]) -> List[dict]:
         if close:
             last_close = close
 
-        contributed = point['netDeposits'] - previous_deposits
+        # A dollar that arrives before the index has a price to buy at is
+        # held over, not dropped: it goes in at the first close available
+        # rather than never - the same failure the holdings replay had, where
+        # a contribution on an unpriced day silently vanished from the
+        # comparison and flattered whichever side it landed on.
+        pending += point['netDeposits'] - previous_deposits
         previous_deposits = point['netDeposits']
-        if close and contributed:
-            units += contributed / close
+        if close and pending:
+            units += pending / close
+            pending = 0.0
 
         benchmark.append({
             'date': point['date'],

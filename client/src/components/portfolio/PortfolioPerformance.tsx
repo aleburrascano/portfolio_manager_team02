@@ -6,6 +6,7 @@ import {
   type User,
 } from '../../api'
 import { useAssetTypes } from '../../context/asset-types'
+import { formatDayLong, formatDayShort } from '../../lib/dates'
 import { formatCurrency, formatNumber } from '../../lib/format'
 import './PortfolioPerformance.css'
 
@@ -19,17 +20,8 @@ const RANGES = [
 
 const AXIS_PADDING_FRACTION = 0.08
 
-function formatAxisDate(value: string) {
-  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function formatFullDate(value: string) {
-  return new Date(value).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+const formatAxisDate = formatDayShort
+const formatFullDate = formatDayLong
 
 function Signed({ value, percent }: { value: number; percent: number }) {
   const tone = value > 0 ? 'positive' : value < 0 ? 'negative' : 'flat'

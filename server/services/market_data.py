@@ -392,6 +392,22 @@ def _analyst_ratings(ticker: str) -> Optional[dict]:
     }
 
 
+def period_covering(days: int) -> str:
+    """
+    The smallest yfinance period string that spans `days` of history.
+
+    The performance chart offers windows up to five years but used to fetch
+    a fixed year of closes, so anything held longer than that was valued at
+    zero for every day before the window began. Mapping the requested span
+    to a period that actually covers it is what keeps an older holding on
+    the chart instead of collapsing it to cash.
+    """
+    for threshold, period in ((365, '1y'), (730, '2y'), (1825, '5y')):
+        if days <= threshold:
+            return period
+    return 'max'
+
+
 def price_history(ticker: str, period: str = '1y') -> List[dict]:
     """
     Daily closing prices over the given period, oldest first, for charting.
