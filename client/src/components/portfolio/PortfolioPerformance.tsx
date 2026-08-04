@@ -181,23 +181,31 @@ function PortfolioPerformance({
             Portfolio performance
           </h3>
           {summary && hasSeries && (
-            <p className="performance-headline">
-              <Signed value={summary.gainLoss} percent={summary.gainLossPercent} />
-              <span className="performance-caption">
-                against {formatCurrency(summary.netDeposits)} paid in
-              </span>
-              {beatBenchmark !== null && (
+            <>
+              <p className="performance-headline">
+                <Signed value={summary.gainLoss} percent={summary.gainLossPercent} />
                 <span className="performance-caption">
+                  against {formatCurrency(summary.netDeposits)} paid in
+                </span>
+              </p>
+              {/*
+               * On its own line, below the figure: an asset with a long name
+               * ("Palantir Technologies Inc.") makes this the widest thing in
+               * the header, and inline it pushes the controls onto a row of
+               * their own.
+               */}
+              {beatBenchmark !== null && (
+                <p className="performance-caption performance-comparison">
                   {beatBenchmark >= 0 ? 'ahead of' : 'behind'} {benchmarkLabel} by{' '}
                   {formatCurrency(Math.abs(beatBenchmark))}
-                </span>
+                </p>
               )}
               {comparing && !priced && (
-                <span className="performance-caption">
+                <p className="performance-caption performance-comparison">
                   {benchmarkLabel} couldn't be priced over this window
-                </span>
+                </p>
               )}
-            </p>
+            </>
           )}
         </div>
 

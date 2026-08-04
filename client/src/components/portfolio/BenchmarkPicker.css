@@ -1,5 +1,5 @@
 .benchmark-picker {
-  width: min(520px, 100%);
+  width: min(640px, 100%);
   max-height: min(640px, 90vh);
   display: flex;
   flex-direction: column;
@@ -12,8 +12,14 @@
   margin: 12px 0 16px;
 }
 
+/*
+ * No vertical padding, so the select's own content never makes it taller
+ * than the search bar beside it - the row stretches both to whichever is
+ * tallest, and this way that is always the search bar. A select centres
+ * its label vertically on its own.
+ */
 .benchmark-picker-controls select {
-  padding: 11px 12px;
+  padding: 0 12px;
   font-family: var(--sans);
   font-size: var(--fs-sm);
   font-weight: 600;
@@ -24,9 +30,20 @@
   cursor: pointer;
 }
 
+/*
+ * `.modal-card input` in WalletCard.css dresses the deposit and withdraw
+ * fields, and reaches every input in every modal - this search bar
+ * included. Its 20px bottom margin is what made this row taller than the
+ * field in it, leaving the select stretched 20px past the search bar
+ * beside it; the mono font came along too. Undone here rather than
+ * narrowed there, which would be a change to modals this work isn't about.
+ */
 .benchmark-picker-controls .search-bar {
   flex: 1;
   min-width: 0;
+  margin: 0;
+  padding: 11px 16px;
+  font-family: var(--sans);
 }
 
 /*
