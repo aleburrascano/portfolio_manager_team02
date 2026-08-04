@@ -43,8 +43,16 @@ class AssetProvider(ABC):
         """Full detail-page quote for one asset, or None if not found."""
 
     @abstractmethod
-    def get_history(self, ticker: str) -> List[dict]:
-        """A year of daily closes: [{'date': str, 'close': float}, ...]."""
+    def get_history(self, ticker: str, days: int = 365) -> List[dict]:
+        """
+        Daily closes covering the trailing `days` days, oldest first:
+        [{'date': str, 'close': float}, ...].
+
+        The span is a parameter because the performance chart values a
+        holding at each past day's close, so charting five years needs five
+        years of them - a fixed year would leave anything older unpriced.
+        The detail page asks for the default year.
+        """
 
     @abstractmethod
     def owns_ticker(self, ticker: str) -> Optional[bool]:
@@ -169,8 +177,8 @@ class _MarketTradedProvider(AssetProvider):
     def get_quote(self, ticker: str) -> Optional[dict]:
         return market_data.asset_quote(ticker)
 
-    def get_history(self, ticker: str) -> List[dict]:
-        return market_data.price_history(ticker)
+    def get_history(self, ticker: str, days: int = 365) -> List[dict]:
+        return market_data.price_history(ticker, period=market_data.period_covering(days))
 
     def trade_price(self, ticker: str) -> Decimal:
         return market_data.trade_price(ticker)
@@ -302,9 +310,9 @@ class BondProvider(AssetProvider):
             'volume': None,
         }
 
-    def get_history(self, ticker: str) -> List[dict]:
+    def get_history(self, ticker: str, days: int = 365) -> List[dict]:
         bond = bond_pricing.get_bond(ticker)
-        return bond_pricing.price_history(bond) if bond else []
+        return bond_pricing.price_history(bond, days) if bond else []
 
     def owns_ticker(self, ticker: str) -> Optional[bool]:
         return bond_pricing.get_bond(ticker) is not None

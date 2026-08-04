@@ -17,6 +17,7 @@ import { useBalance } from '../context/balance-context'
 import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../hooks/realtime'
 import { useIdempotencyKey } from '../hooks/idempotency'
 import { validateAmountInput, validateQuantityInput } from '../lib/validation'
+import { formatDayShort } from '../lib/dates'
 import { formatCurrency, formatNumber } from '../lib/format'
 import AssetLogo from '../components/ui/AssetLogo'
 import AnalystRatings from '../components/trading/AnalystRatings'
@@ -51,9 +52,7 @@ function triggerHint(orderType: PanelOrderType, isBuy: boolean): string | null {
   return null
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
+const formatDate = formatDayShort
 
 function AssetDetail({
   assetType,

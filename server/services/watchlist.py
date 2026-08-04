@@ -16,6 +16,7 @@ from db.connection import get_session
 from db.models import WatchlistEntry
 from services.asset_providers import PROVIDERS
 from services.exceptions import InvalidInput
+from services.serialization import utc_iso
 
 MAX_ENTRIES = 24
 
@@ -128,7 +129,7 @@ def list_entries(user_id: int) -> List[Dict[str, Any]]:
         {
             'symbol': entry.ticker,
             'assetType': entry.assetType,
-            'addedAt': entry.addedAt.isoformat() if entry.addedAt else None,
+            'addedAt': utc_iso(entry.addedAt),
             **{
                 key: quotes.get(entry.ticker, {}).get(key)
                 for key in ('name', 'currentPrice', 'change', 'changePercent')

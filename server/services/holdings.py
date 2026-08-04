@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from services.asset_providers import PROVIDERS
 from services.portfolio_performance import average_cost_basis
+from services.serialization import utc_iso
 from services.user_transactions import get_user_asset_transactions
 
 MARKET_TIMEZONE = ZoneInfo('America/New_York')
@@ -216,6 +217,8 @@ def _day_change(
 
 
 def _iso(value: Any) -> str:
+    if isinstance(value, datetime):
+        return utc_iso(value)
     return value.isoformat() if hasattr(value, 'isoformat') else str(value)
 
 
