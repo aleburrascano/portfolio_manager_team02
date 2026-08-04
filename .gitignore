@@ -1,5 +1,9 @@
 .env
 
+# Dependencies. client/ and e2e/ ignore their own, but vitest run from the
+# root leaves a cache in a node_modules/ of its own that nothing covered.
+node_modules/
+
 # Local SQLite databases
 *.db
 
