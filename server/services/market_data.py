@@ -30,6 +30,7 @@ QuoteMatcher = Callable[[dict], bool]
 
 QUOTE_FRESHNESS_SECONDS = 5
 DAILY_CLOSE_FRESHNESS_SECONDS = 900
+ROLLING_24H_FRESHNESS_SECONDS = 300
 RATINGS_FRESHNESS_SECONDS = 3600
 SEARCH_FRESHNESS_SECONDS = 300
 SCREEN_FRESHNESS_SECONDS = 60
@@ -37,13 +38,14 @@ NEVER_CHANGES_SECONDS = 86400
 
 _quotes = TTLCache(ttl_seconds=QUOTE_FRESHNESS_SECONDS)
 _history = TTLCache(ttl_seconds=DAILY_CLOSE_FRESHNESS_SECONDS)
+_rolling = TTLCache(ttl_seconds=ROLLING_24H_FRESHNESS_SECONDS)
 _classification = TTLCache(ttl_seconds=NEVER_CHANGES_SECONDS)
 _ratings = TTLCache(ttl_seconds=RATINGS_FRESHNESS_SECONDS)
 _searches = TTLCache(ttl_seconds=SEARCH_FRESHNESS_SECONDS)
 _screens = TTLCache(ttl_seconds=SCREEN_FRESHNESS_SECONDS)
 _names = TTLCache(ttl_seconds=NEVER_CHANGES_SECONDS)
 
-_CACHES = (_quotes, _history, _classification, _ratings, _searches, _screens, _names)
+_CACHES = (_quotes, _history, _rolling, _classification, _ratings, _searches, _screens, _names)
 
 
 def clear_caches() -> None:
@@ -66,6 +68,7 @@ def sweep_caches() -> int:
 _BY_NAME = {
     'quotes': _quotes,
     'history': _history,
+    'rolling24h': _rolling,
     'classification': _classification,
     'ratings': _ratings,
     'searches': _searches,
@@ -88,15 +91,51 @@ def cache_sizes() -> Dict[str, dict]:
     }
 
 
-def quote_fields(fast_info) -> dict:
-    """Extract price/change/day-range fields from a fast_info object."""
+def previous_close(asset) -> Optional[float]:
+    """
+    The previous session's official close, from the chart metadata Yahoo
+    returns alongside the price.
+
+    Deliberately not fast_info's own `previousClose`, which yfinance derives
+    for itself and which disagrees with the official figure by anything from
+    a cent to a couple of dollars - and that figure is the one every other
+    app measures the day's change from, so a baseline of our own makes every
+    percentage on the page wrong by a different amount. GOOG read $370.00
+    against an official $372.47, turning a 1.24% day into 1.91%.
+
+    Free to read: the metadata arrives in the same chart response fast_info
+    is built from, so this costs no extra call - but it therefore has to be
+    read *after* fast_info has been touched.
+
+    Returns None when the response carried no metadata, leaving the caller
+    to fall back rather than invent a baseline.
+    """
+    metadata = getattr(asset, 'history_metadata', None) or {}
+    value = metadata.get('previousClose')
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def quote_fields(fast_info, official_close: Optional[float] = None) -> dict:
+    """
+    Extract price/change/day-range fields from a fast_info object.
+
+    `official_close` is the baseline the day's change is measured from; see
+    previous_close for why it is passed in rather than read from fast_info.
+    Falling back to fast_info's own value when it is missing keeps a quote
+    that is slightly off in preference to one with no change at all.
+    """
     last_price = fast_info.get('lastPrice')
-    previous_close = fast_info.get('previousClose')
-    change = last_price - previous_close if last_price is not None and previous_close else None
+    previous = official_close if official_close is not None else fast_info.get('previousClose')
+    change = last_price - previous if last_price is not None and previous else None
     return {
         'currentPrice': last_price,
         'change': change,
-        'changePercent': change / previous_close * 100 if change is not None and previous_close else None,
+        'changePercent': change / previous * 100 if change is not None and previous else None,
         'dayLow': fast_info.get('dayLow'),
         'dayHigh': fast_info.get('dayHigh'),
     }
@@ -139,11 +178,103 @@ def _fetch_prices(symbols: List[str]) -> Dict[str, Optional[dict]]:
     fetched: Dict[str, Optional[dict]] = {}
     for symbol in symbols:
         try:
-            fast_info = tickers.tickers[symbol].fast_info
-            fetched[symbol] = {'volume': fast_info.get('lastVolume'), **quote_fields(fast_info)}
+            asset = tickers.tickers[symbol]
+            fast_info = asset.fast_info
+            fetched[symbol] = {
+                'volume': fast_info.get('lastVolume'),
+                **quote_fields(fast_info, previous_close(asset)),
+            }
         except Exception:
             fetched[symbol] = None
     return fetched
+
+
+HOURS_IN_A_DAY = 24
+
+
+def rolling_24h_closes(symbols: List[str]) -> Dict[str, float]:
+    """
+    What each symbol traded at 24 hours ago, keyed by symbol.
+
+    For the markets that never close. A day's change on an exchange-traded
+    asset is measured from the previous session's close, but a crypto has no
+    session that closed - and every venue quoting one, Yahoo's own quote page
+    included, measures the move over a rolling 24 hours instead. Anchored to
+    the midnight-UTC bar it reads as roughly double the move by mid-afternoon:
+    BTC showed 1.19% against the 0.64% everyone else was showing.
+
+    One batched hourly download for the whole list, cached for minutes,
+    because the baseline is a price a day old and leaves the window one bar
+    at a time. A symbol without a full day of bars is simply absent, leaving
+    its quote measured the ordinary way rather than against a guess.
+    """
+    closes: Dict[str, float] = {}
+    missing = []
+    for symbol in symbols:
+        cached = _rolling.get(symbol)
+        if cached is MISS:
+            missing.append(symbol)
+        elif cached is not None:
+            closes[symbol] = cached
+
+    if missing:
+        for symbol, close in _fetch_rolling_24h_closes(missing).items():
+            _rolling.set(symbol, close)
+            if close is not None:
+                closes[symbol] = close
+    return closes
+
+
+def _fetch_rolling_24h_closes(symbols: List[str]) -> Dict[str, Optional[float]]:
+    """
+    One batched hourly download. A symbol the feed didn't carry a full day
+    of maps to None, and that answer is cached too - an hourly series that
+    isn't there won't be there on the next tick either.
+    """
+    try:
+        frame = yf.download(
+            symbols, period='2d', interval='1h', auto_adjust=False,
+            progress=False, group_by='ticker', threads=False,
+        )
+    except Exception:
+        return {symbol: None for symbol in symbols}
+
+    fetched: Dict[str, Optional[float]] = {}
+    for symbol in symbols:
+        try:
+            series = frame[symbol]['Close'].dropna()
+            fetched[symbol] = (
+                float(series.iloc[-(HOURS_IN_A_DAY + 1)]) if len(series) > HOURS_IN_A_DAY else None
+            )
+        except Exception:
+            fetched[symbol] = None
+    return fetched
+
+
+def with_24h_change(rows: List[dict]) -> List[dict]:
+    """
+    The same quotes with `change` and `changePercent` measured over the last
+    24 hours rather than from the previous close.
+
+    Returns new rows rather than editing the given ones, which may be the
+    cached originals. A row with no 24-hour baseline, or no price to compare,
+    is passed through untouched.
+    """
+    if not rows:
+        return rows
+
+    baselines = rolling_24h_closes([row['symbol'] for row in rows if row.get('symbol')])
+
+    restated = []
+    for row in rows:
+        baseline = baselines.get(row.get('symbol'))
+        price = row.get('currentPrice')
+        if not baseline or price is None:
+            restated.append(row)
+            continue
+        change = price - baseline
+        restated.append({**row, 'change': change, 'changePercent': change / baseline * 100})
+    return restated
 
 
 def display_names(symbols: List[str]) -> Dict[str, str]:
@@ -311,7 +442,7 @@ def _asset_quote(ticker: str) -> Optional[dict]:
     return {
         'symbol': ticker.upper(),
         'name': asset.info.get('longName', asset.info.get('shortName', ticker.upper())),
-        **quote_fields(fast_info),
+        **quote_fields(fast_info, previous_close(asset)),
         'open': fast_info.get('open'),
         'yearLow': fast_info.get('yearLow'),
         'yearHigh': fast_info.get('yearHigh'),
@@ -420,7 +551,17 @@ def price_history(ticker: str, period: str = '1y') -> List[dict]:
 
 
 def _price_history(ticker: str, period: str) -> List[dict]:
-    prices = yf.Ticker(ticker).history(period=period)
+    """
+    Closes as they were actually traded, not back-adjusted for dividends.
+
+    yfinance adjusts by default, which quietly puts this series on a
+    different scale from every other price in the app: KO's close a year ago
+    came back 2.75% under what it traded at, so the chart's own peak sat
+    below the 52-week high printed beside it, and the performance replay
+    valued a holding at prices it could never have been bought or sold at.
+    Splits are applied either way, so nothing is lost by turning this off.
+    """
+    prices = yf.Ticker(ticker).history(period=period, auto_adjust=False)
     return [
         {'date': index.strftime('%Y-%m-%d'), 'close': float(row['Close'])}
         for index, row in prices.iterrows()
@@ -433,7 +574,7 @@ def close_series(ticker: str, days: int):
     callers that need to look prices up at many past dates (the seed
     script). Returns None if the ticker has no history.
     """
-    history = yf.Ticker(ticker).history(period=f'{days}d')
+    history = yf.Ticker(ticker).history(period=f'{days}d', auto_adjust=False)
     if history.empty:
         return None
     history.index = history.index.tz_localize(None)

@@ -96,11 +96,17 @@ function AnalystRatings({
 
   return (
     <div className="ratings-card">
+      {/*
+        * The two counts here are different populations and are labelled as
+        * such: the bars are every rating on file, while the targets come
+        * only from the analysts who published a price. Shown as one number
+        * they never reconciled - "14 analysts" above bars totalling 63.
+        */}
       <div className="ratings-header">
         <h3 className="stats-heading">Analyst ratings</h3>
-        {ratings.analystCount != null && (
+        {total > 0 && (
           <span className="ratings-count">
-            {ratings.analystCount} {ratings.analystCount === 1 ? 'analyst' : 'analysts'}
+            {total} {total === 1 ? 'rating' : 'ratings'}
           </span>
         )}
       </div>
@@ -134,7 +140,14 @@ function AnalystRatings({
       {ratings.targetMean != null && (
         <div className="ratings-targets">
           <p className="ratings-target-headline">
-            <span>12-month target</span>
+            <span>
+              12-month target
+              {ratings.analystCount != null && (
+                <span className="ratings-target-source">
+                  from {ratings.analystCount} {ratings.analystCount === 1 ? 'analyst' : 'analysts'}
+                </span>
+              )}
+            </span>
             <span className="figure">{formatCurrency(ratings.targetMean)}</span>
           </p>
 

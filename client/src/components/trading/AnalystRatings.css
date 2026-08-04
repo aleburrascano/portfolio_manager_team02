@@ -118,6 +118,14 @@
   color: var(--text-h);
 }
 
+.ratings-target-source {
+  margin-left: 6px;
+  font-family: var(--sans);
+  font-size: var(--fs-micro);
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
 .ratings-scale {
   position: relative;
   display: block;

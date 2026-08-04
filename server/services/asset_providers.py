@@ -206,7 +206,10 @@ class _MarketTradedProvider(AssetProvider):
         return market_data.live_quotes(symbols)
 
     def quote_book(self, tickers: List[str]) -> Dict[str, dict]:
-        quotes = market_data.live_quotes(tickers)
+        # self.live_quotes rather than the module's, so a type that restates
+        # its own change - crypto, measured over 24 hours - is quoted the
+        # same way here as everywhere else.
+        quotes = self.live_quotes(tickers)
         names = market_data.display_names(list(quotes))
         return {
             ticker: {**quote, 'name': names.get(ticker, ticker)}
@@ -232,6 +235,18 @@ class StockProvider(_MarketTradedProvider):
 
 
 class CryptoProvider(_MarketTradedProvider):
+    """
+    Quoted like a stock, but with the day's move measured over a rolling 24
+    hours rather than from a previous close.
+
+    A crypto never closes, so there is no session boundary to measure from.
+    Yahoo's own quote page, and every exchange the price could be checked
+    against, use the trailing day instead; anchoring to the midnight-UTC bar
+    made the app read about double everyone else's percentage by mid-
+    afternoon. The restatement is applied to every path a quote surfaces on,
+    so the tiles, the list rows and the detail page can't disagree.
+    """
+
     asset_type = 'crypto'
     label = 'Crypto'
     supports_limit_orders = True
@@ -253,7 +268,18 @@ class CryptoProvider(_MarketTradedProvider):
         return quote.get('quoteType') == 'CRYPTOCURRENCY'
 
     def fetch_popular(self) -> List[dict]:
-        return market_data.quote_summaries(self.POPULAR_SYMBOLS)
+        return market_data.with_24h_change(market_data.quote_summaries(self.POPULAR_SYMBOLS))
+
+    def search(self, query: str) -> List[dict]:
+        return market_data.with_24h_change(super().search(query))
+
+    def get_quote(self, ticker: str) -> Optional[dict]:
+        quote = super().get_quote(ticker)
+        return market_data.with_24h_change([quote])[0] if quote else quote
+
+    def live_quotes(self, symbols: List[str]) -> Dict[str, dict]:
+        quotes = market_data.with_24h_change(list(super().live_quotes(symbols).values()))
+        return {quote['symbol']: quote for quote in quotes}
 
 
 class BondProvider(AssetProvider):
