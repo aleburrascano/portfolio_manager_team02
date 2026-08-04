@@ -52,7 +52,7 @@ def test_holdings_of_a_new_account_are_empty_not_an_error(client):
 
 def test_performance_reflects_a_deposit(client, monkeypatch):
     for provider in perf.PROVIDERS.values():
-        monkeypatch.setattr(provider, 'get_history', lambda ticker: [])
+        monkeypatch.setattr(provider, 'get_history', lambda ticker, days=365: [])
 
     user = register_user(client)
     client.post(f'/api/v1/users/{user["userId"]}/deposit', json={'amount': 250})
