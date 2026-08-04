@@ -8,6 +8,7 @@ import {
   type User,
 } from '../../api'
 import { useOrderFills } from '../../hooks/realtime'
+import { formatDayLong } from '../../lib/dates'
 import { formatCurrency, formatNumber } from '../../lib/format'
 import './OpenOrdersTab.css'
 
@@ -44,13 +45,7 @@ function triggerLabel(order: LimitOrder): string {
   return waitsForFall ? '≤' : '≥'
 }
 
-function formatPlaced(value: string) {
-  return new Date(value).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
-}
+const formatPlaced = formatDayLong
 
 /**
  * A user's GTC conditional orders for one asset type: open, filled, or

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { AssetType, Holding, HoldingsResult } from '../../api'
+import { formatDayLong } from '../../lib/dates'
 import { formatCurrency, formatNumber } from '../../lib/format'
 import AssetLogo from '../ui/AssetLogo'
 import './HoldingsTable.css'
@@ -30,11 +31,7 @@ const ASSET_LABELS: Record<string, string> = {
 
 function formatAcquired(value: string | null) {
   if (!value) return '—'
-  return new Date(value).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  })
+  return formatDayLong(value)
 }
 
 /**

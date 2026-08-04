@@ -8,23 +8,22 @@ import {
   type TransactionSort,
   type User,
 } from '../api'
+import { formatMarketDateTime } from '../lib/dates'
 import { formatCurrency, formatNumber } from '../lib/format'
 import './TransactionHistory.css'
 
 /** One screenful and a bit, so the first page always overflows into a scroll. */
 const PAGE_SIZE = 50
 
-/** Full date for the table; the stacked mobile layout uses the same string. */
-function formatDate(value: string) {
-  return new Date(value).toLocaleString('en-US', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  })
-}
+/**
+ * Full timestamp for the table, in US market time.
+ *
+ * Read back as the UTC the backend stores and shown in the market's zone -
+ * the same frame the trading day is reckoned in - carrying its own EST/EDT
+ * label, so a trade reads at the hour the exchange saw it rather than
+ * sliding into the viewer's zone.
+ */
+const formatDate = formatMarketDateTime
 
 function describe(transaction: Transaction): string {
   if (transaction.type === 'cash') {
