@@ -17,12 +17,15 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-import services.market_data as market_data
 from services.asset_providers import PROVIDERS
 from services.user_transactions import get_cash_flows, get_user_asset_transactions
 
+# Where the comparison starts before the user picks something else: the
+# S&P 500 tracker. Only a default - any asset the catalog can price is a
+# legal benchmark, so "what if I had just bought Bitcoin instead" is as
+# answerable here as "did I beat the index".
+BENCHMARK_ASSET_TYPE = 'stock'
 BENCHMARK_TICKER = 'SPY'
-BENCHMARK_LABEL = 'S&P 500'
 
 
 def _as_date(value: Any) -> date:
@@ -74,7 +77,12 @@ def _close_by_date(asset_type: str, ticker: str, days: int) -> Dict[date, float]
     }
 
 
-def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
+def get_portfolio_performance(
+    user_id: int,
+    days: int = 365,
+    benchmark_type: str = BENCHMARK_ASSET_TYPE,
+    benchmark_ticker: str = BENCHMARK_TICKER,
+) -> Dict[str, Any]:
     """
     Chart a user's portfolio value over the last `days` days.
 
@@ -87,9 +95,11 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
     Args:
         user_id (int): The ID of the user.
         days (int): How far back to chart.
+        benchmark_type (str): The asset type the benchmark is priced by.
+        benchmark_ticker (str): What to measure the portfolio against.
 
     Each point also carries `benchmarkValue`: what the same deposits, made
-    on the same days, would be worth in a broad index fund instead. "Did I
+    on the same days, would be worth in that benchmark instead. "Did I
     beat my own deposits" is the weaker of the two comparisons available
     here, and it was the only one being offered.
 
@@ -97,13 +107,14 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         dict: {'series': list[dict], 'summary': dict, 'byAssetType':
         list[dict], 'benchmark': dict}
     """
+    benchmark = {'assetType': benchmark_type, 'ticker': benchmark_ticker}
     trades = get_user_asset_transactions(user_id)
     cash_flows = get_cash_flows(user_id)
 
     if not trades and not cash_flows:
         return {
             'series': [], 'summary': _empty_summary(), 'byAssetType': [],
-            'benchmark': {'ticker': BENCHMARK_TICKER, 'label': BENCHMARK_LABEL},
+            'benchmark': benchmark,
         }
 
     today = _today()
@@ -189,21 +200,29 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
         latest['investedValue'] = round(invested, 2)
         latest['portfolioValue'] = round(invested + latest['cash'], 2)
 
-    for point, benchmark in zip(series, _benchmark_series(series)):
-        point['benchmarkValue'] = benchmark['benchmarkValue']
+    comparison = _benchmark_series(series, benchmark_type, benchmark_ticker, days)
+    for point, valued in zip(series, comparison):
+        point['benchmarkValue'] = valued['benchmarkValue']
 
     return {
         'series': series,
         'summary': _summarise(series),
         'byAssetType': _by_asset_type(shares, asset_type_of, live_price, trades),
-        'benchmark': {'ticker': BENCHMARK_TICKER, 'label': BENCHMARK_LABEL},
+        'benchmark': benchmark,
     }
 
 
-def _benchmark_series(series: List[dict]) -> List[dict]:
+def _benchmark_series(
+    series: List[dict], asset_type: str, ticker: str, days: int,
+) -> List[dict]:
     """
-    What the same money would have been worth in the index instead, on the
+    What the same money would have been worth in `ticker` instead, on the
     same dates.
+
+    Priced through the same provider registry the holdings are, rather than
+    off the market feed directly, so anything the app can sell can also be
+    compared against - a bond the catalog prices as readily as an index
+    fund the feed quotes.
 
     Deposits are matched, not just the opening balance: a portfolio that was
     topped up halfway through would otherwise be compared against a
@@ -211,21 +230,14 @@ def _benchmark_series(series: List[dict]) -> List[dict]:
     other than timing. Every dollar goes in on the day it arrived and buys
     that day's close.
 
-    Best-effort like everything else on this chart: if the index can't be
-    priced, the comparison is simply absent rather than the whole request
+    Best-effort like everything else on this chart: if the benchmark can't
+    be priced, the comparison is simply absent rather than the whole request
     failing.
     """
     if not series:
         return []
 
-    try:
-        closes = {
-            _as_date(point['date']): float(point['close'])
-            for point in market_data.price_history(BENCHMARK_TICKER, period='5y')
-            if point.get('close')
-        }
-    except Exception:
-        return []
+    closes = _close_by_date(asset_type, ticker, days)
     if not closes:
         return []
 

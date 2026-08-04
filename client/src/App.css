@@ -1,6 +1,25 @@
 
 
+/*
+ * `position: relative` is what makes the `overflow: hidden` above it mean
+ * anything.
+ *
+ * A static ancestor cannot clip an absolutely positioned descendant - the
+ * descendant's containing block is the page itself, so it is laid out and
+ * measured against the document rather than against this box. The holdings
+ * table's `<caption class="visually-hidden">` is one: it takes its static
+ * position, which on a layout tall enough to scroll lands hundreds of
+ * pixels below the fold, and stretches the document's scrollable area to
+ * reach it. The result was a second scrollbar on the window next to the
+ * page's own, scrolling a screen of nothing.
+ *
+ * Positioning this box makes it the containing block for those
+ * descendants, so they are clipped here and the window stops scrolling.
+ * Below 1001px, where the dashboard is a tall column instead of a fitted
+ * grid, is where it showed.
+ */
 .app-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100svh;
