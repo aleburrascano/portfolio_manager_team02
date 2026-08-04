@@ -265,7 +265,24 @@ def fetch_price_histories(tickers, days):
 
 
 def price_on_or_before(series, when):
-    idx = series.index.searchsorted(when, side='right') - 1
+    """
+    The last close at or before `when`, as (date, price).
+
+    `when` is floored to the second first. A price index carries whatever
+    resolution its source chose - yfinance's daily bars come back in
+    seconds, the computed bond series in nanoseconds - and the generated
+    event times carry microseconds. Asked to compare a microsecond
+    timestamp against a second-resolution index, pandas raises rather than
+    truncate silently ("Cannot losslessly convert units"), which fails the
+    whole seed partway through.
+
+    Flooring rather than rounding because the question is "at or before",
+    and to the second because that is the coarsest resolution an index
+    here can have - so the value converts into any of them exactly. It
+    cannot change which daily bar is chosen.
+    """
+    target = pd.Timestamp(when).floor('s')
+    idx = series.index.searchsorted(target, side='right') - 1
     if idx < 0:
         idx = 0
     return series.index[idx], float(series.iloc[idx])
