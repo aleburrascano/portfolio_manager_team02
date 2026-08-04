@@ -4,6 +4,7 @@ Routes for placing, cancelling, and listing GTC conditional orders.
 from typing import Tuple
 
 import services.limit_orders as lo
+from services.serialization import utc_iso
 from api.docs import IDEMPOTENCY_KEY, Blueprint
 from api.authorization import require_user
 from api.idempotency import idempotent
@@ -24,8 +25,8 @@ def _serialize(order) -> dict:
         'quantity': float(order.quantity),
         'limitPrice': float(order.limitPrice),
         'status': order.status,
-        'createdAt': order.createdAt.isoformat(),
-        'resolvedAt': order.resolvedAt.isoformat() if order.resolvedAt else None,
+        'createdAt': utc_iso(order.createdAt),
+        'resolvedAt': utc_iso(order.resolvedAt),
         'assetTransactionId': order.assetTransactionId,
         '_links': limit_order_links(order.userId, order.limitOrderId),
     }
