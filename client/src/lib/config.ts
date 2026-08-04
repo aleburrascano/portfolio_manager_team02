@@ -7,7 +7,7 @@
  * URL reaches the right place and the browser only ever talks to its own
  * origin, which is what keeps the session cookie first-party. Setting this
  * points the client straight at the backend and reintroduces the
- * third-party-cookie 401 the deploy was moved off (see the README).
+ * third-party-cookie 401 the deploy was moved off (see ARCHITECTURE.md).
  *
  * It stays as an escape hatch for pointing a local client at some other
  * backend. Both the HTTP client and the socket read it from here rather
