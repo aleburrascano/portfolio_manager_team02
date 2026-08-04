@@ -42,6 +42,65 @@
   color: var(--negative);
 }
 
+/* `margin-left: auto` keeps these to the right even on the line they wrap
+   onto - without it a long headline pushes them onto their own row and
+   they land back at the left margin, reading as a stray second toolbar. */
+.performance-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.performance-benchmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.performance-compare {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.performance-compare input {
+  accent-color: var(--accent-ink);
+  cursor: pointer;
+}
+
+.benchmark-choice {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 5px 12px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent-ink);
+  cursor: pointer;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.benchmark-choice:hover:not(:disabled) {
+  border-color: var(--accent-ink);
+}
+
+.benchmark-choice:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
 .performance-ranges {
   display: flex;
   gap: 2px;

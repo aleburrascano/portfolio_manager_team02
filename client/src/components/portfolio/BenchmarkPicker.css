@@ -1,0 +1,41 @@
+.benchmark-picker {
+  width: min(520px, 100%);
+  max-height: min(640px, 90vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.benchmark-picker-controls {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+  margin: 12px 0 16px;
+}
+
+.benchmark-picker-controls select {
+  padding: 11px 12px;
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text-h);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.benchmark-picker-controls .search-bar {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * The list is the only part that scrolls; the title and search stay put.
+ * `min-height: 0` is what lets it: a flex item refuses to shrink below its
+ * content without it, so the card would grow past its own max-height and
+ * the dialog would run off the bottom of the screen instead.
+ */
+.benchmark-picker .asset-list {
+  min-height: 0;
+  overflow-y: auto;
+}

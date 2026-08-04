@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { Area, AreaChart, CartesianGrid, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   fetchPortfolioPerformance,
+  type Benchmark,
   type PortfolioPerformance as Performance,
   type User,
 } from '../../api'
 import { useAssetTypes } from '../../context/asset-types'
 import { formatDayLong, formatDayShort } from '../../lib/dates'
 import { formatCurrency, formatNumber } from '../../lib/format'
+import BenchmarkPicker from './BenchmarkPicker'
 import './PortfolioPerformance.css'
 
 /** The windows a user actually asks for, rather than a free-form date picker. */
@@ -17,6 +19,9 @@ const RANGES = [
   { days: 365, label: '1Y' },
   { days: 1825, label: 'All' },
 ] as const
+
+/** Where the comparison starts, until the user picks something else. */
+const DEFAULT_BENCHMARK: Benchmark = { assetType: 'stock', ticker: 'SPY', label: 'S&P 500' }
 
 const AXIS_PADDING_FRACTION = 0.08
 
@@ -44,7 +49,16 @@ function PortfolioPerformance({
 }) {
   const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
-  const requestKey = `${user.userId}:${days}:${balance}`
+  const [benchmark, setBenchmark] = useState<Benchmark>(DEFAULT_BENCHMARK)
+  /**
+   * Whether the comparison is drawn. Client-side only, so turning it off
+   * and back on is instant - the series is fetched with the benchmark
+   * either way, and a round trip to hide a line the browser already has
+   * would make a checkbox feel broken.
+   */
+  const [comparing, setComparing] = useState(true)
+  const [picking, setPicking] = useState(false)
+  const requestKey = `${user.userId}:${days}:${balance}:${benchmark.assetType}:${benchmark.ticker}`
   const [state, setState] = useState<{ key: string; data?: Performance; error?: string }>({
     key: '',
   })
@@ -55,7 +69,7 @@ function PortfolioPerformance({
 
     async function loadPerformance() {
       try {
-        const result = await fetchPortfolioPerformance(user.userId, days)
+        const result = await fetchPortfolioPerformance(user.userId, days, benchmark)
         if (!cancelled) setState({ key: requestKey, data: result })
       } catch (e) {
         if (!cancelled) {
@@ -72,7 +86,7 @@ function PortfolioPerformance({
     return () => {
       cancelled = true
     }
-  }, [user.userId, days, requestKey, balanceSettled])
+  }, [user.userId, days, benchmark, requestKey, balanceSettled])
 
   const loading = state.key !== requestKey
   const data = state.data ?? null
@@ -82,25 +96,26 @@ function PortfolioPerformance({
     const values = (data?.series ?? []).flatMap((point) => [
       point.portfolioValue,
       point.netDeposits,
-      ...(point.benchmarkValue != null ? [point.benchmarkValue] : []),
+      ...(comparing && point.benchmarkValue != null ? [point.benchmarkValue] : []),
     ])
     if (values.length === 0) return undefined
     const low = Math.min(...values)
     const high = Math.max(...values)
     const pad = (high - low || high || 1) * AXIS_PADDING_FRACTION
     return [Math.max(0, low - pad), high + pad] as [number, number]
-  }, [data])
+  }, [data, comparing])
 
   const summary = data?.summary
   const hasSeries = (data?.series.length ?? 0) > 1
-  const hasBenchmark = (data?.series ?? []).some((point) => point.benchmarkValue != null)
-  const benchmarkLabel = data?.benchmark?.label ?? 'Benchmark'
+  const priced = (data?.series ?? []).some((point) => point.benchmarkValue != null)
+  const hasBenchmark = comparing && priced
+  const benchmarkLabel = benchmark.label
 
   const beatBenchmark = useMemo(() => {
     const last = data?.series.at(-1)
-    if (!last || last.benchmarkValue == null) return null
+    if (!comparing || !last || last.benchmarkValue == null) return null
     return last.portfolioValue - last.benchmarkValue
-  }, [data])
+  }, [data, comparing])
 
   return (
     <section className="card performance-card" aria-labelledby="performance-title">
@@ -121,24 +136,61 @@ function PortfolioPerformance({
                   {formatCurrency(Math.abs(beatBenchmark))}
                 </span>
               )}
+              {comparing && !priced && (
+                <span className="performance-caption">
+                  {benchmarkLabel} couldn't be priced over this window
+                </span>
+              )}
             </p>
           )}
         </div>
 
-        <div className="performance-ranges" role="group" aria-label="Chart range">
-          {RANGES.map((range) => (
+        <div className="performance-controls">
+          <div className="performance-benchmark">
+            <label className="performance-compare">
+              <input
+                type="checkbox"
+                checked={comparing}
+                onChange={(event) => setComparing(event.target.checked)}
+              />
+              Compare against
+            </label>
             <button
-              key={range.days}
               type="button"
-              className={days === range.days ? 'active' : ''}
-              aria-pressed={days === range.days}
-              onClick={() => setDays(range.days)}
+              className="benchmark-choice"
+              disabled={!comparing}
+              onClick={() => setPicking(true)}
             >
-              {range.label}
+              {benchmark.label}
             </button>
-          ))}
+          </div>
+
+          <div className="performance-ranges" role="group" aria-label="Chart range">
+            {RANGES.map((range) => (
+              <button
+                key={range.days}
+                type="button"
+                className={days === range.days ? 'active' : ''}
+                aria-pressed={days === range.days}
+                onClick={() => setDays(range.days)}
+              >
+                {range.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
+
+      {picking && (
+        <BenchmarkPicker
+          current={benchmark}
+          onPick={(picked) => {
+            setBenchmark(picked)
+            setPicking(false)
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
 
       {loading ? (
         <div className="performance-body" aria-busy="true">
