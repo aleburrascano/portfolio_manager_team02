@@ -72,6 +72,7 @@ function withBenchmark(portfolioEnd: number, benchmarkEnd: number): Partial<Perf
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   mockedFetch.mockReset()
   mockedFetch.mockResolvedValue(performance())
   mockedPopular.mockReset()
@@ -194,5 +195,49 @@ describe('PortfolioPerformance', () => {
       }),
     )
     expect(screen.getByRole('button', { name: 'Bitcoin' })).toBeInTheDocument()
+  })
+
+  it('opens on the comparison chosen last time, not the default', async () => {
+    window.localStorage.setItem(
+      'treetop.performance.comparison',
+      JSON.stringify({
+        benchmark: { assetType: 'crypto', ticker: 'ETH-USD', label: 'Ethereum' },
+        comparing: false,
+      }),
+    )
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenCalledWith(1, 365, {
+        assetType: 'crypto',
+        ticker: 'ETH-USD',
+        label: 'Ethereum',
+      }),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Compare against' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Ethereum' })).toBeInTheDocument()
+  })
+
+  it('remembers the comparison the user turns off', async () => {
+    const typer = userEvent.setup()
+    render(<PortfolioPerformance user={user} balance={100} />)
+    await screen.findByText(/against \$1,000.00 paid in/)
+
+    await typer.click(screen.getByRole('checkbox', { name: 'Compare against' }))
+
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem('treetop.performance.comparison')!)).toMatchObject({
+        comparing: false,
+        benchmark: { ticker: 'SPY' },
+      }),
+    )
+  })
+
+  it('falls back to the default when the stored comparison is unusable', async () => {
+    window.localStorage.setItem('treetop.performance.comparison', '{"benchmark":{"ticker":42}}')
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
+    expect(screen.getByRole('button', { name: 'S&P 500' })).toBeInTheDocument()
   })
 })
