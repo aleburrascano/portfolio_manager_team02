@@ -111,6 +111,30 @@ def test_a_fill_does_not_reach_another_user(app, client):
     assert messages_named(socket, 'orderFilled') == []
 
 
+def test_a_cancellation_reaches_the_owner_of_the_order(app, client):
+    user = register_user(client)
+    socket = socket_client(app, client)
+
+    realtime.notify_order_cancelled({
+        'userId': user['userId'], 'limitOrderId': 1, 'ticker': 'AMZN',
+        'reason': 'position_closed',
+    })
+
+    [message] = messages_named(socket, 'orderCancelled')
+    assert message['args'][0]['ticker'] == 'AMZN'
+
+
+def test_a_cancellation_does_not_reach_another_user(app, client):
+    user = register_user(client)
+    socket = socket_client(app, client)
+
+    realtime.notify_order_cancelled({
+        'userId': user['userId'] + 1, 'limitOrderId': 1, 'ticker': 'AMZN',
+    })
+
+    assert messages_named(socket, 'orderCancelled') == []
+
+
 def test_an_anonymous_socket_still_gets_quotes(app, client):
     socket = socket_client(app, client)
     socket.emit('subscribe', {'assetType': 'stock', 'symbols': ['AAPL']})

@@ -7,7 +7,7 @@ import {
   type OrderStatus,
   type User,
 } from '../../api'
-import { useOrderFills } from '../../hooks/realtime'
+import { useOrderCancellations, useOrderFills } from '../../hooks/realtime'
 import { formatDayLong } from '../../lib/dates'
 import { formatCurrency, formatNumber } from '../../lib/format'
 import './OpenOrdersTab.css'
@@ -98,7 +98,9 @@ function OpenOrdersTab({ user, assetType }: { user: User; assetType: AssetType }
     }
   }, [requestKey, loadOrders])
 
-  useOrderFills(() => setReloadKey((current) => current + 1))
+  const reload = () => setReloadKey((current) => current + 1)
+  useOrderFills(reload)
+  useOrderCancellations(reload)
 
   async function handleCancel(order: LimitOrder) {
     setCancellingId(order.limitOrderId)

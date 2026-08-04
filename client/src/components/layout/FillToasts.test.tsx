@@ -4,19 +4,39 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import FillToasts from './FillToasts'
 import {
   useBondRedemptions,
+  useOrderCancellations,
   useOrderFills,
   type BondRedemption,
+  type OrderCancellation,
   type OrderFill,
 } from '../../hooks/realtime'
 
-vi.mock('../../hooks/realtime', () => ({ useOrderFills: vi.fn(), useBondRedemptions: vi.fn() }))
+vi.mock('../../hooks/realtime', () => ({
+  useOrderFills: vi.fn(),
+  useBondRedemptions: vi.fn(),
+  useOrderCancellations: vi.fn(),
+}))
 
 const mockedUseOrderFills = vi.mocked(useOrderFills)
 const mockedUseRedemptions = vi.mocked(useBondRedemptions)
+const mockedUseCancellations = vi.mocked(useOrderCancellations)
 
 /** The handlers the component registered, so a test can push events at it. */
 let announce: (fill: OrderFill) => void
 let announceRedemption: (payout: BondRedemption) => void
+let announceCancellation: (cancellation: OrderCancellation) => void
+
+function cancellation(overrides: Partial<OrderCancellation> = {}): OrderCancellation {
+  return {
+    limitOrderId: 9,
+    ticker: 'AMZN',
+    side: 'sell',
+    orderType: 'limit',
+    quantity: 3,
+    reason: 'position_closed',
+    ...overrides,
+  }
+}
 
 function fill(overrides: Partial<OrderFill> = {}): OrderFill {
   return {
@@ -37,6 +57,9 @@ beforeEach(() => {
   })
   mockedUseRedemptions.mockImplementation((onRedeem) => {
     announceRedemption = onRedeem
+  })
+  mockedUseCancellations.mockImplementation((onCancel) => {
+    announceCancellation = onCancel
   })
 })
 
@@ -102,6 +125,32 @@ describe('FillToasts', () => {
 
     expect(screen.getByText('Limit order filled')).toBeInTheDocument()
     expect(screen.getByText('Bond matured')).toBeInTheDocument()
+  })
+
+  it('says why an order was cancelled for the user', () => {
+    render(<FillToasts />)
+    act(() => announceCancellation(cancellation()))
+
+    expect(screen.getByText('Limit order cancelled')).toBeInTheDocument()
+    expect(
+      screen.getByText('You no longer hold any AMZN, so the order to sell 3.00 of it was dropped.'),
+    ).toBeInTheDocument()
+  })
+
+  it('names a cancelled stop as a stop', () => {
+    render(<FillToasts />)
+    act(() => announceCancellation(cancellation({ orderType: 'stop' })))
+
+    expect(screen.getByText('Stop order cancelled')).toBeInTheDocument()
+  })
+
+  it('keeps a cancellation apart from a fill of the same order', () => {
+    render(<FillToasts />)
+    act(() => announce(fill({ limitOrderId: 9, ticker: 'AMZN' })))
+    act(() => announceCancellation(cancellation({ limitOrderId: 9 })))
+
+    expect(screen.getByText('Limit order filled')).toBeInTheDocument()
+    expect(screen.getByText('Limit order cancelled')).toBeInTheDocument()
   })
 
   it('clears itself after a while', () => {

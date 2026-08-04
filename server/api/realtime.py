@@ -178,6 +178,18 @@ def notify_order_filled(fill: dict) -> None:
     _notify_user('orderFilled', fill, fill.get('limitOrderId'))
 
 
+def notify_order_cancelled(cancellation: dict) -> None:
+    """
+    Tell one user that a conditional order of theirs has been dropped
+    because the position it was written against no longer exists.
+
+    Announced for a reason the other two don't share: this is the app
+    cancelling something the user did not cancel, and a state change nobody
+    is told about is worse than the stale row it replaces.
+    """
+    _notify_user('orderCancelled', cancellation, cancellation.get('limitOrderId'))
+
+
 def notify_bond_redeemed(payout: dict) -> None:
     """
     Tell one user that a bond of theirs has matured and been paid out.

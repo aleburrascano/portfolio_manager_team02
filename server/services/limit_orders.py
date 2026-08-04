@@ -15,12 +15,12 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 import db.connection as db_conn
 import services.market_data as market_data
 import services.user_transactions as ut
-from db.models import Asset, LimitOrder
+from db.models import Asset, AssetTransaction, LimitOrder
 from services.asset_providers import PROVIDERS
 from services.asset_transactions import get_holding_qty_decimal, record_trade, register_asset
 from services.exceptions import (
@@ -325,5 +325,115 @@ def _try_fill(session, limit_order_id: int, price: Decimal) -> Optional[dict]:
         return fill
     except Exception:
         logger.exception('Limit order %s failed to fill', limit_order_id)
+        session.rollback()
+        return None
+
+
+def cancel_orders_for_closed_positions() -> List[dict]:
+    """
+    Cancel every pending sell order whose position no longer exists.
+
+    A sell order is an instruction to dispose of something. Once the owner
+    has disposed of all of it by hand, that instruction has nothing left to
+    act on, and leaving it pending is not harmless: it sits in the open
+    orders list looking live, and if the position is ever rebuilt it fills
+    against the new one on a trigger chosen for the old.
+
+    Deliberately narrow. A position merely *reduced* below the order's
+    quantity is left alone, because selling some of a holding says nothing
+    about whether the rest is going too - and so is every buy that can't
+    currently be covered, since cash replenishes and evaluate_pending_orders
+    explains at length why it keeps trying rather than guessing. A position
+    closed to zero is the one case with no reading under which the order can
+    still do what it was placed to do.
+
+    Driven from the poller rather than from the sale that empties the
+    position, so it covers the other ways one closes too: another order
+    filling, or a bond redeeming at maturity.
+
+    Returns:
+        list[dict]: one row per cancellation, described for the caller to
+        announce - this module has no socket, exactly as with a fill.
+    """
+    session = db_conn.get_session()
+    pending = session.scalars(
+        select(LimitOrder)
+        .where(LimitOrder.status == 'pending', LimitOrder.side == 'sell')
+        .order_by(LimitOrder.createdAt, LimitOrder.limitOrderId)
+    ).all()
+    if not pending:
+        return []
+
+    held = _held_quantities(session, pending)
+
+    cancelled = []
+    for order in pending:
+        if held.get((order.userId, order.ticker), Decimal('0')) > 0:
+            continue
+        cancellation = _cancel_closed_position(session, order.limitOrderId)
+        if cancellation is not None:
+            cancelled.append(cancellation)
+    return cancelled
+
+
+def _held_quantities(session, orders: List[LimitOrder]) -> dict:
+    """
+    Net holdings for every (user, ticker) the given orders name, in one
+    query, keyed by that pair.
+
+    A screening pass, so it costs one query for the whole set rather than a
+    lookup per order: on any given tick almost every pending order still has
+    its position, and those are then dropped here for nothing.
+    """
+    user_ids = {order.userId for order in orders}
+    tickers = {order.ticker for order in orders}
+    rows = session.execute(
+        select(
+            AssetTransaction.userId,
+            AssetTransaction.ticker,
+            func.coalesce(func.sum(AssetTransaction.qty), 0),
+        )
+        .where(AssetTransaction.userId.in_(user_ids), AssetTransaction.ticker.in_(tickers))
+        .group_by(AssetTransaction.userId, AssetTransaction.ticker)
+    ).all()
+    return {(user_id, ticker): Decimal(str(quantity)) for user_id, ticker, quantity in rows}
+
+
+def _cancel_closed_position(session, limit_order_id: int) -> Optional[dict]:
+    """
+    Cancel one order under its lock, if the position really has gone.
+
+    Re-checked here rather than trusted from the screening pass, for the
+    same reason a fill re-checks its condition: between the two the owner
+    may have bought back in, or the order may have filled or been cancelled
+    by hand.
+    """
+    try:
+        order = _lock_order(session, limit_order_id)
+        if order is None or order.status != 'pending':
+            return None
+
+        if not db_conn.lock_user(session, order.userId):
+            return None
+
+        if get_holding_qty_decimal(order.userId, order.ticker) > 0:
+            return None
+
+        order.status = 'cancelled'
+        order.resolvedAt = _now()
+
+        cancellation = {
+            'userId': order.userId,
+            'limitOrderId': order.limitOrderId,
+            'ticker': order.ticker,
+            'side': order.side,
+            'orderType': order.orderType,
+            'quantity': float(order.quantity),
+            'reason': 'position_closed',
+        }
+        session.commit()
+        return cancellation
+    except Exception:
+        logger.exception('Limit order %s failed to cancel', limit_order_id)
         session.rollback()
         return None
