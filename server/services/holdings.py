@@ -7,12 +7,16 @@ asset class"; this answers "which positions make that up", which is what a
 holdings table and the sorting in issue #27 need.
 """
 from collections import defaultdict
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Tuple
+from zoneinfo import ZoneInfo
 
 from services.asset_providers import PROVIDERS
 from services.portfolio_performance import average_cost_basis
 from services.user_transactions import get_user_asset_transactions
+
+MARKET_TIMEZONE = ZoneInfo('America/New_York')
 
 
 def _quote_book(held: Dict[str, str]) -> Dict[str, Tuple[float, float]]:
@@ -47,6 +51,58 @@ def _quote_book(held: Dict[str, str]) -> Dict[str, Tuple[float, float]]:
             book[ticker] = (float(price or 0.0), float(quote.get('change') or 0.0))
 
     return book
+
+
+def _session_date() -> date:
+    """
+    Today's date at the exchange, which is what "today" means in a day
+    change - not the server's date and not the user's.
+    """
+    return datetime.now(MARKET_TIMEZONE).date()
+
+
+def _exchange_date(value: Any) -> Any:
+    """
+    The exchange-local date a stored timestamp falls on, or None if it
+    isn't a timestamp.
+
+    Trade times are written by the database in UTC, so they have to be
+    read back in the exchange's zone before their date is taken. A trade
+    at 8pm in New York is already the small hours of the next day in UTC,
+    and calling that tomorrow would place a purchase outside the very
+    session it was made in - which is precisely the after-hours case this
+    exists to get right.
+    """
+    if not isinstance(value, datetime):
+        return None
+    stamped = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return stamped.astimezone(MARKET_TIMEZONE).date()
+
+
+def _bought_this_session(trades: List[dict], session_day: date) -> Dict[str, Tuple[Decimal, Decimal]]:
+    """
+    What was bought today, as {ticker: (quantity, average price paid)}.
+
+    Sales are ignored: this answers what the user has *taken on* during
+    the session, which is what can't be credited with a move that had
+    already happened when they bought it.
+    """
+    quantities: Dict[str, Decimal] = defaultdict(Decimal)
+    costs: Dict[str, Decimal] = defaultdict(Decimal)
+
+    for trade in trades:
+        quantity = Decimal(str(trade['qty']))
+        if quantity <= 0 or _exchange_date(trade['transactionDate']) != session_day:
+            continue
+        ticker = trade['ticker']
+        quantities[ticker] += quantity
+        costs[ticker] += quantity * Decimal(str(trade['price']))
+
+    return {
+        ticker: (quantity, costs[ticker] / quantity)
+        for ticker, quantity in quantities.items()
+        if quantity > 0
+    }
 
 
 def get_holdings(user_id: int) -> Dict[str, Any]:
@@ -84,6 +140,7 @@ def get_holdings(user_id: int) -> Dict[str, Any]:
             first_bought[ticker] = _iso(trade['transactionDate'])
 
     cost_basis = average_cost_basis(trades)
+    bought_today = _bought_this_session(trades, _session_date())
 
     held = {
         ticker: asset_type_of[ticker]
@@ -103,7 +160,7 @@ def get_holdings(user_id: int) -> Dict[str, Any]:
         price, change = quotes[ticker]
         value = float(quantity) * price
         cost = float(quantity) * unit_cost
-        day_change = float(quantity) * change
+        day_change = _day_change(quantity, price, change, bought_today.get(ticker))
         raw_value += value
         raw_cost += cost
         raw_day_change += day_change
@@ -127,6 +184,35 @@ def get_holdings(user_id: int) -> Dict[str, Any]:
         'holdings': holdings,
         'totals': _totals(len(holdings), raw_value, raw_cost, raw_day_change),
     }
+
+
+def _day_change(
+    quantity: Decimal,
+    price: float,
+    change: float,
+    bought_today: Tuple[Decimal, Decimal] = None,
+) -> float:
+    """
+    What this position has actually made today, in currency.
+
+    Shares held since before the session moved by `change`, which the feed
+    measures from the previous close. Shares bought during it did not:
+    they moved from what was paid for them. Crediting a purchase with the
+    whole day's move is how buying a stock that had already risen 5% shows
+    an instant 5% gain on money that was in cash while it happened.
+
+    The split is by quantity rather than by lot because the cost basis
+    above is an average too - a sale reduces the position without picking
+    a lot, so there is no lot left to point at.
+    """
+    if not bought_today:
+        return float(quantity) * change
+
+    session_quantity, paid = bought_today
+    session_quantity = min(session_quantity, quantity)
+    prior_quantity = quantity - session_quantity
+
+    return float(prior_quantity) * change + float(session_quantity) * (price - float(paid))
 
 
 def _iso(value: Any) -> str:
