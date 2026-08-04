@@ -23,6 +23,43 @@ const RANGES = [
 /** Where the comparison starts, until the user picks something else. */
 const DEFAULT_BENCHMARK: Benchmark = { assetType: 'stock', ticker: 'SPY', label: 'S&P 500' }
 
+/** What the user is comparing against, and whether they want to see it. */
+type Comparison = { benchmark: Benchmark; comparing: boolean }
+
+const DEFAULT_COMPARISON: Comparison = { benchmark: DEFAULT_BENCHMARK, comparing: true }
+const COMPARISON_KEY = 'treetop.performance.comparison'
+
+/**
+ * The comparison last chosen, from this browser.
+ *
+ * Kept here rather than on the account: it is a way of looking at the
+ * chart, not a fact about the portfolio, and someone who picked Bitcoin on
+ * their laptop hasn't said anything about what their phone should open on.
+ *
+ * Validated on the way out rather than trusted. The stored value outlives
+ * the code that wrote it - it survives a deploy that renames an asset type
+ * - and an unchecked one would be sent to the API as a query or rendered
+ * as the button's label.
+ *
+ * `window.localStorage`, not the bare global: Node 25 defines a
+ * `localStorage` of its own, and under the test runner the bare name finds
+ * that one - inert without --localstorage-file - instead of the DOM's.
+ */
+function savedComparison(): Comparison {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(COMPARISON_KEY) ?? '')
+    const { assetType, ticker, label } = saved?.benchmark ?? {}
+    if (typeof assetType !== 'string' || typeof ticker !== 'string') return DEFAULT_COMPARISON
+
+    return {
+      benchmark: { assetType, ticker, label: typeof label === 'string' && label ? label : ticker },
+      comparing: saved.comparing !== false,
+    }
+  } catch {
+    return DEFAULT_COMPARISON
+  }
+}
+
 const AXIS_PADDING_FRACTION = 0.08
 
 const formatAxisDate = formatDayShort
@@ -49,15 +86,24 @@ function PortfolioPerformance({
 }) {
   const { byType } = useAssetTypes()
   const [days, setDays] = useState<number>(365)
-  const [benchmark, setBenchmark] = useState<Benchmark>(DEFAULT_BENCHMARK)
   /**
-   * Whether the comparison is drawn. Client-side only, so turning it off
-   * and back on is instant - the series is fetched with the benchmark
-   * either way, and a round trip to hide a line the browser already has
-   * would make a checkbox feel broken.
+   * `comparing` is client-side only, so turning the line off and back on
+   * is instant - the series is fetched with the benchmark either way, and
+   * a round trip to hide something the browser already has would make a
+   * checkbox feel broken. Changing the asset does refetch.
    */
-  const [comparing, setComparing] = useState(true)
+  const [comparison, setComparison] = useState<Comparison>(savedComparison)
+  const { benchmark, comparing } = comparison
   const [picking, setPicking] = useState(false)
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(COMPARISON_KEY, JSON.stringify(comparison))
+    } catch {
+      // A browser refusing storage - private mode, a full quota - costs
+      // the preference, not the chart.
+    }
+  }, [comparison])
   const requestKey = `${user.userId}:${days}:${balance}:${benchmark.assetType}:${benchmark.ticker}`
   const [state, setState] = useState<{ key: string; data?: Performance; error?: string }>({
     key: '',
@@ -151,7 +197,9 @@ function PortfolioPerformance({
               <input
                 type="checkbox"
                 checked={comparing}
-                onChange={(event) => setComparing(event.target.checked)}
+                onChange={(event) =>
+                  setComparison((current) => ({ ...current, comparing: event.target.checked }))
+                }
               />
               Compare against
             </label>
@@ -185,7 +233,7 @@ function PortfolioPerformance({
         <BenchmarkPicker
           current={benchmark}
           onPick={(picked) => {
-            setBenchmark(picked)
+            setComparison((current) => ({ ...current, benchmark: picked }))
             setPicking(false)
           }}
           onClose={() => setPicking(false)}
