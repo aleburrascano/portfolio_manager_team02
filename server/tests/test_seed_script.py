@@ -10,6 +10,7 @@ design.
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
+import pandas as pd
 import pytest
 
 import scripts.seed as seed
@@ -28,6 +29,38 @@ def ctx(app):
 @pytest.fixture()
 def session(ctx):
     return get_session()
+
+
+def price_series(unit):
+    """Three daily closes on an index of the given resolution."""
+    index = pd.DatetimeIndex(
+        [datetime(2026, 1, day) for day in (1, 2, 3)]
+    ).as_unit(unit)
+    return pd.Series([100.0, 110.0, 120.0], index=index)
+
+
+@pytest.mark.parametrize('unit', ['s', 'ms', 'us', 'ns'])
+def test_a_price_is_found_whatever_resolution_the_index_carries(unit):
+    """
+    The seed died partway through against production's pandas, which gives
+    yfinance's daily bars a second-resolution index. Event times carry
+    microseconds, and pandas raises "Cannot losslessly convert units"
+    rather than truncating - so a run that worked on one machine failed on
+    another with no code difference between them.
+    """
+    when = datetime(2026, 1, 2, 15, 30, 45, 123456)
+
+    found, price = seed.price_on_or_before(price_series(unit), when)
+
+    assert price == 110.0
+    assert found.date() == date(2026, 1, 2)
+
+
+def test_a_price_before_any_close_falls_back_to_the_first(session):
+    found, price = seed.price_on_or_before(price_series('s'), datetime(2025, 6, 1))
+
+    assert price == 100.0
+    assert found.date() == date(2026, 1, 1)
 
 
 def test_the_username_is_stored_in_the_form_login_looks_for(session):
