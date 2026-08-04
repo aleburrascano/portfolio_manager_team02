@@ -6,7 +6,7 @@ Price history is stubbed per ticker so the series is deterministic; the
 point of these tests is the replay and the gain/loss arithmetic, not the
 market data feed.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -17,6 +17,19 @@ from db.models import CashTransaction
 from services.auth import register
 from services.user_transactions import get_user_balance
 from test_holdings_service import record_trade
+
+
+def today_utc() -> date:
+    """
+    The date these tests build their windows from.
+
+    UTC rather than the local date, because that is the frame the ledger
+    is stamped in and the frame the series is replayed in. Mixing the two
+    makes a test that constructs three days of history and expects three
+    points fail for the last few hours of every day, anywhere west of
+    Greenwich - the developer's evening, which is when it would be found.
+    """
+    return datetime.now(timezone.utc).date()
 
 
 @pytest.fixture()
@@ -97,7 +110,7 @@ def test_no_activity_gives_an_empty_series(user_id):
 
 def test_cash_only_portfolio_tracks_the_deposit(user_id, history):
     history({})
-    deposit(user_id, 1000, date.today() - timedelta(days=2))
+    deposit(user_id, 1000, today_utc() - timedelta(days=2))
 
     result = perf.get_portfolio_performance(user_id)
     assert result['series'][-1]['portfolioValue'] == 1000.0
@@ -248,20 +261,20 @@ def test_a_position_bought_and_sold_leaves_no_value_behind(user_id, history):
 
 
 def test_the_series_covers_every_day_with_no_gaps(user_id, history):
-    start = date.today() - timedelta(days=10)
+    start = today_utc() - timedelta(days=10)
     deposit(user_id, 1000, start)
     history({})
 
     series = perf.get_portfolio_performance(user_id, days=365)['series']
     dates = [date.fromisoformat(point['date']) for point in series]
     assert dates == sorted(dates)
-    assert dates[-1] == date.today()
+    assert dates[-1] == today_utc()
     for earlier, later in zip(dates, dates[1:]):
         assert (later - earlier).days == 1
 
 
 def test_window_limits_the_series_without_losing_earlier_trades(user_id, history):
-    long_ago = date.today() - timedelta(days=200)
+    long_ago = today_utc() - timedelta(days=200)
     deposit(user_id, 1000, long_ago)
     record_trade(user_id, 'AAPL', qty=5, price=100, day=1)
     history({'AAPL': {long_ago: 100.0}})
@@ -272,7 +285,7 @@ def test_window_limits_the_series_without_losing_earlier_trades(user_id, history
 
 
 def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
-    today = date.today()
+    today = today_utc()
     days = [today - timedelta(days=n) for n in (2, 1, 0)]
     history({'SPY': dict(zip(days, (100.0, 110.0, 120.0)))})
     deposit(user_id, 1000, days[0])
@@ -284,7 +297,7 @@ def test_benchmark_tracks_a_deposit_into_the_index(user_id, history):
 
 
 def test_benchmark_matches_a_later_deposit(user_id, history):
-    today = date.today()
+    today = today_utc()
     days = [today - timedelta(days=n) for n in (2, 1, 0)]
     history({'SPY': dict(zip(days, (100.0, 100.0, 200.0)))})
     deposit(user_id, 1000, days[0])
@@ -296,7 +309,7 @@ def test_benchmark_matches_a_later_deposit(user_id, history):
 
 
 def test_benchmark_carries_the_last_close_over_a_closed_market(user_id, history):
-    today = date.today()
+    today = today_utc()
     days = [today - timedelta(days=n) for n in (2, 1, 0)]
     history({'SPY': {days[0]: 100.0, days[2]: 150.0}})
     deposit(user_id, 1000, days[0])
@@ -305,9 +318,30 @@ def test_benchmark_carries_the_last_close_over_a_closed_market(user_id, history)
     assert [point['benchmarkValue'] for point in result['series']] == [1000.0, 1000.0, 1500.0]
 
 
+def test_a_deposit_made_late_in_the_utc_day_still_charts(user_id, history):
+    """
+    The regression: the chart came back empty for an account that plainly
+    had money in it.
+
+    The ledger is stamped by the database in UTC, and the replay compared
+    those dates against the server's *local* today. West of Greenwich the
+    two disagree for the last hours of the day - a deposit at 8pm in New
+    York is already tomorrow in UTC, so it sorted after "today", the
+    replay never reached it, and the series came back with nothing in it.
+    """
+    history({})
+    deposit(user_id, 1000, datetime.now(timezone.utc).replace(tzinfo=None))
+
+    result = perf.get_portfolio_performance(user_id)
+
+    assert result['series'], 'a funded account charted as empty'
+    assert result['series'][-1]['date'] == today_utc().isoformat()
+    assert result['series'][-1]['cash'] == 1000.0
+
+
 def test_an_unpriceable_benchmark_leaves_the_comparison_out(user_id, history):
     history({})
-    deposit(user_id, 1000, date.today() - timedelta(days=1))
+    deposit(user_id, 1000, today_utc() - timedelta(days=1))
 
     result = perf.get_portfolio_performance(user_id)
 
@@ -317,7 +351,7 @@ def test_an_unpriceable_benchmark_leaves_the_comparison_out(user_id, history):
 
 def test_a_failing_benchmark_lookup_does_not_fail_the_request(user_id, history, monkeypatch):
     history({})
-    deposit(user_id, 1000, date.today() - timedelta(days=1))
+    deposit(user_id, 1000, today_utc() - timedelta(days=1))
 
     def boom(ticker, period='1y'):
         raise RuntimeError('feed down')
