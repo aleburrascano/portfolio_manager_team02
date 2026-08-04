@@ -55,9 +55,25 @@
     min-height: 0;
   }
 
+  /* Fill the row rather than standing at the top of it. Left at `start`,
+     each card is only as tall as its own content, and the row it sits in
+     is whatever is left after the wallet and the watchlist have taken
+     theirs - so on a shorter window, or once the watchlist has grown a
+     few rows of tiles, the cards are taller than the row and paint
+     straight over the holdings table underneath. */
+  #dashboard-content .dashboard-row {
+    align-items: stretch;
+  }
+
   #dashboard-content .card {
     display: flex;
     flex-direction: column;
+
+    /* Belt and braces: a grid area doesn't clip, so without this a card
+       whose content can't shrink any further goes back to painting over
+       its neighbour. The panels that can outgrow their row scroll
+       internally below. */
+    overflow: hidden;
   }
 
   #dashboard-content .performance-card .performance-body {

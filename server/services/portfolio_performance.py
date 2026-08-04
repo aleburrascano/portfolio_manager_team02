@@ -13,7 +13,7 @@ dependencies to a web request, and a plotting library has no business
 inside a request handler at all.
 """
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
@@ -30,6 +30,21 @@ def _as_date(value: Any) -> date:
     if isinstance(value, str):
         return date.fromisoformat(value[:10])
     return value.date() if hasattr(value, 'date') else value
+
+
+def _today() -> date:
+    """
+    Today in the same frame the ledger is stamped in, which is UTC.
+
+    Not date.today(): that is the server's local date, and the dates it
+    would be compared against here come from transaction timestamps the
+    database writes in UTC. Anywhere west of Greenwich the two disagree
+    for the last hours of the day - a deposit made at 8pm in New York is
+    already tomorrow in UTC, so it sorts after a local "today", the replay
+    loop below never reaches it, and the chart comes back empty for a
+    portfolio that plainly has something in it.
+    """
+    return datetime.now(timezone.utc).date()
 
 
 def _close_by_date(asset_type: str, ticker: str) -> Dict[date, float]:
@@ -87,7 +102,7 @@ def get_portfolio_performance(user_id: int, days: int = 365) -> Dict[str, Any]:
             'benchmark': {'ticker': BENCHMARK_TICKER, 'label': BENCHMARK_LABEL},
         }
 
-    today = date.today()
+    today = _today()
     first_activity = min(_as_date(row['transactionDate']) for row in trades + cash_flows)
     start = max(first_activity, today - timedelta(days=days))
 

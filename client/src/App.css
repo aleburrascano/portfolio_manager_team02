@@ -21,9 +21,17 @@
   overflow-y: auto;
 }
 
+/*
+ * A ceiling rather than a fixed measure: wide enough that the dashboard's
+ * two-panel row and the holdings table get the room they can use, capped
+ * so a page that is mostly prose doesn't run to a line length nobody can
+ * track back from. Centred, so what's left over on a wide monitor falls
+ * either side instead of piling up to the right of the content.
+ */
 .app-page > * {
   width: 100%;
-  max-width: 1240px;
+  max-width: 1600px;
+  margin-inline: auto;
 }
 
 .app-page:focus {
