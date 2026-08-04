@@ -41,26 +41,22 @@
   flex: 1;
 }
 
-@media (min-width: 1001px) and (min-height: 780px) {
-  #dashboard-content {
-    display: grid;
-
-    grid-template-rows: auto auto minmax(0, 1.25fr) minmax(0, 1fr);
-    height: 100%;
-    overflow: hidden;
-  }
-
-  #dashboard-content .dashboard-row,
-  #dashboard-content .card {
-    min-height: 0;
-  }
-
-  /* Fill the row rather than standing at the top of it. Left at `start`,
-     each card is only as tall as its own content, and the row it sits in
-     is whatever is left after the wallet and the watchlist have taken
-     theirs - so on a shorter window, or once the watchlist has grown a
-     few rows of tiles, the cards are taller than the row and paint
-     straight over the holdings table underneath. */
+/*
+ * On a wide screen the two panels in the middle row sit side by side, so
+ * they are made to match heights. Nothing else here is pinned to the
+ * window.
+ *
+ * It used to be a grid exactly the height of the viewport, each panel
+ * given a fraction of it and scrolling inside its own box. That reads
+ * well on an account with three holdings and falls apart on a real one:
+ * a watchlist wrapping to a second row took a third of the window, and
+ * what was left showed one row of a twenty-seven row table through a
+ * 128px slot, with the performance card's own asset-type breakdown
+ * clipped away entirely. A dashboard that hides its contents to avoid a
+ * scrollbar has the trade backwards - so the panels are their natural
+ * height now and the column scrolls when there is more than fits.
+ */
+@media (min-width: 1001px) {
   #dashboard-content .dashboard-row {
     align-items: stretch;
   }
@@ -68,35 +64,14 @@
   #dashboard-content .card {
     display: flex;
     flex-direction: column;
-
-    /* Belt and braces: a grid area doesn't clip, so without this a card
-       whose content can't shrink any further goes back to painting over
-       its neighbour. The panels that can outgrow their row scroll
-       internally below. */
-    overflow: hidden;
   }
 
+  /* Lets the chart grow into whatever height the composition panel beside
+     it takes, rather than leaving a gap under it. */
   #dashboard-content .performance-card .performance-body {
     flex: 1;
-    min-height: 150px;
+    min-height: 260px;
     height: auto;
-  }
-
-  #dashboard-content .holdings-card .holdings-scroll {
-    flex: 1;
-    overflow-y: auto;
-  }
-
-  #dashboard-content .holdings-card .holdings-table thead th {
-    position: sticky;
-    top: 0;
-    z-index: var(--z-sticky);
-    background: var(--surface);
-  }
-
-  #dashboard-content .composition-card-scroll {
-    flex: 1;
-    overflow-y: auto;
   }
 }
 
