@@ -2,10 +2,17 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PortfolioPerformance from './PortfolioPerformance'
-import { fetchPortfolioPerformance, type PortfolioPerformance as Performance } from '../../api'
+import {
+  fetchPopularAssets,
+  fetchPortfolioPerformance,
+  searchAssets,
+  type PortfolioPerformance as Performance,
+} from '../../api'
 
 vi.mock('../../api', () => ({
   fetchPortfolioPerformance: vi.fn(),
+  fetchPopularAssets: vi.fn(),
+  searchAssets: vi.fn(),
 }))
 
 vi.mock('recharts', () => ({
@@ -20,7 +27,12 @@ vi.mock('recharts', () => ({
 }))
 
 const mockedFetch = vi.mocked(fetchPortfolioPerformance)
+const mockedPopular = vi.mocked(fetchPopularAssets)
+const mockedSearch = vi.mocked(searchAssets)
 const user = { userId: 1, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' }
+
+/** What the chart compares against until the user picks something else. */
+const SP500 = { assetType: 'stock', ticker: 'SPY', label: 'S&P 500' }
 
 function performance(overrides: Partial<Performance> = {}): Performance {
   return {
@@ -38,7 +50,7 @@ function performance(overrides: Partial<Performance> = {}): Performance {
     byAssetType: [
       { assetType: 'stock', value: 1000, costBasis: 500, gainLoss: 500, gainLossPercent: 100 },
     ],
-    benchmark: { ticker: 'SPY', label: 'S&P 500' },
+    benchmark: { assetType: 'stock', ticker: 'SPY' },
     ...overrides,
   }
 }
@@ -60,8 +72,13 @@ function withBenchmark(portfolioEnd: number, benchmarkEnd: number): Partial<Perf
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   mockedFetch.mockReset()
   mockedFetch.mockResolvedValue(performance())
+  mockedPopular.mockReset()
+  mockedPopular.mockResolvedValue([{ symbol: 'BTC-USD', name: 'Bitcoin', currentPrice: 60000 }])
+  mockedSearch.mockReset()
+  mockedSearch.mockResolvedValue([])
 })
 
 describe('PortfolioPerformance', () => {
@@ -95,9 +112,9 @@ describe('PortfolioPerformance', () => {
     expect(await screen.findByText(/▼ \$200.00 \(20.00%\)/)).toBeInTheDocument()
   })
 
-  it('defaults to a one-year window', async () => {
+  it('defaults to a one-year window against the S&P 500', async () => {
     render(<PortfolioPerformance user={user} balance={100} />)
-    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365))
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
     expect(screen.getByRole('button', { name: '1Y' })).toHaveAttribute('aria-pressed', 'true')
   })
 
@@ -107,7 +124,7 @@ describe('PortfolioPerformance', () => {
     await screen.findByText(/against \$1,000.00 paid in/)
 
     await typer.click(screen.getByRole('button', { name: '1M' }))
-    await waitFor(() => expect(mockedFetch).toHaveBeenLastCalledWith(1, 30))
+    await waitFor(() => expect(mockedFetch).toHaveBeenLastCalledWith(1, 30, SP500))
   })
 
   it('breaks the gain down by asset class', async () => {
@@ -146,5 +163,100 @@ describe('PortfolioPerformance', () => {
 
     await screen.findByText(/against \$1,000.00 paid in/)
     expect(screen.queryByText(/S&P 500 by/)).not.toBeInTheDocument()
+    expect(screen.getByText(/S&P 500 couldn't be priced/)).toBeInTheDocument()
+  })
+
+  it('drops the comparison when the toggle is switched off, without refetching', async () => {
+    const typer = userEvent.setup()
+    mockedFetch.mockResolvedValue(performance(withBenchmark(1500, 1200)))
+    render(<PortfolioPerformance user={user} balance={100} />)
+    await screen.findByText('ahead of S&P 500 by $300.00')
+
+    await typer.click(screen.getByRole('checkbox', { name: 'Compare against' }))
+
+    expect(screen.queryByText('ahead of S&P 500 by $300.00')).not.toBeInTheDocument()
+    expect(mockedFetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('compares against any asset the user searches for', async () => {
+    const typer = userEvent.setup()
+    render(<PortfolioPerformance user={user} balance={100} />)
+    await screen.findByText(/against \$1,000.00 paid in/)
+
+    await typer.click(screen.getByRole('button', { name: 'S&P 500' }))
+    await typer.selectOptions(screen.getByLabelText('Asset type'), 'crypto')
+    await typer.click(await screen.findByRole('button', { name: /Bitcoin/ }))
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(1, 365, {
+        assetType: 'crypto',
+        ticker: 'BTC-USD',
+        label: 'Bitcoin',
+      }),
+    )
+    expect(screen.getByRole('button', { name: 'Bitcoin' })).toBeInTheDocument()
+  })
+
+  it('opens on the comparison chosen last time, not the default', async () => {
+    window.localStorage.setItem(
+      'treetop.performance.comparison',
+      JSON.stringify({
+        benchmark: { assetType: 'crypto', ticker: 'ETH-USD', label: 'Ethereum' },
+        comparing: false,
+      }),
+    )
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenCalledWith(1, 365, {
+        assetType: 'crypto',
+        ticker: 'ETH-USD',
+        label: 'Ethereum',
+      }),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Compare against' })).not.toBeChecked()
+    expect(screen.getByRole('button', { name: 'Ethereum' })).toBeInTheDocument()
+  })
+
+  it('remembers the comparison the user turns off', async () => {
+    const typer = userEvent.setup()
+    render(<PortfolioPerformance user={user} balance={100} />)
+    await screen.findByText(/against \$1,000.00 paid in/)
+
+    await typer.click(screen.getByRole('checkbox', { name: 'Compare against' }))
+
+    await waitFor(() =>
+      expect(JSON.parse(window.localStorage.getItem('treetop.performance.comparison')!)).toMatchObject({
+        comparing: false,
+        benchmark: { ticker: 'SPY' },
+      }),
+    )
+  })
+
+  it('falls back to the default when the stored comparison is unusable', async () => {
+    window.localStorage.setItem('treetop.performance.comparison', '{"benchmark":{"ticker":42}}')
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
+    expect(screen.getByRole('button', { name: 'S&P 500' })).toBeInTheDocument()
+  })
+
+  /**
+   * A stored asset type this deployment no longer has. The server answers
+   * an unknown one with a 422, so passing it through would leave the chart
+   * showing an error until the user cleared their browser storage.
+   */
+  it('falls back when the stored asset type is not one the app has', async () => {
+    window.localStorage.setItem(
+      'treetop.performance.comparison',
+      JSON.stringify({
+        benchmark: { assetType: 'commodity', ticker: 'GC=F', label: 'Gold' },
+        comparing: true,
+      }),
+    )
+    render(<PortfolioPerformance user={user} balance={100} />)
+
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledWith(1, 365, SP500))
+    expect(screen.queryByRole('button', { name: 'Gold' })).not.toBeInTheDocument()
   })
 })

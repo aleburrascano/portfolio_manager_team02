@@ -67,12 +67,15 @@ export type AssetTypePerformance = {
   gainLossPercent: number
 }
 
+/** What the portfolio is being measured against. */
+export type Benchmark = { assetType: AssetType; ticker: string; label: string }
+
 export type PortfolioPerformance = {
   series: PerformancePoint[]
   summary: PerformanceSummary
   byAssetType: AssetTypePerformance[]
-  /** What the comparison line is, so the chart can name it. */
-  benchmark: { ticker: string; label: string }
+  /** Which comparison the series was charted against, echoed back. */
+  benchmark: { assetType: AssetType; ticker: string }
 }
 
 export type Holding = {
@@ -118,12 +121,26 @@ export async function fetchPortfolioBreakdown(userId: number): Promise<Portfolio
   return { ...data, cash: data.cash || 0 }
 }
 
+/**
+ * The value series, compared against `benchmark` if one is given.
+ *
+ * The benchmark is a whole asset rather than a ticker on its own because
+ * the catalog prices each type differently - a bond has no feed to quote
+ * it - and the server needs to know which provider to ask.
+ */
 export async function fetchPortfolioPerformance(
   userId: number,
   days = 365,
+  benchmark?: { assetType: AssetType; ticker: string },
 ): Promise<PortfolioPerformance> {
+  const params = new URLSearchParams({ days: String(days) })
+  if (benchmark) {
+    params.set('benchmarkType', benchmark.assetType)
+    params.set('benchmarkTicker', benchmark.ticker)
+  }
+
   return apiFetch(
-    `/users/${userId}/portfolio/performance?days=${days}`,
+    `/users/${userId}/portfolio/performance?${params}`,
     'Failed to fetch portfolio performance',
   )
 }
