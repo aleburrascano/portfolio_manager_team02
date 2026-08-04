@@ -6,6 +6,13 @@ Clients subscribe to the symbols they're currently showing and get a
 client used to do. Only symbols with at least one subscriber are fetched,
 so an idle server does no work at all.
 
+Those re-prices come from two places. Symbols Yahoo streams are pushed the
+moment they move (services.live_prices); everything else is picked up by
+the five-second poll below, which skips whatever streamed recently. The
+poll is not a leftover - it is what covers a shut market, a symbol the
+stream doesn't carry, and a stream that has quietly died, none of which
+announce themselves.
+
 Quotes are public, matching the REST asset routes - no session required.
 
 The one thing here that isn't public is `orderFilled`. A conditional order
@@ -24,6 +31,7 @@ from typing import Dict, List, Set, Tuple
 from flask import request, session
 from flask_socketio import SocketIO, join_room, leave_room
 
+import services.live_prices as live_prices
 from api.authorization import SESSION_USER_KEY
 from services.asset_providers import PROVIDERS
 
@@ -52,8 +60,14 @@ def _watched() -> List[Tuple[str, str]]:
         return list(_watchers)
 
 
-def _forget(session_id: str, watched: List[Tuple[str, str]]) -> None:
-    """Drop a session from the given subscriptions, discarding empty ones."""
+def _forget(session_id: str, watched: List[Tuple[str, str]]) -> List[str]:
+    """
+    Drop a session from the given subscriptions, discarding empty ones.
+
+    Returns the symbols that just lost their last watcher, which are the
+    ones worth dropping upstream as well.
+    """
+    dropped = []
     with _lock:
         for key in watched:
             watchers = _watchers.get(key)
@@ -62,6 +76,8 @@ def _forget(session_id: str, watched: List[Tuple[str, str]]) -> None:
             watchers.discard(session_id)
             if not watchers:
                 del _watchers[key]
+                dropped.append(key[1])
+    return dropped
 
 
 def _quotes_for(watched: List[Tuple[str, str]]) -> Dict[str, dict]:
@@ -86,25 +102,54 @@ def _quotes_for(watched: List[Tuple[str, str]]) -> Dict[str, dict]:
     return quotes
 
 
+def _due_for_polling() -> List[Tuple[str, str]]:
+    """
+    The watched symbols the stream isn't already covering.
+
+    Filtering before fetching rather than after is the point: a symbol
+    arriving live costs no upstream call here at all, so an open market
+    makes the poll nearly free instead of doubling the work. When the
+    market shuts and the stream falls silent, the same test quietly hands
+    every symbol back to polling - which is what keeps the client's
+    "updated" timestamp ticking overnight, the one piece of evidence that
+    a still price is a live one and not a dead feed.
+    """
+    return [
+        key for key in _watched()
+        if not live_prices.streamed_recently(key[1], BROADCAST_INTERVAL_SECONDS)
+    ]
+
+
 def _broadcast_loop() -> None:
     while True:
         socketio.sleep(BROADCAST_INTERVAL_SECONDS)
 
-        watched = _watched()
+        watched = _due_for_polling()
         if not watched:
             continue
         for symbol, quote in _quotes_for(watched).items():
             socketio.emit('quote', quote, to=_room(symbol))
 
 
+def _push_quote(quote: dict) -> None:
+    """
+    Send one streamed quote to whoever is watching that symbol.
+
+    Called from the stream's thread rather than from a request, so it has
+    to name its room - there is no current client to answer.
+    """
+    socketio.emit('quote', quote, to=_room(quote['symbol']))
+
+
 def _ensure_broadcaster() -> None:
-    """Start the broadcaster on the first subscription, not at import."""
+    """Start the poll loop and the stream on the first subscription, not at import."""
     global _broadcaster_started
     with _lock:
         if _broadcaster_started:
             return
         _broadcaster_started = True
     socketio.start_background_task(_broadcast_loop)
+    live_prices.start(_push_quote)
 
 
 @socketio.on('connect')
@@ -180,6 +225,8 @@ def handle_subscribe(payload: dict) -> None:
         join_room(_room(symbol))
 
     _ensure_broadcaster()
+    if PROVIDERS[asset_type].streams:
+        live_prices.watch(symbols)
 
     for symbol, quote in _quotes_for(watched).items():
         socketio.emit('quote', quote, to=session_id)
@@ -193,13 +240,13 @@ def handle_unsubscribe(payload: dict) -> None:
     symbols = [s for s in payload.get('symbols') or [] if isinstance(s, str)]
     for symbol in symbols:
         leave_room(_room(symbol))
-    _forget(request.sid, [(asset_type, symbol) for symbol in symbols])
+    live_prices.unwatch(_forget(request.sid, [(asset_type, symbol) for symbol in symbols]))
 
 
 @socketio.on('disconnect')
 def handle_disconnect(reason: str = None) -> None:
     """Drop everything a departing client was watching."""
-    _forget(request.sid, _watched())
+    live_prices.unwatch(_forget(request.sid, _watched()))
 
 
 def init_app(app, cors_allowed_origins) -> None:
