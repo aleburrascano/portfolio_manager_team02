@@ -7,7 +7,7 @@ generated with Faker.
 
 Usage (from the server/ directory):
     python -m scripts.seed [--username demo] [--password demopassword]
-                      [--first Demo] [--last User] [--days 730]
+                      [--first Demo] [--last User] [--days 1095]
 
 Re-running clears and regenerates that user's transactions, so it's safe to
 run repeatedly while iterating on the demo.
@@ -15,8 +15,10 @@ run repeatedly while iterating on the demo.
 import argparse
 import random
 import sys
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from itertools import zip_longest
 
 from dotenv import load_dotenv
 from faker import Faker
@@ -35,21 +37,32 @@ from db.models import (
 from services.asset_providers import PROVIDERS
 from services.auth import normalize_username
 
-STOCKS = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA']
-CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD']
+# Spread across sectors rather than one basket of megacap tech, so the
+# composition donut has visibly different slices and the performance line
+# isn't just NASDAQ traced twice.
+STOCKS = [
+    'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TSLA', 'META', 'NFLX',
+    'JPM', 'V', 'JNJ', 'WMT', 'XOM', 'KO', 'DIS', 'COST',
+]
+CRYPTOS = ['BTC-USD', 'ETH-USD', 'SOL-USD', 'DOGE-USD', 'ADA-USD', 'XRP-USD']
 MARKET_TICKERS = {t: 'stock' for t in STOCKS} | {t: 'crypto' for t in CRYPTOS}
-BOND_COUNT = 3
+BOND_COUNT = 5
 
-INITIAL_DEPOSIT_RANGE = (30_000, 60_000)
-EVENT_SPACING_DAYS = (4, 12)
-DEPOSIT_RANGE = (500, 8_000)
-WITHDRAW_RANGE = (200, 3_000)
-BUY_DOLLAR_RANGE = (500, 6_000)
+# Scaled with the ticker count: the same deposits split across three times
+# as many names would leave every position too small to read.
+INITIAL_DEPOSIT_RANGE = (80_000, 150_000)
+EVENT_SPACING_DAYS = (2, 6)
+DEPOSIT_RANGE = (1_000, 12_000)
+WITHDRAW_RANGE = (200, 4_000)
+BUY_DOLLAR_RANGE = (800, 9_000)
 SELL_FRACTION_RANGE = (0.1, 0.6)
 CASH_RESERVE = Decimal('2000')
 EVENT_WEIGHTS = {'buy': 0.45, 'deposit': 0.30, 'sell': 0.15, 'withdraw': 0.10}
 
-WATCHLIST_COUNT = 6
+WATCHLIST_COUNT = 12
+PENDING_ORDER_COUNT = 4
+FILLED_ORDER_COUNT = 3
+CANCELLED_ORDER_COUNT = 2
 FAR_FROM_MARKET = Decimal('0.5')
 
 
@@ -127,6 +140,27 @@ def clear_user_transactions(session, user_id):
     session.commit()
 
 
+def pick_watchlist(asset_type_of, available, count):
+    """
+    Up to `count` tickers spread across the asset types, as {ticker: type}.
+
+    Taken in turn from each type rather than off the front of the list,
+    which is grouped: slicing it gave a watchlist of nothing but stocks,
+    on an account whose whole point is showing three kinds of asset.
+    """
+    by_type = defaultdict(list)
+    for ticker in available:
+        by_type[asset_type_of[ticker]].append(ticker)
+
+    interleaved = [
+        ticker
+        for group in zip_longest(*by_type.values())
+        for ticker in group
+        if ticker is not None
+    ]
+    return {ticker: asset_type_of[ticker] for ticker in interleaved[:count]}
+
+
 def seed_watchlist(session, user_id, tickers, now):
     """
     Leave some tickers saved, so the dashboard opens on a real watchlist
@@ -150,14 +184,14 @@ def seed_watchlist(session, user_id, tickers, now):
 
 def seed_orders(session, user_id, last_prices, now):
     """
-    One conditional order of each status, so the orders view has something
-    in all three of its tabs.
+    Several conditional orders in each status, so every tab of the orders
+    view opens on a list rather than on a single row.
 
     The pending ones are placed far from the market on purpose - a demo
     account whose open orders fill as soon as the poller notices them would
-    show an empty tab to anyone who looked a minute later. The filled one is
-    linked to a real trade of the user's, which is what makes its realised
-    gain line up with the transaction history.
+    show an empty tab to anyone who looked a minute later. The filled ones
+    are linked to real trades of the user's, which is what makes their
+    realised gains line up with the transaction history.
     """
     tradable = [
         ticker for ticker, asset_type in MARKET_TICKERS.items()
@@ -166,7 +200,24 @@ def seed_orders(session, user_id, last_prices, now):
     if not tradable:
         return 0
 
-    filled_trade = session.scalar(
+    def far_from_market(ticker):
+        return (last_prices[ticker] * FAR_FROM_MARKET).quantize(Decimal('0.01'))
+
+    orders = []
+
+    # Alternating, so the tab shows both order types and both directions.
+    for offset, ticker in enumerate(tradable[:PENDING_ORDER_COUNT]):
+        buying = offset % 2 == 0
+        orders.append(LimitOrder(
+            userId=user_id, ticker=ticker,
+            side='buy' if buying else 'sell',
+            orderType='limit' if buying else 'stop',
+            quantity=Decimal('2') if buying else Decimal('1'),
+            limitPrice=far_from_market(ticker),
+            status='pending', createdAt=now - timedelta(days=offset + 1),
+        ))
+
+    filled_trades = session.scalars(
         select(AssetTransaction)
         .where(
             AssetTransaction.userId == user_id,
@@ -174,43 +225,26 @@ def seed_orders(session, user_id, last_prices, now):
             AssetTransaction.qty > 0,
         )
         .order_by(AssetTransaction.assetTransactionDate.desc())
-    )
+        .limit(FILLED_ORDER_COUNT)
+    ).all()
 
-    orders = []
-    pending_buy = tradable[0]
-    orders.append(LimitOrder(
-        userId=user_id, ticker=pending_buy, side='buy', orderType='limit',
-        quantity=Decimal('2'),
-        limitPrice=(last_prices[pending_buy] * FAR_FROM_MARKET).quantize(Decimal('0.01')),
-        status='pending', createdAt=now - timedelta(days=3),
-    ))
-
-    if len(tradable) > 1:
-        stop_sell = tradable[1]
+    for trade in filled_trades:
         orders.append(LimitOrder(
-            userId=user_id, ticker=stop_sell, side='sell', orderType='stop',
-            quantity=Decimal('1'),
-            limitPrice=(last_prices[stop_sell] * FAR_FROM_MARKET).quantize(Decimal('0.01')),
-            status='pending', createdAt=now - timedelta(days=2),
+            userId=user_id, ticker=trade.ticker, side='buy', orderType='limit',
+            quantity=trade.qty, limitPrice=trade.price, status='filled',
+            createdAt=trade.assetTransactionDate - timedelta(days=1),
+            resolvedAt=trade.assetTransactionDate,
+            assetTransactionId=trade.assetTransactionId,
         ))
 
-    if filled_trade is not None:
+    for offset, ticker in enumerate(tradable[-CANCELLED_ORDER_COUNT:]):
+        placed = now - timedelta(days=30 + offset)
         orders.append(LimitOrder(
-            userId=user_id, ticker=filled_trade.ticker, side='buy', orderType='limit',
-            quantity=filled_trade.qty, limitPrice=filled_trade.price, status='filled',
-            createdAt=filled_trade.assetTransactionDate - timedelta(days=1),
-            resolvedAt=filled_trade.assetTransactionDate,
-            assetTransactionId=filled_trade.assetTransactionId,
+            userId=user_id, ticker=ticker, side='buy', orderType='limit',
+            quantity=Decimal('1'), limitPrice=far_from_market(ticker),
+            status='cancelled',
+            createdAt=placed, resolvedAt=placed + timedelta(days=1),
         ))
-
-    cancelled = tradable[-1]
-    orders.append(LimitOrder(
-        userId=user_id, ticker=cancelled, side='buy', orderType='limit',
-        quantity=Decimal('1'),
-        limitPrice=(last_prices[cancelled] * FAR_FROM_MARKET).quantize(Decimal('0.01')),
-        status='cancelled',
-        createdAt=now - timedelta(days=30), resolvedAt=now - timedelta(days=29),
-    ))
 
     session.add_all(orders)
     session.commit()
@@ -345,7 +379,7 @@ def run(username, password, first_name, last_name, days):
     ])
     session.commit()
 
-    watched = {t: tickers[t] for t in available_tickers[:WATCHLIST_COUNT]}
+    watched = pick_watchlist(tickers, available_tickers, WATCHLIST_COUNT)
     seed_watchlist(session, user_id, watched, now)
 
     last_prices = {
@@ -371,6 +405,6 @@ if __name__ == '__main__':
     parser.add_argument('--password', default='demopassword')
     parser.add_argument('--first', default='Demo')
     parser.add_argument('--last', default='User')
-    parser.add_argument('--days', type=int, default=730)
+    parser.add_argument('--days', type=int, default=1095)
     args = parser.parse_args()
     run(args.username, args.password, args.first, args.last, args.days)
