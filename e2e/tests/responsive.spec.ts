@@ -141,6 +141,50 @@ test.describe('desktop', () => {
   })
 })
 
+/**
+ * Just under the width where the dashboard stops being a fitted grid.
+ *
+ * Here it is a tall stacked column that scrolls inside .app-page, which is
+ * correct - but the window behind it was scrolling too, so the dashboard
+ * came with two vertical scrollbars and the outer one dragged the whole
+ * shell, side rail and all, off the top of the screen.
+ *
+ * The cause was a `position: absolute` element that no ancestor could
+ * clip: the holdings table's visually-hidden `<caption>` took its static
+ * position far below the fold and stretched the document to reach it. It
+ * only shows on a layout tall enough to push that caption past the
+ * viewport, which is why the 1440px test above never caught it.
+ */
+test.describe('narrow desktop', () => {
+  test.use({ viewport: { width: 999, height: 854 } })
+
+  test('the window itself does not scroll behind the dashboard', async ({ page }) => {
+    await registerNewUser(page, uniqueUsername('narrow'))
+    await fundAccount(page, '5000')
+
+    await page.getByRole('link', { name: 'Trade' }).click()
+    await page.getByRole('button', { name: 'Bonds' }).click()
+    await page.getByRole('button', { name: /US Treasury Note 2Y/ }).click()
+    await page.getByRole('button', { name: 'Review buy' }).click()
+    await page.getByRole('button', { name: 'Buy 1.00 UST2Y' }).click()
+    await expect(page.getByText(/Bought 1\.00 UST2Y for/)).toBeVisible()
+
+    await page.getByRole('link', { name: 'Dashboard' }).click()
+    await expect(page.getByRole('table').filter({ hasText: 'UST2Y' })).toBeVisible()
+
+    // The page is meant to be taller than the window at this width - that
+    // is what .app-page scrolls. The window must not move regardless.
+    const scrolled = await page.evaluate(() => {
+      window.scrollTo(0, 3000)
+      const down = window.scrollY
+      window.scrollTo(0, 0)
+      return down
+    })
+    expect(scrolled, 'the window scrolled behind the dashboard').toBe(0)
+    await expectNoHorizontalScroll(page, 'Narrow desktop dashboard')
+  })
+})
+
 test.describe('tablet', () => {
   test.use({ viewport: TABLET })
 
