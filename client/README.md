@@ -11,8 +11,9 @@ npm run build    # tsc -b && vite build
 ```
 
 The dev server proxies `/api` and `/socket.io` to the server on port 5000, so
-run that too — see the root [README](../README.md) for both processes, the
-environment variables, and how the deployed client reaches the backend.
+run that too. See the root [README](../README.md) for both processes, and
+[ARCHITECTURE.md](../ARCHITECTURE.md) for the environment variables and how the
+deployed client reaches the backend.
 
 ## Layout
 
@@ -31,6 +32,6 @@ src/
 ```
 
 Each component keeps its stylesheet and its test beside it. Styles shared
-across screens — the type scale, buttons, `.card`, `.skeleton` — live in
+across screens (the type scale, buttons, `.card`, `.skeleton`) live in
 `index.css`; a page's own stylesheet scopes its layout rules under that page's
 root id rather than reaching into components globally.

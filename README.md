@@ -1,62 +1,244 @@
 # TreeTop Trading
 
-TAP 2026 Project — a simulated trading app. Users get a cash wallet, browse live
-market data, and buy or sell stocks, crypto and bonds against their balance.
+A paper-trading app. You get a cash wallet, real market data, and everything you
+need to run a portfolio with it: buy and sell stocks, crypto and bonds, leave
+conditional orders that fill while you're away, and watch how you're doing
+against what you paid in and against the index.
 
-![DB Schema](assets/db-schema.PNG)
-![Wireframes](assets/wireframes.PNG)
+Nothing here touches real money. Prices are real; the account is not.
 
-**Stack** — Flask + SQLAlchemy on the server (MySQL in production, SQLite locally),
-live prices from `yfinance` pushed over Socket.IO; React + TypeScript on the client,
-built with Vite.
+Built for TAP 2026 by team 02.
 
-## Running it
+![The dashboard](assets/screenshots/dashboard.png)
 
-Two processes, both needed.
+---
+
+## What it does
+
+### Your portfolio, on one screen
+
+- **Portfolio value.** Cash plus every position at the current market price,
+  with today's move on the whole book.
+- **Performance over time.** 1 month to 5 years, charted against the money you
+  actually paid in. A portfolio that grew because you deposited more hasn't
+  performed, and the chart says so.
+- **Compare against anything.** The default is the S&P 500, but the benchmark is
+  any asset the app can price, so "what if I'd just bought Bitcoin" is as
+  answerable as "did I beat the index". Your deposits are matched day for day, so
+  the comparison isn't flattered by timing.
+- **Composition.** How the money splits across cash, stocks, crypto and bonds.
+- **Holdings.** Quantity, average cost, market value, gain/loss and when you
+  first bought in, sortable by any column.
+- **Watchlist.** Save tickers you're considering, with live prices. Before
+  you've saved anything it shows the day's most active stocks instead.
+
+### Trading
+
+![Browsing and searching assets](assets/screenshots/trade.png)
+
+- **Three kinds of asset.** US-listed stocks and crypto are quoted live; bonds are
+  a synthetic catalog priced from their own terms (the present value of their
+  remaining coupons plus face value), because no feed quotes them.
+- **Search or browse.** Most-active listings per asset type, or search by name or
+  symbol.
+- **An asset page worth reading**: a year of daily closes, today's open/high/low
+  and volume, the 52-week range, and Wall Street's analyst consensus with its
+  price targets where there is coverage.
+- **Market orders with a review step.** Nothing moves on one click: you see the
+  cost, your cash before and after, and your holding after, then confirm. The
+  quantity box knows your maximum: your cash on a buy, your position on a sell.
+
+![An asset, its chart and the trade panel](assets/screenshots/asset-detail.png)
+
+- **Limit and stop orders** on stocks and crypto, good till cancelled. A limit
+  waits for a price at least as good as your trigger; a stop waits for one at
+  least as bad: a stop loss, or a breakout entry. The panel spells out which way
+  round the one you're placing runs.
+- **They fill without you.** A background poller checks pending orders against
+  the market every few seconds and fills them at the price prevailing at that
+  moment, not at the trigger. Whatever screen you're on, a toast tells you it
+  happened, and your balance updates.
+- **Bonds redeem themselves.** A bond that reaches maturity is paid out at face
+  value automatically, booked like any other sale.
+
+![Open, filled and cancelled orders](assets/screenshots/orders.png)
+
+### Money and history
+
+![Transaction history with realized gains](assets/screenshots/history.png)
+
+- **Deposit and withdraw** with the same review-then-confirm flow.
+- **Every deposit, withdrawal, buy and sell**, newest or oldest first, paged, and
+  exportable as CSV.
+- **Realized gain/loss on every sale**, measured against the average cost of the
+  position it came out of, the same basis the open positions are judged on.
+- **Balances are never stored.** Your cash is the sum of the ledger, recomputed
+  on every read, so it cannot drift from the transactions behind it.
+
+### Live prices
+
+Quotes are pushed over a socket rather than polled by the browser: symbols
+stream from Yahoo where it carries them, with a five-second server-side poll
+covering everything else: a shut market, a symbol the stream skips, a stream
+that quietly died. A "Live · updated 14:15:33" stamp ticks on every update
+received, because a working feed and a broken one look identical when the market
+is closed and the price simply never changes.
+
+### Accounts
+
+Register with a username and password (hashed, never stored in the clear), stay
+signed in through an httpOnly session cookie, and edit your name, username or
+password from the account screen.
+
+---
+
+## Data model
+
+Seven tables plus one for retry safety. Two conventions run through all of them:
+**nothing derived is stored** (a balance, a position, a cash effect is always
+recomputed from the rows behind it), and **transactions are append-only**:
+nothing updates or deletes them, which is why they carry no `updatedAt`.
+
+```mermaid
+erDiagram
+    Users ||--o{ CashTransactions : "deposits and withdrawals"
+    Users ||--o{ AssetTransactions : "buys and sells"
+    Users ||--o{ LimitOrders : places
+    Users ||--o{ WatchlistEntries : saves
+    Users ||--o{ IdempotentRequests : "spends retry keys"
+    Assets ||--o{ AssetTransactions : "is traded as"
+    Assets ||--o{ LimitOrders : "is ordered as"
+    Assets ||--o| Bonds : "priced from its terms"
+    AssetTransactions |o--o| LimitOrders : "a fill points back at its trade"
+
+    Users {
+        int userId PK
+        string username UK "lowercased on the way in"
+        string firstName
+        string lastName
+        string passwordHash
+        datetime createdAt
+    }
+
+    Assets {
+        string ticker PK
+        string assetType "stock, crypto or bond"
+    }
+
+    Bonds {
+        string ticker PK,FK
+        string name
+        decimal faceValue
+        decimal couponRate
+        decimal marketYield
+        enum couponFrequency "annual or semiannual"
+        date issueDate
+        date maturityDate
+    }
+
+    CashTransactions {
+        int cashTransactionId PK
+        enum cashTransactionType "deposit or withdraw"
+        decimal amount "signed; CHECK keeps it agreeing with the type"
+        datetime cashTransactionDate
+        int userId FK
+    }
+
+    AssetTransactions {
+        int assetTransactionId PK
+        string ticker FK
+        decimal qty "positive on a buy, negative on a sell"
+        decimal price
+        enum assetTransactionType "buy or sell"
+        datetime assetTransactionDate
+        int userId FK
+    }
+
+    LimitOrders {
+        int limitOrderId PK
+        int userId FK
+        string ticker FK
+        enum side "buy or sell"
+        enum orderType "limit or stop"
+        decimal quantity
+        decimal limitPrice "the trigger, not the fill price"
+        enum status "pending, filled or cancelled"
+        datetime createdAt
+        datetime resolvedAt "null while pending"
+        int assetTransactionId FK "set only on a fill"
+    }
+
+    WatchlistEntries {
+        int userId PK,FK
+        string ticker PK
+        string assetType
+        datetime addedAt
+    }
+
+    IdempotentRequests {
+        int userId PK,FK
+        string idempotencyKey PK
+        string fingerprint
+        text responseBody
+        datetime createdAt
+    }
+```
+
+A few decisions the diagram doesn't explain on its own:
+
+- **`Assets` is what says a ticker is a stock, a crypto or a bond.** It's a
+  property of the ticker, not of the trade, so adding a kind of asset is an
+  `INSERT` rather than an `ALTER` on an enum.
+- **`WatchlistEntries` deliberately has no foreign key to `Assets`.** That table
+  records what has been *traded*, and the whole point of a watchlist is to follow
+  something before you buy it, so the asset type rides on the row instead.
+- **`LimitOrders` is the one mutable row.** It moves from `pending` to exactly one
+  of `filled`/`cancelled`, which is why it carries a `resolvedAt` and the
+  transaction tables don't.
+- **Every timestamp is UTC**, and the database's own `now()` is pinned to agree
+  with what the application writes.
+
+The schema lives in [`server/db/models.py`](server/db/models.py); every change to
+it is an Alembic revision under [`server/migrations/`](server/migrations/).
+
+---
+
+## Running it locally
+
+You'll need Python 3.12+ and Node 22+. Two processes, both needed.
 
 ```bash
-# server — http://localhost:5000
+# server: http://localhost:5000
 cd server
 python -m venv venv
 ./venv/Scripts/activate          # source venv/bin/activate on macOS/Linux
 pip install -r requirements.txt
+cp .env.example .env             # then set DATABASE_URL (see below)
 alembic upgrade head             # creates or updates the schema
 python app.py
 ```
 
+`DATABASE_URL` arrives empty, which builds a MySQL URL from the `DB_*` variables.
+For a zero-setup local run put `DATABASE_URL=sqlite:///dev.db` in `server/.env`
+instead. SQLite needs no database to exist first; MySQL needs its (empty)
+one created.
+
 ```bash
-# client — http://localhost:5173
+# client: http://localhost:5173
 cd client
 npm install
 npm run dev
 ```
 
-The client proxies `/api` and `/socket.io` to the server, so run both.
+Open http://localhost:5173. The client proxies `/api` and `/socket.io` to the
+server, so both have to be running.
 
-### Configuration
+### Demo data
 
-Everything lives in `server/.env` (not committed):
-
-| Variable | Purpose |
-| --- | --- |
-| `DATABASE_URL` | `sqlite:///dev.db`, or `mysql+mysqlconnector://user:pass@host/db`. Falls back to the `DB_*` variables if unset. |
-| `SECRET_KEY` | Signs the session cookie. Without it sessions don't survive a restart. |
-| `CORS_ORIGINS` | Comma-separated browser origins. Defaults to `http://localhost:5173`. Deployed, it must name the **frontend's** origin (the Vercel domain), not this server's — see below. |
-| `CROSS_SITE_COOKIE` | Set to `1` only where the client is on a different domain than the server. Sends the session cookie as `SameSite=None; Secure`, which needs HTTPS — so it breaks local sign-in. |
-| `LOG_LEVEL` | Defaults to `INFO`, which logs one line per request with its status and duration. `WARNING` keeps only the slow ones, the 500s, and background work that failed. |
-| `START_LIMIT_ORDER_POLLER` | Set to `false` to stop the background thread that fills conditional orders and redeems matured bonds. The only switch that keeps this process off the market data feed on a timer, which is why the test suite sets it — leave it alone otherwise, or nothing ever fills. |
-
-MySQL needs its (empty) database to exist first; SQLite doesn't.
-
-The client reads one variable, `VITE_API_URL`, from `client/.env`. Leave it unset
-locally: Vite's proxy already forwards `/api` and `/socket.io` to port 5000, and
-setting it would bypass that. Both folders have a `.env.example` to copy.
-
-## Demo data
-
-`scripts/seed` builds an account with ~2 years of history — stocks, crypto and
-bonds, priced from real market data — which is what makes the dashboard's
-performance chart, composition donut and holdings table worth looking at.
+An empty account is not much to look at. The seed script builds one with ~3 years
+of history: stocks, crypto and bonds, priced from real market data, which is
+what makes the performance chart, the composition donut and the holdings table
+worth opening.
 
 ```bash
 cd server
@@ -64,9 +246,9 @@ python -m scripts.seed --username demo --password demopassword --first Ada --las
 ```
 
 Then sign in as `demo` / `demopassword`. Re-running regenerates that user's
-transactions, so it's safe to repeat.
+transactions, so it's safe to repeat. The screenshots above are that account.
 
-To keep demo data away from your working database, point it somewhere separate:
+To keep demo data out of your working database, point it somewhere separate:
 
 ```bash
 DATABASE_URL=sqlite:///demo.db alembic upgrade head
@@ -74,145 +256,37 @@ DATABASE_URL=sqlite:///demo.db python -m scripts.seed
 DATABASE_URL=sqlite:///demo.db python app.py
 ```
 
-`scripts/set_password` resets a password if you need to get back into an account.
+`scripts/set_password` resets a password if you lock yourself out of an account.
+
+---
 
 ## Tests
 
 ```bash
 cd server && pytest              # services and routes
-cd client && npm test            # components and API layer
+cd client && npm test            # components and the API layer
 cd e2e    && npx playwright test # full stack, real browser
 ```
 
-The e2e suite starts its own server and client against a throwaway database,
-with `MARKET_DATA=fake` so prices come from `services/fake_feed.py` rather
-than from Yahoo. That is what lets it trade stocks and crypto, and watch a
-conditional order actually fill, without depending on a third party being up
-or on a company keeping its name.
+The end-to-end suite starts its own server and client against a throwaway
+database with a deterministic stand-in for the market feed, so it can trade,
+watch a conditional order fill, and never depend on a third party being up. All
+three run on every push and pull request.
+
+---
 
 ## Layout
 
 ```
-server/
-  app.py        entry point — wires the app together
-  api/          everything that speaks HTTP: schemas and validation, the
-                error envelope, sessions, idempotency, HATEOAS links, the
-                OpenAPI setup, request logging, the Socket.IO feed
-    routes/     blueprints — HTTP only, no business logic
-  services/     business logic, market data, domain exceptions
-  db/           SQLAlchemy models, engine, request-scoped session
-  migrations/   Alembic revisions — the source of schema history
-  scripts/      seeding and password reset
-client/src/
-  api/          one module per resource, behind a shared fetch helper
-  pages/        one per screen the address bar can reach
-  components/
-    layout/     the chrome every signed-in page sits inside
-    ui/         presentational pieces that carry no domain logic
-    portfolio/  what the dashboard is made of
-    trading/    what the trade screens are made of
-  context/      session-wide state and its providers
-  hooks/        the live quote feed, idempotency keys
-  lib/          formatting, input validation, backend origin
+server/     Flask + SQLAlchemy API, Socket.IO quote feed, background order poller
+client/     React + TypeScript, built with Vite
+e2e/        Playwright specs that drive both
+assets/     Screenshots and design artifacts
 ```
 
-Layering runs one way: `api/ → services/ → db/`. Routes never touch the
-database or `yfinance`; services never import Flask. A service raises from
-`services/exceptions.py` to reject a request (each exception carries the status
-it surfaces as), so routes carry no `try`/`except`. All market data access lives
-in `services/market_data.py`, so swapping or stubbing the feed is a one-file
-change.
+Interactive API docs are served by the running server at `/apidocs`, generated
+from the same schemas that validate incoming requests.
 
-Routes are served under `/api/v1`. Responses carry a `_links` map of related
-endpoints, and errors are always `{'error': {'message': str, 'code': str}}`.
-
-Browsable docs live at `/apidocs`, with the raw spec at `/apispec_1.json`.
-flask-smorest builds that spec from the same marshmallow schemas that parse
-incoming requests, so it can't describe a body the code would reject — one
-declaration, used twice. Routes and their path parameters come from the
-blueprints, so a new endpoint is documented as soon as it is registered.
-
-Request shapes live in `api/schemas.py`; the rules behind them stay in
-`api/validation.py`, which each field defers to. Adding a field means adding it
-to the schema — the docs and the parser both follow from that.
-
-## Deployment
-
-The server runs on Railway (with its MySQL), the client on Vercel. Pushing to
-`main` deploys both.
-
-The browser never addresses Railway directly. `client/vercel.json` rewrites
-`/api` and `/socket.io` to the Railway service, so every request the client
-makes goes to its own origin — mirroring what Vite's proxy does locally. That
-is not a detail: the session cookie has to be first-party, and a cookie set by
-another domain is a third-party cookie, which Safari blocks outright and Chrome
-is retiring. Pointed straight at Railway, signing in worked and then every
-following request came back 401, in Safari and in any browser with third-party
-cookies turned off.
-
-The last rewrite in that file is the one client-side routing needs: anything
-that isn't `/api`, `/socket.io`, or a real file is an address this app resolves
-itself, so it has to be served `index.html`. Without it, opening
-`/trade/stock/NVDA` directly — or reloading on it — 404s at the edge before the
-app ever loads. (`vercel.json` is schema-validated and JSON has no comments, so
-this note lives here rather than beside the rule.)
-
-The one cost is that Vercel's rewrites don't carry a WebSocket upgrade, so the
-quote feed settles on Socket.IO's long-polling transport. It was already
-falling back to polling before this, so nothing was lost. A custom domain
-(`app.example.com` and `api.example.com`) would make both first-party and keep
-the upgrade, if the project ever gets one.
-
-`CORS_ORIGINS` on Railway has to name the **Vercel** origins. The proxy forwards
-the browser's `Origin` header unchanged, so what arrives is the domain the page
-was loaded from, not the one serving the request. Getting this wrong breaks the
-quote feed and very little else, in a way that reads as a network fault rather
-than a config one: Engine.IO checks `Origin` only when the browser sends one,
-which it does on long-polling's POSTs and not on its GETs — so exactly half the
-`/socket.io` requests answer `400 Not an accepted origin`, the feed reconnects
-forever, and every price tile sits under "Reconnecting". The boot log prints the
-parsed list, so `railway logs` says what the server will actually accept.
-
-Listing origins one by one is not enough, which is how this last went wrong.
-Vercel serves each deployment on its own hostname
-(`<project>-<hash>-<team>.vercel.app`) and each branch on another, so a list
-that is right today is stale on the next push — opening the app from the
-dashboard's Visit button, which uses the per-deployment URL, hit the 400 every
-time. Entries therefore accept `*`:
-
-```
-CORS_ORIGINS=https://treetop.vercel.app,https://treetop-*.vercel.app
-```
-
-Scoped to the project's own prefix rather than `*.vercel.app`, so it doesn't
-admit every site on the platform.
-
-Migrations run on boot: the server starts with `alembic upgrade head`, so a
-merged migration reaches the deployed database without anyone remembering to
-apply it. Forgetting had already broken production twice, which is a worse
-failure than the one being guarded against — a single service with one worker
-gives concurrent upgrades little room to race, and `upgrade head` is a no-op
-once there.
-
-A failing migration stops the container from starting, and the previous
-deployment keeps serving until a good one replaces it. The cost is that a
-rollback is no longer just redeploying an older commit: the schema has already
-moved, so going back means `alembic downgrade`.
-
-## Changing the schema
-
-Edit `db/models.py`, generate the migration, and read what it wrote before
-committing it:
-
-```bash
-alembic revision --autogenerate -m "what changed"
-alembic upgrade head
-```
-
-`alembic check` fails when the models and the migration history disagree.
-
-The conventions the schema relies on — nothing derived is stored, timestamps are
-UTC, transactions are append-only, `CHECK` constraints keep each type column
-agreeing with the sign beside it — are documented in `db/models.py`. The same
-goes for idempotency (`api/idempotency.py`) and the live quote feed
-(`api/realtime.py`), which each explain themselves where they live.
+**[ARCHITECTURE.md](ARCHITECTURE.md)** covers the rest: how the layers fit
+together, the API conventions, configuration, the live price feed, deployment,
+and how to change the schema.
