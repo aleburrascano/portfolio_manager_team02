@@ -24,12 +24,37 @@ const VIEWPORTS = [
   { label: 'fullscreen 1440p', width: 2560, height: 1440 },
 ]
 
-type Box = { top: number; bottom: number; left: number; right: number }
+type Box = { label: string; top: number; bottom: number; left: number; right: number }
 
-async function boxOf(page: Page, selector: string): Promise<Box> {
-  const box = await page.locator(selector).boundingBox()
-  if (!box) throw new Error(`${selector} is not on the page`)
-  return { top: box.y, bottom: box.y + box.height, left: box.x, right: box.x + box.width }
+/**
+ * Every box the assertions need, read in one pass in the page.
+ *
+ * One pass because two are not comparable: a second call is a second
+ * layout, and anything that moved between them - a pushed quote
+ * re-rendering a tile, the column scrolling - shows up as geometry that
+ * never existed. Mixing Playwright's boundingBox() with
+ * getBoundingClientRect() compounds it, since the page began scrolling
+ * and the two no longer share an origin.
+ */
+async function measure(page: Page) {
+  return page.evaluate(() => {
+    const read = (node: Element, label: string) => {
+      const r = node.getBoundingClientRect()
+      return { label, top: r.top, bottom: r.bottom, left: r.left, right: r.right }
+    }
+    const one = (sel: string, label: string) => {
+      const node = document.querySelector(sel)
+      return node ? read(node, label) : null
+    }
+    return {
+      panels: [...document.querySelectorAll('.dashboard-row > .card')].map((node) =>
+        read(node, node.querySelector('.section-title')?.textContent ?? node.className),
+      ),
+      holdings: one('.holdings-card', 'holdings'),
+      content: one('#dashboard-content', 'dashboard'),
+      page: one('.app-page', 'panel'),
+    }
+  })
 }
 
 function overlap(a: Box, b: Box): number {
@@ -48,34 +73,24 @@ test.describe('dashboard layout', () => {
 
       await expect(page.locator('.holdings-card')).toBeVisible()
       await expect(page.locator('.performance-card')).toBeVisible()
+      // The chart is lazy-loaded behind a shorter placeholder; measuring
+      // before it lands reads the layout it is about to replace.
+      await expect(page.locator('#dashboard-content [aria-busy="true"]')).toHaveCount(0)
 
-      const holdings = await boxOf(page, '.holdings-card')
-
-      const panels = await page.locator('.dashboard-row > .card').evaluateAll((nodes) =>
-        nodes.map((node) => {
-          const rect = node.getBoundingClientRect()
-          return {
-            label: node.querySelector('.section-title')?.textContent ?? node.className,
-            top: rect.top,
-            bottom: rect.bottom,
-            left: rect.left,
-            right: rect.right,
-          }
-        }),
-      )
+      const { panels, holdings, content } = await measure(page)
       expect(panels.length, 'the row above holdings has no panels to check').toBeGreaterThan(0)
+      expect(holdings, 'no holdings card on the page').not.toBeNull()
 
       for (const panel of panels) {
         expect(
-          overlap(panel, holdings),
-          `"${panel.label}" runs ${overlap(panel, holdings)}px into the holdings card`,
+          overlap(panel, holdings!),
+          `"${panel.label}" runs ${overlap(panel, holdings!)}px into the holdings card`,
         ).toBe(0)
       }
 
       // Nothing may spill out of the dashboard's own box either.
-      const content = await boxOf(page, '#dashboard-content')
       expect(
-        holdings.bottom - content.bottom,
+        holdings!.bottom - content!.bottom,
         'the holdings card hangs below the dashboard',
       ).toBeLessThanOrEqual(1)
     })
@@ -85,15 +100,15 @@ test.describe('dashboard layout', () => {
     await page.setViewportSize({ width: 2560, height: 1440 })
     await registerNewUser(page, uniqueUsername('width'))
     await expect(page.locator('.holdings-card')).toBeVisible()
+    await expect(page.locator('#dashboard-content [aria-busy="true"]')).toHaveCount(0)
 
-    const panel = await boxOf(page, '.app-page')
-    const content = await boxOf(page, '#dashboard-content')
+    const { page: panel, content } = await measure(page)
 
     // Capped for readability, but the leftover falls either side rather
     // than piling up to the right of the content.
-    const leftGap = content.left - panel.left
-    const rightGap = panel.right - content.right
+    const leftGap = content!.left - panel!.left
+    const rightGap = panel!.right - content!.right
     expect(Math.abs(leftGap - rightGap), 'the content is not centred in the panel').toBeLessThan(2)
-    expect(content.right - content.left).toBeGreaterThan(1240)
+    expect(content!.right - content!.left).toBeGreaterThan(1240)
   })
 })
