@@ -97,17 +97,15 @@ test.describe('desktop', () => {
   test.use({ viewport: { width: 1440, height: 900 } })
 
   /**
-   * This used to assert the dashboard never scrolled its column at all.
-   * It held only because the account under test has one holding: on a real
-   * one the same rule showed a single row of a twenty-seven row table
-   * through a 128px slot and clipped the performance card's breakdown away
-   * entirely, to avoid a scrollbar nobody minded.
+   * The dashboard fills the window without scrolling it.
    *
-   * What's worth pinning is what it was really protecting - that the app
-   * shell itself never scrolls, that nothing runs off sideways, and that a
-   * modest account still opens with everything in view.
+   * This held once before for the wrong reason - the account here has a
+   * single holding, and the same rule was showing one row of a real
+   * twenty-seven row account through a 128px slot to avoid a scrollbar.
+   * It holds now because the watchlist sits beside the holdings table
+   * instead of above it, which is where the height came from.
    */
-  test('the dashboard opens with everything in view on a small account', async ({ page }) => {
+  test('the dashboard fills the screen without scrolling it', async ({ page }) => {
     await registerNewUser(page, uniqueUsername('desk'))
     await fundAccount(page, '5000')
 
@@ -129,6 +127,7 @@ test.describe('desktop', () => {
       }
     })
     expect(overflow.docScroll, 'the app shell itself should never scroll').toBeLessThanOrEqual(1)
+    expect(overflow.pageScroll, 'the dashboard should fit its column').toBeLessThanOrEqual(1)
     await expectNoHorizontalScroll(page, 'Desktop dashboard')
 
     for (const name of ['Watchlist', 'Most active today']) {
