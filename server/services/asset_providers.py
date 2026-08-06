@@ -334,6 +334,12 @@ class BondProvider(AssetProvider):
             'yearLow': min(closes) if closes else None,
             'yearHigh': max(closes) if closes else None,
             'volume': None,
+            'faceValue': float(bond['faceValue']),
+            'couponRate': float(bond['couponRate']),
+            'marketYield': float(bond['marketYield']),
+            'couponFrequency': bond['couponFrequency'],
+            'issueDate': bond['issueDate'].isoformat(),
+            'maturityDate': bond['maturityDate'].isoformat(),
         }
 
     def get_history(self, ticker: str, days: int = 365) -> List[dict]:

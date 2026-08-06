@@ -100,6 +100,8 @@ def get_asset_detail(asset_type: str, ticker: str) -> Tuple[dict, int]:
         'dayLow', 'dayHigh', 'open', 'yearLow', 'yearHigh', 'volume'}, or a
         404 if the asset type or ticker isn't found. Fields that don't apply
         to an asset type - a bond has no volume or intraday range - are null.
+        Bonds also carry 'faceValue', 'couponRate', 'marketYield',
+        'couponFrequency', 'issueDate', and 'maturityDate'.
     """
     quote = PROVIDERS[asset_type].get_quote(ticker)
     if quote is None:

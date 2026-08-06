@@ -17,8 +17,8 @@ import { useBalance } from '../context/balance-context'
 import { useLiveFeed, usePriceDirection, useQuoteConnection } from '../hooks/realtime'
 import { useIdempotencyKey } from '../hooks/idempotency'
 import { validateAmountInput, validateQuantityInput } from '../lib/validation'
-import { formatDayShort } from '../lib/dates'
-import { formatCurrency, formatNumber } from '../lib/format'
+import { formatDayLong, formatDayShort } from '../lib/dates'
+import { formatCurrency, formatNumber, formatPercent } from '../lib/format'
 import AssetLogo from '../components/ui/AssetLogo'
 import AnalystRatings from '../components/trading/AnalystRatings'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
@@ -313,29 +313,67 @@ function AssetDetail({
               </div>
 
               <div className="stats-card">
-                <section className="stats-group">
-                  <h3 className="stats-heading">Today</h3>
-                  <dl className="stats-list">
-                    <dt>Open</dt>
-                    <dd className="figure">{quote.open != null ? formatCurrency(quote.open) : '—'}</dd>
-                    <dt>High</dt>
-                    <dd className="figure">{quote.dayHigh != null ? formatCurrency(quote.dayHigh) : '—'}</dd>
-                    <dt>Low</dt>
-                    <dd className="figure">{quote.dayLow != null ? formatCurrency(quote.dayLow) : '—'}</dd>
-                    <dt>Volume</dt>
-                    <dd className="figure">{quote.volume != null ? formatNumber(quote.volume) : '—'}</dd>
-                  </dl>
-                </section>
+                {assetType === 'bond' ? (
+                  <section className="stats-group">
+                    <h3 className="stats-heading">Bond Terms</h3>
+                    <dl className="stats-list">
+                      <dt>Face value</dt>
+                      <dd className="figure">
+                        {quote.faceValue != null ? formatCurrency(quote.faceValue) : '—'}
+                      </dd>
+                      <dt>Coupon rate</dt>
+                      <dd className="figure">
+                        {quote.couponRate != null ? formatPercent(quote.couponRate) : '—'}
+                      </dd>
+                      <dt>Market yield</dt>
+                      <dd className="figure">
+                        {quote.marketYield != null ? formatPercent(quote.marketYield) : '—'}
+                      </dd>
+                      <dt>Coupon frequency</dt>
+                      <dd className="figure">
+                        {quote.couponFrequency === 'annual'
+                          ? 'Annual'
+                          : quote.couponFrequency === 'semiannual'
+                            ? 'Semiannual'
+                            : '—'}
+                      </dd>
+                      <dt>Issue date</dt>
+                      <dd className="figure">
+                        {quote.issueDate ? formatDayLong(quote.issueDate) : '—'}
+                      </dd>
+                      <dt>Maturity date</dt>
+                      <dd className="figure">
+                        {quote.maturityDate ? formatDayLong(quote.maturityDate) : '—'}
+                      </dd>
+                    </dl>
+                  </section>
+                ) : (
+                  <>
+                    <section className="stats-group">
+                      <h3 className="stats-heading">Today</h3>
+                      <dl className="stats-list">
+                        <dt>Open</dt>
+                        <dd className="figure">{quote.open != null ? formatCurrency(quote.open) : '—'}</dd>
+                        <dt>High</dt>
+                        <dd className="figure">{quote.dayHigh != null ? formatCurrency(quote.dayHigh) : '—'}</dd>
+                        <dt>Low</dt>
+                        <dd className="figure">{quote.dayLow != null ? formatCurrency(quote.dayLow) : '—'}</dd>
+                        <dt>Volume</dt>
+                        <dd className="figure">{quote.volume != null ? formatNumber(quote.volume) : '—'}</dd>
+                      </dl>
+                    </section>
 
-                <section className="stats-group">
-                  <h3 className="stats-heading">Past 52 weeks</h3>
-                  <dl className="stats-list">
-                    <dt>High</dt>
-                    <dd className="figure">{quote.yearHigh != null ? formatCurrency(quote.yearHigh) : '—'}</dd>
-                    <dt>Low</dt>
-                    <dd className="figure">{quote.yearLow != null ? formatCurrency(quote.yearLow) : '—'}</dd>
-                  </dl>
-                </section>
+                    <section className="stats-group">
+                      <h3 className="stats-heading">Past 52 weeks</h3>
+                      <dl className="stats-list">
+                        <dt>High</dt>
+                        <dd className="figure">{quote.yearHigh != null ? formatCurrency(quote.yearHigh) : '—'}</dd>
+                        <dt>Low</dt>
+                        <dd className="figure">{quote.yearLow != null ? formatCurrency(quote.yearLow) : '—'}</dd>
+                      </dl>
+                    </section>
+                  </>
+                )}
               </div>
 
               <AnalystRatings assetType={assetType} symbol={symbol} price={price || null} />

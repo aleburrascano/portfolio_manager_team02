@@ -40,6 +40,13 @@ export type AssetDetail = Asset & {
   open?: number | null
   yearLow?: number | null
   yearHigh?: number | null
+  /** Bond terms - only present when assetType is 'bond'. */
+  faceValue?: number | null
+  couponRate?: number | null
+  marketYield?: number | null
+  couponFrequency?: 'annual' | 'semiannual' | null
+  issueDate?: string | null
+  maturityDate?: string | null
 }
 
 export type PricePoint = { date: string; close: number }
