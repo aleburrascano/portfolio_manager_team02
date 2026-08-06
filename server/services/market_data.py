@@ -16,6 +16,7 @@ follow (one dashboard load re-fetching a year of history per held ticker,
 the poller re-pricing every pending order's ticker every five seconds)
 collapses onto shared entries.
 """
+import math
 import os
 import sys
 from decimal import Decimal
@@ -91,53 +92,115 @@ def cache_sizes() -> Dict[str, dict]:
     }
 
 
-def previous_close(asset) -> Optional[float]:
+def _number(value) -> Optional[float]:
     """
-    The previous session's official close, from the chart metadata Yahoo
-    returns alongside the price.
+    `value` as a float, or None if it can't be read as one.
 
-    Deliberately not fast_info's own `previousClose`, which yfinance derives
-    for itself and which disagrees with the official figure by anything from
-    a cent to a couple of dollars - and that figure is the one every other
-    app measures the day's change from, so a baseline of our own makes every
-    percentage on the page wrong by a different amount. GOOG read $370.00
-    against an official $372.47, turning a 1.24% day into 1.91%.
-
-    Free to read: the metadata arrives in the same chart response fast_info
-    is built from, so this costs no extra call - but it therefore has to be
-    read *after* fast_info has been touched.
-
-    Returns None when the response carried no metadata, leaving the caller
-    to fall back rather than invent a baseline.
+    NaN counts as absent rather than as a number. It arrives from the feed
+    often enough - an empty price frame averages to NaN, a bar Yahoo has
+    opened but not yet filled reads as NaN - and it is not a value anything
+    downstream can use: JSON has no literal for it, so a single NaN in a
+    quote is served as bare `NaN` and takes out the whole response the
+    browser tries to parse.
     """
-    metadata = getattr(asset, 'history_metadata', None) or {}
-    value = metadata.get('previousClose')
-    if value is None:
-        return None
     try:
-        return float(value)
+        number = float(value)
     except (TypeError, ValueError):
         return None
+    return None if math.isnan(number) else number
 
 
-def quote_fields(fast_info, official_close: Optional[float] = None) -> dict:
+def _first(*values) -> Optional[float]:
+    """The first of these that reads as a number, or None if none of them do."""
+    for value in values:
+        number = _number(value)
+        if number is not None:
+            return number
+    return None
+
+
+def _fast_field(fast_info, key: str) -> Optional[float]:
     """
-    Extract price/change/day-range fields from a fast_info object.
+    One numeric field from fast_info, or None if it isn't usable.
 
-    `official_close` is the baseline the day's change is measured from; see
-    previous_close for why it is passed in rather than read from fast_info.
-    Falling back to fast_info's own value when it is missing keeps a quote
-    that is slightly off in preference to one with no change at all.
+    fast_info computes each of these on read from the daily bars behind it,
+    so a field can be missing (the frame came back empty), unusable (NaN),
+    or raise outright - `lastVolume` is an int cast, and int(NaN) is a
+    ValueError that would otherwise take the entire quote down with it.
+    All three mean the same thing to a caller, which is to ask elsewhere.
     """
-    last_price = fast_info.get('lastPrice')
-    previous = official_close if official_close is not None else fast_info.get('previousClose')
+    try:
+        return _number(fast_info.get(key))
+    except Exception:
+        return None
+
+
+def chart_metadata(asset) -> dict:
+    """
+    The quote figures Yahoo returns alongside the price data, or {} if the
+    response carried none.
+
+    Free to read: this arrives in the same chart response fast_info is built
+    from, so it costs no extra call - but it therefore has to be read
+    *after* fast_info has been touched.
+    """
+    return getattr(asset, 'history_metadata', None) or {}
+
+
+# The fields fast_info derives from the daily bars, and what each one is
+# called in the chart metadata. The metadata is the fallback because it is
+# the same response, already paid for, and populated even when the bars in
+# it are not - which is the case that used to blank the whole "Today" panel
+# while the price above it read fine.
+_METADATA_NAMES = {
+    'lastPrice': 'regularMarketPrice',
+    'dayLow': 'regularMarketDayLow',
+    'dayHigh': 'regularMarketDayHigh',
+    'lastVolume': 'regularMarketVolume',
+    'yearLow': 'fiftyTwoWeekLow',
+    'yearHigh': 'fiftyTwoWeekHigh',
+}
+
+
+def quoted_number(fast_info, metadata: dict, key: str) -> Optional[float]:
+    """
+    One numeric quote field, from fast_info where it has it and from the
+    chart metadata where it doesn't.
+
+    A throttled or transient chart request comes back with metadata but no
+    bars, and every field fast_info computes from those bars then reads as
+    absent at once. Both sources describe the same session, so covering one
+    with the other costs nothing and is the difference between a stat panel
+    of em-dashes and a quote.
+    """
+    return _first(_fast_field(fast_info, key), metadata.get(_METADATA_NAMES.get(key, '')))
+
+
+def quote_fields(fast_info, metadata: Optional[dict] = None) -> dict:
+    """
+    Extract price/change/day-range fields for one asset, given its fast_info
+    and the chart metadata that came back with it.
+
+    The day's change is measured from the metadata's `previousClose` and
+    deliberately not from fast_info's own, which yfinance derives for itself
+    and which disagrees with the official figure by anything from a cent to
+    a couple of dollars - and that figure is the one every other app
+    measures from, so a baseline of our own makes every percentage on the
+    page wrong by a different amount. GOOG read $370.00 against an official
+    $372.47, turning a 1.24% day into 1.91%. fast_info's value is still used
+    when the metadata has none: a quote that is slightly off beats one with
+    no change at all.
+    """
+    metadata = metadata or {}
+    last_price = quoted_number(fast_info, metadata, 'lastPrice')
+    previous = _first(metadata.get('previousClose'), _fast_field(fast_info, 'previousClose'))
     change = last_price - previous if last_price is not None and previous else None
     return {
         'currentPrice': last_price,
         'change': change,
         'changePercent': change / previous * 100 if change is not None and previous else None,
-        'dayLow': fast_info.get('dayLow'),
-        'dayHigh': fast_info.get('dayHigh'),
+        'dayLow': quoted_number(fast_info, metadata, 'dayLow'),
+        'dayHigh': quoted_number(fast_info, metadata, 'dayHigh'),
     }
 
 
@@ -180,9 +243,10 @@ def _fetch_prices(symbols: List[str]) -> Dict[str, Optional[dict]]:
         try:
             asset = tickers.tickers[symbol]
             fast_info = asset.fast_info
+            metadata = chart_metadata(asset)
             fetched[symbol] = {
-                'volume': fast_info.get('lastVolume'),
-                **quote_fields(fast_info, previous_close(asset)),
+                'volume': quoted_number(fast_info, metadata, 'lastVolume'),
+                **quote_fields(fast_info, metadata),
             }
         except Exception:
             fetched[symbol] = None
@@ -434,19 +498,27 @@ def _asset_quote(ticker: str) -> Optional[dict]:
     asset = yf.Ticker(ticker)
     try:
         fast_info = asset.fast_info
-        if fast_info.get('lastPrice') is None:
-            return None
+        metadata = chart_metadata(asset)
+        fields = quote_fields(fast_info, metadata)
     except Exception:
         return None
 
+    if fields['currentPrice'] is None:
+        return None
+
+    # The detail page is the one caller that already pays for `.info` - it
+    # needs the long name - so it is also the only one that can afford it as
+    # a last resort. That matters for the open in particular, which is the
+    # single figure on the panel the chart metadata doesn't carry.
+    info = asset.info or {}
     return {
         'symbol': ticker.upper(),
-        'name': asset.info.get('longName', asset.info.get('shortName', ticker.upper())),
-        **quote_fields(fast_info, previous_close(asset)),
-        'open': fast_info.get('open'),
-        'yearLow': fast_info.get('yearLow'),
-        'yearHigh': fast_info.get('yearHigh'),
-        'volume': fast_info.get('lastVolume'),
+        'name': info.get('longName', info.get('shortName', ticker.upper())),
+        **fields,
+        'open': _first(_fast_field(fast_info, 'open'), info.get('regularMarketOpen')),
+        'yearLow': _first(quoted_number(fast_info, metadata, 'yearLow'), info.get('fiftyTwoWeekLow')),
+        'yearHigh': _first(quoted_number(fast_info, metadata, 'yearHigh'), info.get('fiftyTwoWeekHigh')),
+        'volume': _first(quoted_number(fast_info, metadata, 'lastVolume'), info.get('regularMarketVolume')),
     }
 
 

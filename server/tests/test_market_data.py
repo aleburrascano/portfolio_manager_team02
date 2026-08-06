@@ -39,7 +39,9 @@ def fast_info(last=110.0, previous=100.0):
 
 def test_quote_fields_measures_change_from_the_official_close():
     """The baseline is the previous session's close, not fast_info's guess."""
-    fields = market_data.quote_fields(fast_info(last=110.0, previous=100.0), 105.0)
+    fields = market_data.quote_fields(
+        fast_info(last=110.0, previous=100.0), {'previousClose': 105.0}
+    )
 
     assert fields['change'] == pytest.approx(5.0)
     assert fields['changePercent'] == pytest.approx(5.0 / 105.0 * 100)
@@ -47,31 +49,81 @@ def test_quote_fields_measures_change_from_the_official_close():
 
 def test_quote_fields_falls_back_when_no_official_close_is_available():
     """A slightly-off quote beats one with no change at all."""
-    fields = market_data.quote_fields(fast_info(last=110.0, previous=100.0), None)
+    fields = market_data.quote_fields(fast_info(last=110.0, previous=100.0), {})
 
     assert fields['change'] == pytest.approx(10.0)
     assert fields['changePercent'] == pytest.approx(10.0)
 
 
 def test_quote_fields_reports_no_change_without_any_baseline():
-    fields = market_data.quote_fields(FakeFastInfo({'lastPrice': 110.0}), None)
+    fields = market_data.quote_fields(FakeFastInfo({'lastPrice': 110.0}), {})
 
     assert fields['change'] is None
     assert fields['changePercent'] is None
 
 
-def test_previous_close_reads_the_chart_metadata():
-    assert market_data.previous_close(FakeAsset({'previousClose': 372.47})) == 372.47
+def test_quote_fields_ignores_a_baseline_it_cannot_read_as_a_number():
+    fields = market_data.quote_fields(FakeFastInfo({'lastPrice': 110.0}), {'previousClose': 'n/a'})
+
+    assert fields['change'] is None
 
 
-def test_previous_close_is_none_when_the_response_carried_no_metadata():
-    assert market_data.previous_close(FakeAsset(None)) is None
-    assert market_data.previous_close(FakeAsset({})) is None
-    assert market_data.previous_close(object()) is None
+def test_chart_metadata_is_empty_when_the_response_carried_none():
+    assert market_data.chart_metadata(FakeAsset(None)) == {}
+    assert market_data.chart_metadata(FakeAsset({})) == {}
+    assert market_data.chart_metadata(object()) == {}
 
 
-def test_previous_close_ignores_a_value_it_cannot_read_as_a_number():
-    assert market_data.previous_close(FakeAsset({'previousClose': 'n/a'})) is None
+def test_quote_fields_covers_a_bar_less_response_from_the_chart_metadata():
+    """
+    A throttled chart request answers with metadata and no bars, which is
+    what used to blank the day's range while the price above it read fine.
+    """
+    metadata = {
+        'regularMarketPrice': 315.58,
+        'previousClose': 311.0,
+        'regularMarketDayLow': 313.49,
+        'regularMarketDayHigh': 316.29,
+    }
+    fields = market_data.quote_fields(FakeFastInfo({}), metadata)
+
+    assert fields['currentPrice'] == pytest.approx(315.58)
+    assert fields['dayLow'] == pytest.approx(313.49)
+    assert fields['dayHigh'] == pytest.approx(316.29)
+    assert fields['change'] == pytest.approx(4.58)
+
+
+def test_quote_fields_prefers_fast_info_over_the_metadata_it_came_with():
+    fields = market_data.quote_fields(fast_info(last=110.0), {'regularMarketPrice': 999.0})
+
+    assert fields['currentPrice'] == pytest.approx(110.0)
+
+
+def test_quote_fields_treats_a_nan_as_absent():
+    """
+    NaN reaches here from a bar Yahoo has opened but not yet filled, and it
+    has no JSON literal - one of them served raw breaks the whole response.
+    """
+    fields = market_data.quote_fields(
+        FakeFastInfo({'lastPrice': 110.0, 'dayHigh': float('nan')}),
+        {'regularMarketDayHigh': 112.0},
+    )
+
+    assert fields['dayHigh'] == pytest.approx(112.0)
+
+
+def test_quoted_number_survives_a_field_that_raises():
+    """
+    fast_info computes lastVolume with an int cast, and int(NaN) raises -
+    which used to take down every quote for that ticker, not just its volume.
+    """
+    class Raising(dict):
+        def get(self, key, default=None):
+            raise ValueError('cannot convert float NaN to integer')
+
+    assert market_data.quoted_number(
+        Raising(), {'regularMarketVolume': 6144001}, 'lastVolume'
+    ) == pytest.approx(6144001)
 
 
 def test_price_history_asks_for_unadjusted_closes(monkeypatch):
