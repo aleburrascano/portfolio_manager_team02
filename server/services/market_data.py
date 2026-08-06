@@ -119,6 +119,27 @@ def _first(*values) -> Optional[float]:
     return None
 
 
+def _first_traded(*values) -> Optional[float]:
+    """
+    The first of these that reports a volume actually traded, or 0 if they
+    all agree nothing was, or None if none of them said.
+
+    Volume is the one figure here where 0 has to be read as a non-answer
+    rather than as a number. A day bar Yahoo has opened but not yet
+    aggregated carries a volume of exactly 0 beside a price that is plainly
+    moving, and unlike the absent open and range beside it, 0 satisfies
+    every fallback that None would have passed through - which turned the
+    em-dash this module was just taught to avoid into a confident, wrong
+    zero. Only when no source claims a share changed hands is that the
+    answer, which is what a halted or not-yet-open session looks like.
+    """
+    reported = [number for number in map(_number, values) if number is not None]
+    for number in reported:
+        if number > 0:
+            return number
+    return 0.0 if reported else None
+
+
 def _fast_field(fast_info, key: str) -> Optional[float]:
     """
     One numeric field from fast_info, or None if it isn't usable.
@@ -174,6 +195,20 @@ def quoted_number(fast_info, metadata: dict, key: str) -> Optional[float]:
     of em-dashes and a quote.
     """
     return _first(_fast_field(fast_info, key), metadata.get(_METADATA_NAMES.get(key, '')))
+
+
+def quoted_volume(fast_info, metadata: dict, fallback=None) -> Optional[float]:
+    """
+    The day's volume, from the first source that reports any having traded.
+
+    Its own reader rather than quoted_number's because 0 is a number and
+    every other field's absence isn't; see _first_traded.
+    """
+    return _first_traded(
+        _fast_field(fast_info, 'lastVolume'),
+        metadata.get(_METADATA_NAMES['lastVolume']),
+        fallback,
+    )
 
 
 def quote_fields(fast_info, metadata: Optional[dict] = None) -> dict:
@@ -245,7 +280,7 @@ def _fetch_prices(symbols: List[str]) -> Dict[str, Optional[dict]]:
             fast_info = asset.fast_info
             metadata = chart_metadata(asset)
             fetched[symbol] = {
-                'volume': quoted_number(fast_info, metadata, 'lastVolume'),
+                'volume': quoted_volume(fast_info, metadata),
                 **quote_fields(fast_info, metadata),
             }
         except Exception:
@@ -518,7 +553,7 @@ def _asset_quote(ticker: str) -> Optional[dict]:
         'open': _first(_fast_field(fast_info, 'open'), info.get('regularMarketOpen')),
         'yearLow': _first(quoted_number(fast_info, metadata, 'yearLow'), info.get('fiftyTwoWeekLow')),
         'yearHigh': _first(quoted_number(fast_info, metadata, 'yearHigh'), info.get('fiftyTwoWeekHigh')),
-        'volume': _first(quoted_number(fast_info, metadata, 'lastVolume'), info.get('regularMarketVolume')),
+        'volume': quoted_volume(fast_info, metadata, info.get('regularMarketVolume')),
     }
 
 
