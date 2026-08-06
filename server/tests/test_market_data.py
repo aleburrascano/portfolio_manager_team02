@@ -112,6 +112,39 @@ def test_quote_fields_treats_a_nan_as_absent():
     assert fields['dayHigh'] == pytest.approx(112.0)
 
 
+def test_quoted_volume_reads_a_zero_as_not_yet_aggregated():
+    """
+    Yahoo opens the day's bar before anything goes into it, so fast_info
+    reports 0 shares beside a price that is plainly moving. Unlike the
+    absent open and range beside it, 0 is defined enough to satisfy the
+    fallback, which is how the panel traded an em-dash for a wrong number.
+    """
+    volume = market_data.quoted_volume(
+        FakeFastInfo({'lastVolume': 0}), {'regularMarketVolume': 9786160}
+    )
+
+    assert volume == pytest.approx(9786160)
+
+
+def test_quoted_volume_keeps_a_zero_every_source_agrees_on():
+    """A halted session really did trade nothing, and 0 says so."""
+    volume = market_data.quoted_volume(
+        FakeFastInfo({'lastVolume': 0}), {'regularMarketVolume': 0}
+    )
+
+    assert volume == 0
+
+
+def test_quoted_volume_is_none_when_nobody_reports_one():
+    assert market_data.quoted_volume(FakeFastInfo({}), {}) is None
+
+
+def test_quoted_volume_falls_through_to_the_caller_s_last_resort():
+    volume = market_data.quoted_volume(FakeFastInfo({'lastVolume': 0}), {}, 6144001)
+
+    assert volume == pytest.approx(6144001)
+
+
 def test_quoted_number_survives_a_field_that_raises():
     """
     fast_info computes lastVolume with an int cast, and int(NaN) raises -
