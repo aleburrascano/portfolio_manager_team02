@@ -66,7 +66,7 @@ export function useLiveFeed(assetType: AssetType, symbols: string[]): LiveFeed {
     const connection = getSocket()
 
     function handleQuote(update: QuoteUpdate) {
-      setQuotes((current) => ({ ...current, [update.symbol]: update }))
+      setQuotes((current) => ({ ...current, [update.symbol]: { ...current[update.symbol], ...update } }))
       setLastUpdate(new Date())
     }
 
@@ -111,7 +111,7 @@ export function useLiveFeeds(symbolsByType: Partial<Record<AssetType, string[]>>
     const connection = getSocket()
 
     function handleQuote(update: QuoteUpdate) {
-      setQuotes((current) => ({ ...current, [update.symbol]: update }))
+      setQuotes((current) => ({ ...current, [update.symbol]: { ...current[update.symbol], ...update } }))
       setLastUpdate(new Date())
     }
 
